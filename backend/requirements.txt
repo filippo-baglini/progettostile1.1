@@ -1,0 +1,15 @@
+supabase
+google-genai
+psycopg2-binary
+flask
+flask-cors
+python-dotenv
+flask-login
+Pillow
+torch
+transformers
+numpy
+pandas
+torchvision
+python-dotenv
+google-auth
