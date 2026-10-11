@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '../../utils/test-utils';
+import { render } from '../../utils/test-utils';
 import ChatMessageSkeleton from './ChatMessageSkeleton';
 
 describe('ChatMessageSkeleton', () => {

@@ -5,9 +5,9 @@ import OutfitOptionPoll from './OutfitOptionPoll';
 import type { OutfitGenerationOption } from '../../types';
 
 const mockOptions: OutfitGenerationOption[] = [
-    { label: 'Single Outfit', description: 'Generate one complete outfit', value: 'single' },
-    { label: 'Multiple Outfits', description: 'Generate several outfit options', value: 'multiple' },
-    { label: 'Capsule Wardrobe', description: 'Create a coordinated wardrobe', value: 'capsule' },
+    { id: 'Single Outfit', label: 'Single Outfit', description: 'Generate one complete outfit', value: 'single' },
+    { id: 'Multiple Outfits', label: 'Multiple Outfits', description: 'Generate several outfit options', value: 'multiple' },
+    { id: 'Capsule Wardrobe', label: 'Capsule Wardrobe', description: 'Create a coordinated wardrobe', value: 'capsule' },
 ];
 
 describe('OutfitOptionPoll', () => {

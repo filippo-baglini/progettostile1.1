@@ -106,7 +106,7 @@ describe('ImageLightbox', () => {
 
     it('handles download', async () => {
         // Mock fetch and URL APIs
-        global.fetch = vi.fn().mockResolvedValue({
+        globalThis.fetch = vi.fn().mockResolvedValue({
             blob: () => Promise.resolve(new Blob(['test'])),
         });
 

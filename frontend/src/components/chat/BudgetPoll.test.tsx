@@ -5,10 +5,10 @@ import BudgetPoll from './BudgetPoll';
 import type { BudgetOption } from '../../types';
 
 const mockOptions: BudgetOption[] = [
-    { label: '$0 - $50', description: 'Budget-friendly options', min: 0, max: 50 },
-    { label: '$50 - $100', description: 'Mid-range selection', min: 50, max: 100 },
-    { label: '$100 - $200', description: 'Premium choices', min: 100, max: 200 },
-    { label: '$200+', description: 'Luxury items', min: 200, max: 1000 },
+    { label: '$0 - $50', description: 'Budget-friendly options', min_budget: 0, max_budget: 50 },
+    { label: '$50 - $100', description: 'Mid-range selection', min_budget: 50, max_budget: 100 },
+    { label: '$100 - $200', description: 'Premium choices', min_budget: 100, max_budget: 200 },
+    { label: '$200+', description: 'Luxury items', min_budget: 200, max_budget: 1000 },
 ];
 
 describe('BudgetPoll', () => {

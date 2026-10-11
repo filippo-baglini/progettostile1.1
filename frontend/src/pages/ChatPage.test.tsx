@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import ChatPage from './ChatPage';
+import { ThemeProvider } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useChatMessages } from '../hooks/useChatMessages';
 import { useImageUpload } from '../hooks/useImageUpload';
@@ -95,9 +96,11 @@ vi.mock('../components/ui/ScrollToBottomButton', () => ({
 // Helper function to render with router
 const renderWithRouter = (ui: React.ReactElement) => {
     return render(
-        <MemoryRouter>
-            {ui}
-        </MemoryRouter>
+        <ThemeProvider>
+            <MemoryRouter>
+                {ui}
+            </MemoryRouter>
+        </ThemeProvider>
     );
 };
 

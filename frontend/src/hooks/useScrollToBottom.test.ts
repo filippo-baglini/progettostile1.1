@@ -63,7 +63,6 @@ describe('useScrollToBottom', () => {
             clientHeight: 500,
         } as unknown as HTMLDivElement;
 
-        // @ts-expect-error - Testing read-only property
         result.current.scrollRef.current = mockDiv;
 
         act(() => {
@@ -83,7 +82,6 @@ describe('useScrollToBottom', () => {
             clientHeight: 500, // 1000 - 950 - 500 = -450 < 100
         } as unknown as HTMLDivElement;
 
-        // @ts-expect-error - Testing read-only property
         result.current.scrollRef.current = mockDiv;
 
         act(() => {
@@ -107,7 +105,6 @@ describe('useScrollToBottom', () => {
             clientHeight: 500,
         } as unknown as HTMLDivElement;
 
-        // @ts-expect-error - Testing read-only property
         result.current.scrollRef.current = mockDiv;
 
         // Simulate user scrolling

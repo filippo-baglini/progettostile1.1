@@ -35,7 +35,7 @@ describe('GenderSelector', () => {
             />
         );
 
-        expect(screen.getByText(/Select your style/)).toBeInTheDocument();
+        expect(screen.getByText(/Select clothing preference/)).toBeInTheDocument();
     });
 
     it('shows different text when disabled', () => {
@@ -47,7 +47,7 @@ describe('GenderSelector', () => {
             />
         );
 
-        expect(screen.getByText(/Style preference/)).toBeInTheDocument();
+        expect(screen.getByText(/Clothing preference:/)).toBeInTheDocument();
         expect(screen.getByText(/start a new chat to change/)).toBeInTheDocument();
     });
 
@@ -104,7 +104,7 @@ describe('GenderSelector', () => {
             />
         );
 
-        expect(screen.getByText(/Select your style to start/)).toBeInTheDocument();
+        expect(screen.getByText(/Select clothing preference to start/)).toBeInTheDocument();
     });
 
     it('applies emphasis styling to buttons when no gender is selected', () => {
