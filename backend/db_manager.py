@@ -382,7 +382,9 @@ class DBManager:
                             p.created_at,
                             '[]'::json AS outfits,
                             p.image_id,
-                            NULL as status
+                            NULL as status,
+                            NULL::jsonb AS budget_options,
+                            NULL::jsonb AS outfit_generation_options
                         FROM prompts p
                                  JOIN conversations c ON p.conversation_id = c.id
                         WHERE p.conversation_id = %s AND c.user_id = %s
@@ -434,7 +436,9 @@ class DBManager:
                                 '[]'::json
                             ) AS outfits,
                             NULL AS image_id,
-                            ar.status as status
+                            ar.status as status,
+                            ar.budget_options,
+                            ar.outfit_generation_options
                         FROM ai_responses ar
                                  JOIN conversations c ON ar.conversation_id = c.id
                         WHERE ar.conversation_id = %s AND c.user_id = %s
@@ -453,7 +457,7 @@ class DBManager:
 
             for message in results:
                 if message.get("role") == "user":
-                    del message['explanation'], message['outfits']
+                    del message['explanation'], message['outfits'], message['budget_options'], message['outfit_generation_options']
                     if message['image_id']:
                         file_path = f"public/{message['image_id']}.jpg"
                         message['image_id'] = get_image_url(file_path)
@@ -574,7 +578,7 @@ class DBManager:
             raise e
 
     @staticmethod
-    def add_simple_ai_response(conversation_id, message, status):
+    def add_simple_ai_response(conversation_id, message, status, budget_options=None, outfit_generation_options=None):
         conn = None
         try:
             conn = DBManager.get_db_connection()
@@ -583,11 +587,15 @@ class DBManager:
             # 2. Inserisci la risposta nella tabella ai_responses
             # Usiamo RETURNING id per ottenere l'ID generato auto-increment
             insert_response_query = """
-                                    INSERT INTO ai_responses (conversation_id, short_message, status)
-                                    VALUES (%s, %s, %s)
+                                    INSERT INTO ai_responses (conversation_id, short_message, status, budget_options, outfit_generation_options)
+                                    VALUES (%s, %s, %s, %s, %s)
                                     RETURNING id; \
                                     """
-            cursor.execute(insert_response_query, (conversation_id, message, status))
+            cursor.execute(insert_response_query, (
+                conversation_id, message, status,
+                extras.Json(budget_options) if budget_options else None,
+                extras.Json(outfit_generation_options) if outfit_generation_options else None,
+            ))
             new_ai_response_id = cursor.fetchone()[0]
 
             # Conferma le modifiche (Commit)

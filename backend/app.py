@@ -571,7 +571,7 @@ def send_message():
             # AWAITING_INPUT, Guardrail and Error: every saved prompt gets a saved reply
             text = output.get("prompt_to_user", output.get("message"))
             if is_authenticated:
-                DBManager.add_simple_ai_response(conv_id, text, status)
+                DBManager.add_simple_ai_response(conv_id, text, status, output.get("budget_options"), output.get("outfit_generation_options"))
 
         # Update chat history
         chat_history.append({'role': 'user', 'text': msg_text, 'image_id': image_id})

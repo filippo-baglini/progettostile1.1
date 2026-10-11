@@ -36,8 +36,12 @@ CREATE TABLE IF NOT EXISTS ai_responses (
     short_message TEXT,
     explanation TEXT,
     status VARCHAR(50),
+    budget_options JSONB,            -- the option boxes shown with this reply, so they survive a reload
+    outfit_generation_options JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE ai_responses ADD COLUMN IF NOT EXISTS budget_options JSONB;
+ALTER TABLE ai_responses ADD COLUMN IF NOT EXISTS outfit_generation_options JSONB;
 
 -- Product Data table (Catalog)
 CREATE TABLE IF NOT EXISTS product_data (

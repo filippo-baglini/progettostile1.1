@@ -23,6 +23,7 @@ import { chatService } from '../services/chatService';
 import { beautifyUsername } from '../utils/stringUtils';
 import { showToast } from '../utils/toast';
 import type { ChatHistory, BudgetOption } from '../types';
+import { budgetReply, findSelectedOption } from '../utils/optionReply';
 
 type GuestGender = 'male' | 'female' | 'non-binary';
 
@@ -281,13 +282,7 @@ const ChatPage = () => {
   };
 
   const handleOptionSelect = (option: BudgetOption) => {
-    let message;
-    if (option.max_budget === 0) {
-      message = "My max budget is unlimited";
-    } else {
-      message = `My max budget is ${option.max_budget}`;
-    }
-    sendMessage(message);
+    sendMessage(budgetReply(option));
   };
 
   const handleOutfitOptionSelect = (option: import('../types').OutfitGenerationOption) => {
@@ -403,6 +398,7 @@ const ChatPage = () => {
                     onOptionSelect={(option) => handleOptionSelect(option)}
                     onOutfitOptionSelect={handleOutfitOptionSelect}
                     isLast={index === messages.length - 1}
+                    selectedOption={message.role === 'user' ? findSelectedOption(messages[index - 1], message.content) : undefined}
                   />
                 ))
               )}

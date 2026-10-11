@@ -13,6 +13,7 @@ import BudgetPoll from './BudgetPoll';
 import OutfitOptionPoll from './OutfitOptionPoll';
 import { fadeInUp } from '../../utils/animations';
 import { formatTime } from '../../utils/dateUtils';
+import type { SelectedOption } from '../../utils/optionReply';
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -25,9 +26,10 @@ interface ChatMessageProps {
   onOptionSelect?: (option: BudgetOption) => void;
   onOutfitOptionSelect?: (option: import('../../types').OutfitGenerationOption) => void;
   isLast?: boolean;
+  selectedOption?: SelectedOption; // set when this user message was sent by clicking an option box
 }
 
-const ChatMessage = ({ message, onExplainOutfit, isLoadingExplanation, onRetry, onContentChange, onSelectOutfit, selectedOutfitIndex, onOptionSelect, onOutfitOptionSelect, isLast = false }: ChatMessageProps) => {
+const ChatMessage = ({ message, onExplainOutfit, isLoadingExplanation, onRetry, onContentChange, onSelectOutfit, selectedOutfitIndex, onOptionSelect, onOutfitOptionSelect, isLast = false, selectedOption }: ChatMessageProps) => {
   const [selectedProductIndex, setSelectedProductIndex] = useState<number | null>(null);
   const [activeOutfitIndex, setActiveOutfitIndex] = useState(0);
   const [isRetrying, setIsRetrying] = useState(false);
@@ -169,6 +171,21 @@ const ChatMessage = ({ message, onExplainOutfit, isLoadingExplanation, onRetry, 
         aria-label="User message"
       >
         <div className="flex flex-col items-end max-w-lg">
+          {selectedOption ? (
+            <div className="flex flex-col items-start p-4 rounded-xl rounded-tr-none border border-primary text-left shadow-md bg-gradient-to-br from-cream-50 via-cream-100 to-primary/5 dark:from-surface-dark dark:via-surface-darker dark:to-primary/10">
+              <div className="flex items-center justify-between gap-3 w-full mb-2">
+                <span className="text-sm font-bold px-2.5 py-1 rounded-lg bg-primary/15 text-primary">
+                  {selectedOption.label}
+                </span>
+                <div className="w-7 h-7 rounded-full flex items-center justify-center bg-primary text-white">
+                  <Check className="w-4 h-4" />
+                </div>
+              </div>
+              <p className="text-xs text-text-muted dark:text-stone-400 leading-snug">
+                {selectedOption.description}
+              </p>
+            </div>
+          ) : (
           <div className="bg-primary text-white font-inter px-5 py-3 rounded-2xl rounded-tr-none shadow-md">
             {message.imageUrl && (
               <div className="mb-3">
@@ -177,6 +194,7 @@ const ChatMessage = ({ message, onExplainOutfit, isLoadingExplanation, onRetry, 
             )}
             {message.content}
           </div>
+          )}
           <span className="text-[10px] text-gray-400 dark:text-stone-500 mt-1 mr-1">
             {formatTime(message.timestamp)}
           </span>
