@@ -1,4 +1,4 @@
-from google.genai import types, Client
+from google.genai import types
 
 from ai.src.model_fallback import generate_content_with_fallback
 
@@ -10,7 +10,7 @@ The final output MUST be textual explaining in detail how the retrieved outfit i
 Focus on destailing how every clothing item matches the request, also highlighting how the different clothing itmes match and are coherent with one another.
 """
 
-def explain_selected_outfit(CLIENT: Client, MODEL_NAME: str, user_prompt: str, retrieved_outfit) -> str:
+def explain_selected_outfit(user_prompt: str, retrieved_outfit) -> str:
     """
     Sends the user prompt to Gemini and enforces the structured JSON output.
     Returns the raw parsed JSON dictionary.
@@ -36,7 +36,6 @@ def explain_selected_outfit(CLIENT: Client, MODEL_NAME: str, user_prompt: str, r
         )
         
         response = generate_content_with_fallback(
-            client=CLIENT,
             contents=[full_prompt],
             config=config
         )

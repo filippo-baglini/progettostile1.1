@@ -1,5 +1,5 @@
 import json
-from google.genai import types, Client
+from google.genai import types
 
 from ai.src.model_fallback import generate_content_with_fallback
 
@@ -554,11 +554,9 @@ the field 'message' MUST BE PRESENT ONLY if a guardrail triggers.
 FASHION_CATEGORIES = ['top', 'bottom', 'dresses', 'outerwear', 'swimwear', 'shoes', 'accessories']
 
 import json
-from google.genai import types, Client
+from google.genai import types
 
 def generate_outfit_plan(
-        client: Client,
-        model_name: str,
         new_user_query: str,
         chat_history: list[dict],
         image_data: tuple[str, bytes] | None,
@@ -672,7 +670,6 @@ def generate_outfit_plan(
     try:
         print("DEBUG: Calling generate_content (with fallback)...")
         response = generate_content_with_fallback(
-            client=client,
             contents=gemini_history,
             config=types.GenerateContentConfig(
                 system_instruction = base_prompt,
@@ -712,7 +709,6 @@ def generate_outfit_plan(
 
         try:
             final_response = generate_content_with_fallback(
-                client=client,
                 contents=final_generation_prompt,
                 config=types.GenerateContentConfig(
                     system_instruction = base_prompt,
@@ -850,16 +846,7 @@ if __name__ == '__main__':
     # Add minimal required imports for standalone testing
     import os
     from dotenv import load_dotenv
-    from google import genai
     load_dotenv()
-    
-    # Initialize Client for testing purposes
-    try:
-        TEST_CLIENT = genai.Client()
-        TEST_MODEL = 'gemini-2.5-flash'
-    except Exception as e:
-        print(f"Could not initialize TEST_CLIENT (check API Key): {e}")
-        exit()
         
     # --- TEST SETUP ---
     # Soft Preferences (Gemini sees these)
@@ -876,8 +863,6 @@ if __name__ == '__main__':
     
     # 1. Get the plan from the LLM (LLM only sees navy/silk preference)
     outfit_json = generate_outfit_plan(
-        TEST_CLIENT, 
-        TEST_MODEL, 
         test_prompt, 
         chat_history=[], 
         image_data=None, 

@@ -2,7 +2,6 @@ import os
 import logging
 
 from flask_login import current_user
-from google import genai
 import torch
 from supabase import create_client, Client
 from transformers import CLIPProcessor, CLIPModel
@@ -21,7 +20,7 @@ from ai.src.get_explanations import explain_selected_outfit
 
 # --- 1. Global Initialization (Loaded only ONCE when the server starts) ---
 
-# Load environment variables (like the GEMINI_API_KEY)
+# Load environment variables (like the MISTRAL_API_KEY)
 load_dotenv()
 
 SUPABASE_URL: Optional[str] = os.environ.get("SUPABASE_URL")
@@ -43,17 +42,9 @@ except Exception as e:
     # Reraise the exception to stop the server process from starting
     raise ConnectionError("Failed to connect to Supabase.") from e
 
-# 2. Gemini Client Initialization
-try:
-    GEMINI_CLIENT = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-    logging.info("✅ Gemini client initialized successfully.")
-except Exception as e:
-    # Handle Gemini client initialization failure: Critical, must stop.
-    logging.critical(f"❌ Error initializing Gemini client: {e}", exc_info=True)
-    # Reraise the exception to stop the server process from starting
-    raise RuntimeError("Failed to initialize the Google Gemini Client.") from e
-
-GEMINI_MODEL_NAME = 'gemini-2.5-pro'  # Fallback chain: 2.5-pro -> 2.5-flash -> 2.5-flash-lite (handled in model_fallback.py)
+# 2. LLM: Mistral, called over HTTP in model_fallback.py (needs MISTRAL_API_KEY)
+if not os.environ.get("MISTRAL_API_KEY"):
+    raise RuntimeError("MISTRAL_API_KEY is missing from the environment / .env file.")
 
 # 3. CLIP Model Initialization (Heavy/Critical Resource)
 CLIP_MODEL_NAME = "patrickjohncyh/fashion-clip"
@@ -138,8 +129,6 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
         final_prompt += f"\n(System Note: Refining outfit option #{target_index+1}. This specific option has a budget of {target_outfit_budget}. IMPORTANT: If the user asks to increase/decrease the budget, apply the change to THIS amount ({target_outfit_budget}), NOT the global history budget.)"
 
     response = generate_outfit_plan(
-        GEMINI_CLIENT, 
-        GEMINI_MODEL_NAME, 
         final_prompt, 
         chat_history, 
         image_data, 
@@ -486,7 +475,7 @@ def generate_explanation_only(user_prompt: str, outfit_data: List[Dict[str, Any]
     """
     logging.info("Generating outfit explanation (On-Demand)...")
     try:
-        explanations = explain_selected_outfit(GEMINI_CLIENT, GEMINI_MODEL_NAME, user_prompt, outfit_data)
+        explanations = explain_selected_outfit(user_prompt, outfit_data)
         return explanations
     except Exception as e:
         logging.error(f"Error generating explanation: {e}")
