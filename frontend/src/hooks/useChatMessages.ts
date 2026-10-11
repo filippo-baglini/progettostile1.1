@@ -456,6 +456,7 @@ export const useChatMessages = (guestGender?: string) => {
 
   const clearMessages = useCallback(() => {
     viewRef.current++;
+    setIsFetching(false); // a load still in flight will no longer clear it itself
     setMessages([]);
     setCurrentChatId(undefined);
     setCurrentChatTitle(undefined);

@@ -217,6 +217,27 @@ describe('useChatMessages', () => {
         expect(result.current.messages.map((m) => m.content)).toEqual(['Chat B message']);
     });
 
+    it('stops showing the loading skeleton when a loading chat is closed', async () => {
+        let resolveLoad: (value: any) => void = () => {};
+        (chatService.getChatConversation as any).mockReturnValue(new Promise((resolve) => { resolveLoad = resolve; }));
+
+        const { result } = renderHook(() => useChatMessages());
+
+        let loading: Promise<void> = Promise.resolve();
+        act(() => {
+            loading = result.current.loadChatMessages('chat-deleted');
+        });
+        act(() => {
+            result.current.clearMessages();
+        });
+        await act(async () => {
+            resolveLoad([]);
+            await loading;
+        });
+
+        expect(result.current.isFetching).toBe(false);
+    });
+
     it('retry removes the failed user message, not the latest one', async () => {
         (chatService.sendMessage as any).mockRejectedValueOnce(new Error('Network error'));
         (chatService.sendMessage as any).mockResolvedValueOnce({ status: 'COMPLETED', content: { message: 'Second reply' } });
