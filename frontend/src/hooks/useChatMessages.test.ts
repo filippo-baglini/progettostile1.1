@@ -188,4 +188,53 @@ describe('useChatMessages', () => {
         expect(result.current.messages[0].content).toBe('Hello');
         expect(result.current.messages[1].content).toBe('Response');
     });
+
+    it('does not add a reply to a chat the user switched to while waiting', async () => {
+        let resolveSend: (value: any) => void = () => {};
+        (chatService.sendMessage as any).mockReturnValue(new Promise((resolve) => { resolveSend = resolve; }));
+        (chatService.transformOutfitResponse as any).mockReturnValue({
+            status: 'COMPLETED', hasOutfit: false, message: 'Reply for chat A', items: [], totalPrice: 0, explanation: ''
+        });
+        (chatService.getChatConversation as any).mockResolvedValue([
+            { id: 'b1', role: 'user', content: 'Chat B message', timestamp: new Date() },
+        ]);
+
+        const { result } = renderHook(() => useChatMessages());
+
+        let sending: Promise<void> = Promise.resolve();
+        act(() => {
+            sending = result.current.sendMessage('Question in chat A');
+        });
+        await act(async () => {
+            await result.current.loadChatMessages('chat-B');
+        });
+        await act(async () => {
+            resolveSend({ status: 'COMPLETED', conv_id: 'chat-A', content: { message: 'Reply for chat A' } });
+            await sending;
+        });
+
+        expect(result.current.currentChatId).toBe('chat-B');
+        expect(result.current.messages.map((m) => m.content)).toEqual(['Chat B message']);
+    });
+
+    it('retry removes the failed user message, not the latest one', async () => {
+        (chatService.sendMessage as any).mockRejectedValueOnce(new Error('Network error'));
+        (chatService.sendMessage as any).mockResolvedValueOnce({ status: 'COMPLETED', content: { message: 'Second reply' } });
+        (chatService.transformOutfitResponse as any).mockReturnValue({
+            status: 'COMPLETED', hasOutfit: false, message: 'Second reply', items: [], totalPrice: 0, explanation: ''
+        });
+
+        const { result } = renderHook(() => useChatMessages());
+        await act(async () => { await result.current.sendMessage('First (fails)'); });
+        await act(async () => { await result.current.sendMessage('Second (works)'); });
+        const errorId = result.current.messages.find((m) => m.isError)!.id;
+
+        (chatService.sendMessage as any).mockResolvedValueOnce({ status: 'COMPLETED', content: { message: 'Retried reply' } });
+        await act(async () => { await result.current.retryMessage(errorId, 'First (fails)'); });
+
+        const contents = result.current.messages.map((m) => m.content);
+        expect(contents.slice(0, 2)).toEqual(['Second (works)', 'Second reply']);
+        expect(contents[2]).toBe('First (fails)');
+        expect(result.current.messages.some((m) => m.isError)).toBe(false);
+    });
 });

@@ -39,9 +39,13 @@ const Header = ({ chatTitle }: HeaderProps) => {
     };
   }, [showUserMenu]);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
     setShowUserMenu(false);
+    try {
+      await logout();
+    } catch (error) {
+      console.error('Logout request failed:', error);
+    }
     navigate('/');
   };
 

@@ -57,8 +57,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = async () => {
-    await authService.logout();
-    setUser(null);
+    try {
+      await authService.logout();
+    } finally {
+      // Log out locally even if the request fails (e.g. the session had already expired)
+      setUser(null);
+    }
   };
 
   const loginWithGoogle = async (credential: string) => {

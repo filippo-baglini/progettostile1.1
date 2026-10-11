@@ -42,21 +42,6 @@ const getErrorDetails = (error: unknown): { title: string; message: string } => 
           message: 'Please wait a moment before trying again.',
         };
       case 500:
-        // Check if this is a "no results" case, not a real server error
-        if (serverMessage && (
-          serverMessage.toLowerCase().includes('no candidates') ||
-          serverMessage.toLowerCase().includes('no matching products') ||
-          serverMessage.toLowerCase().includes('failed to find candidates') ||
-          serverMessage.toLowerCase().includes('could not find matching') ||
-          serverMessage.toLowerCase().includes('retrieval failed') ||
-          serverMessage.toLowerCase().includes('cannot form a full outfit') ||
-          serverMessage.toLowerCase().includes('cannot proceed with knapsack')
-        )) {
-          return {
-            title: 'No Results Found',
-            message: 'We couldn\'t find products matching your criteria. Try adjusting your preferences or broadening your request.',
-          };
-        }
         return {
           title: 'Server Error',
           message: 'Something went wrong on our end. Please try again later.',
@@ -101,7 +86,11 @@ export const useChatMessages = (guestGender?: string) => {
   const [currentChatId, setCurrentChatId] = useState<string | undefined>();
   const [currentChatTitle, setCurrentChatTitle] = useState<string | undefined>();
   const [loadingExplanationId, setLoadingExplanationId] = useState<string | null>(null);
-  const [messageCache, setMessageCache] = useState<Record<string, ChatMessage[]>>({});
+  // Messages per chat id, so switching back to a chat doesn't refetch it. A ref: it never drives rendering.
+  const messageCacheRef = useRef<Record<string, ChatMessage[]>>({});
+  // Bumped whenever the visible chat changes. Async work started for an older view must not
+  // write into the chat that is open now (switching chats while a reply is loading).
+  const viewRef = useRef(0);
   const onNewMessageRef = useRef<(() => void) | null>(null);
 
   const [isFetching, setIsFetching] = useState(false);
@@ -128,43 +117,45 @@ export const useChatMessages = (guestGender?: string) => {
     }
   }, [selectedOutfitIndex, selectedMessageId]);
 
-  const loadChatMessages = async (chatId: string, preloadedMessages?: ChatMessage[]) => {
+  // Updates the visible messages and mirrors the result into that chat's cache entry
+  const updateMessages = (chatId: string | undefined, update: (prev: ChatMessage[]) => ChatMessage[]) => {
+    setMessages((prev) => {
+      const updated = update(prev);
+      if (chatId) {
+        messageCacheRef.current[chatId] = updated;
+      }
+      return updated;
+    });
+  };
+
+  const loadChatMessages = useCallback(async (chatId: string, preloadedMessages?: ChatMessage[]) => {
+    const view = ++viewRef.current;
     setIsFetching(true);
     setCurrentChatId(chatId);
     setCurrentChatTitle(undefined);
 
-    if (preloadedMessages) {
-      setMessages(preloadedMessages);
-      // Update cache with preloaded messages
-      setMessageCache(prev => ({ ...prev, [chatId]: preloadedMessages }));
+    const cached = preloadedMessages ?? messageCacheRef.current[chatId];
+    if (cached) {
+      messageCacheRef.current[chatId] = cached;
+      setMessages(cached);
       setIsFetching(false);
-      return;
-    }
-
-    // Check cache first
-    if (messageCache[chatId]) {
-      setMessages(messageCache[chatId]);
-      setIsFetching(false);
-      // Optional: Background refresh could go here if needed
       return;
     }
 
     // Load from API if not cached
     try {
-      console.log(`DEBUG: Loading chat history for chat ID: ${chatId}`);
       setMessages([]);
       const fetchedMessages = await chatService.getChatConversation(chatId);
-      console.log(`DEBUG: Fetched ${fetchedMessages.length} messages for chat ${chatId}`);
+      messageCacheRef.current[chatId] = fetchedMessages;
+      if (view !== viewRef.current) return; // the user opened another chat meanwhile
       setMessages(fetchedMessages);
-      // Update cache
-      setMessageCache(prev => ({ ...prev, [chatId]: fetchedMessages }));
     } catch (error) {
       console.error('Failed to load chat messages:', error);
-      showToast.error('Failed to load conversation');
+      if (view === viewRef.current) showToast.error('Failed to load conversation');
     } finally {
-      setIsFetching(false);
+      if (view === viewRef.current) setIsFetching(false);
     }
-  };
+  }, []);
 
   const sendMessage = async (
     message: string,
@@ -179,6 +170,8 @@ export const useChatMessages = (guestGender?: string) => {
       return;
     }
 
+    const view = viewRef.current;
+
     // Use explicit values if provided, otherwise use state
     const outfitIndexToSend = explicitOutfitIndex !== undefined ? explicitOutfitIndex : selectedOutfitIndex;
     const messageIdToSend = explicitMessageId !== undefined ? explicitMessageId : selectedMessageId;
@@ -192,18 +185,8 @@ export const useChatMessages = (guestGender?: string) => {
       imageUrl: imageFile ? URL.createObjectURL(imageFile) : undefined,
     };
 
-    // Update messages and cache immediately (optimistic)
-    const updateMessagesAndCache = (newMsg: ChatMessage) => {
-      setMessages((prev) => {
-        const updated = [...prev, newMsg];
-        if (currentChatId) {
-          setMessageCache(cache => ({ ...cache, [currentChatId]: updated }));
-        }
-        return updated;
-      });
-    };
-
-    updateMessagesAndCache(userMessage);
+    // Show the user message immediately (optimistic)
+    updateMessages(currentChatId, (prev) => [...prev, userMessage]);
     setIsLoading(true);
     setLoadingStatus('Analyzing your request...');
 
@@ -217,6 +200,14 @@ export const useChatMessages = (guestGender?: string) => {
         messageIdToSend,
         guestGenderRef.current // Pass guest gender for non-authenticated users
       );
+
+      if (view !== viewRef.current) {
+        // The user switched chats while waiting: don't add the reply to the chat now on screen.
+        // Drop the stale cache entry so the chat is refetched (with the reply) when reopened.
+        const repliedChatId = currentChatId ?? (response.conv_id ? String(response.conv_id) : undefined);
+        if (repliedChatId) delete messageCacheRef.current[repliedChatId];
+        return;
+      }
 
       // Clear selection after sending
       setSelectedOutfitIndex(null);
@@ -235,22 +226,16 @@ export const useChatMessages = (guestGender?: string) => {
 
       // Update user message image URL if backend returned one
       if (response.img_url) {
-        setMessages((prev) => {
-          const updated = prev.map((msg) => {
-            if (msg.id === userMessage.id) {
-              // Revoke the temporary object URL to prevent memory leak
-              if (msg.imageUrl && msg.imageUrl.startsWith('blob:')) {
-                URL.revokeObjectURL(msg.imageUrl);
-              }
-              return { ...msg, imageUrl: response.img_url! };
+        updateMessages(activeChatId, (prev) => prev.map((msg) => {
+          if (msg.id === userMessage.id) {
+            // Revoke the temporary object URL to prevent memory leak
+            if (msg.imageUrl && msg.imageUrl.startsWith('blob:')) {
+              URL.revokeObjectURL(msg.imageUrl);
             }
-            return msg;
-          });
-          if (activeChatId) {
-            setMessageCache(cache => ({ ...cache, [activeChatId!]: updated }));
+            return { ...msg, imageUrl: response.img_url! };
           }
-          return updated;
-        });
+          return msg;
+        }));
       }
 
       // Transform and add assistant message
@@ -278,13 +263,7 @@ export const useChatMessages = (guestGender?: string) => {
       };
 
       // Add assistant message to state and cache
-      setMessages((prev) => {
-        const updated = [...prev, assistantMessage];
-        if (activeChatId) {
-          setMessageCache(cache => ({ ...cache, [activeChatId!]: updated }));
-        }
-        return updated;
-      });
+      updateMessages(activeChatId, (prev) => [...prev, assistantMessage]);
 
       // Scroll to bottom when receiving a message (with small delay to ensure DOM is updated)
       setTimeout(() => {
@@ -303,6 +282,11 @@ export const useChatMessages = (guestGender?: string) => {
 
     } catch (error) {
       console.error('Failed to send message:', error);
+      if (view !== viewRef.current) {
+        // Failed for a chat that is no longer on screen: refetch that chat when reopened
+        if (currentChatId) delete messageCacheRef.current[currentChatId];
+        return;
+      }
 
       // Get specific error details based on error type
       const errorInfo = getErrorDetails(error);
@@ -323,13 +307,7 @@ export const useChatMessages = (guestGender?: string) => {
       };
 
       // Keep the user message but add an error response
-      setMessages((prev) => {
-        const updated = [...prev, errorMessage];
-        if (currentChatId) {
-          setMessageCache(cache => ({ ...cache, [currentChatId]: updated }));
-        }
-        return updated;
-      });
+      updateMessages(currentChatId, (prev) => [...prev, errorMessage]);
 
       // Scroll to bottom when error message is added (with small delay to ensure DOM is updated)
       setTimeout(() => {
@@ -344,31 +322,20 @@ export const useChatMessages = (guestGender?: string) => {
   const retryMessage = async (
     errorMessageId: string,
     originalMessage: string,
-    originalImage?: File,
-    _filters?: OutfitFilters
+    originalImage?: File
   ) => {
-    // Remove the error message
-    setMessages((prev) => {
-      const updated = prev.filter((msg) => msg.id !== errorMessageId);
-      if (currentChatId) {
-        setMessageCache(cache => ({ ...cache, [currentChatId]: updated }));
+    // Remove the error message and the user message it answered (the one right before it,
+    // not simply the last user message: there may be newer messages after a failed one)
+    updateMessages(currentChatId, (prev) => {
+      const errorIndex = prev.findIndex((msg) => msg.id === errorMessageId);
+      if (errorIndex === -1) return prev;
+      let userIndex = errorIndex - 1;
+      while (userIndex >= 0 && prev[userIndex].role !== 'user') userIndex--;
+      const failedUserMsg = prev[userIndex];
+      if (failedUserMsg?.imageUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(failedUserMsg.imageUrl); // sendMessage creates a fresh one for the retry
       }
-      return updated;
-    });
-
-    // Also remove the original user message that preceded the error
-    setMessages((prev) => {
-      // Find and remove the last user message (which was the failed one)
-      const lastUserMsgIndex = [...prev].reverse().findIndex(msg => msg.role === 'user');
-      if (lastUserMsgIndex !== -1) {
-        const actualIndex = prev.length - 1 - lastUserMsgIndex;
-        const updated = prev.filter((_, i) => i !== actualIndex);
-        if (currentChatId) {
-          setMessageCache(cache => ({ ...cache, [currentChatId]: updated }));
-        }
-        return updated;
-      }
-      return prev;
+      return prev.filter((_, i) => i !== errorIndex && i !== userIndex);
     });
 
     // Retry sending the message
@@ -467,7 +434,7 @@ export const useChatMessages = (guestGender?: string) => {
         }
         // Update cache
         if (currentChatId) {
-          setMessageCache(cache => ({ ...cache, [currentChatId]: updated }));
+          messageCacheRef.current[currentChatId] = updated;
         }
         return updated;
       });
@@ -487,11 +454,17 @@ export const useChatMessages = (guestGender?: string) => {
     }
   };
 
-  const clearMessages = () => {
+  const clearMessages = useCallback(() => {
+    viewRef.current++;
     setMessages([]);
     setCurrentChatId(undefined);
     setCurrentChatTitle(undefined);
-  };
+  }, []);
+
+  // Call after a chat is deleted so its messages aren't served from the cache again
+  const forgetChat = useCallback((chatId: string) => {
+    delete messageCacheRef.current[chatId];
+  }, []);
 
   return {
     messages,
@@ -505,6 +478,7 @@ export const useChatMessages = (guestGender?: string) => {
     retryMessage,
     explainOutfit,
     clearMessages,
+    forgetChat,
     isFetching,
     setCurrentChatId,
     setOnNewMessage,

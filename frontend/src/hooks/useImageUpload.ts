@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { showToast } from '../utils/toast';
 
 export const useImageUpload = (fileReaderFactory = () => new FileReader()) => {
@@ -82,14 +82,11 @@ export const useImageUpload = (fileReaderFactory = () => new FileReader()) => {
     }
   };
 
-  const clearImage = () => {
-    // Revoke object URL to prevent memory leak
-    if (imagePreview && imagePreview.startsWith('data:')) {
-      // data URLs don't need to be revoked
-    }
+  // Stable: ChatPage's navigation effect depends on it
+  const clearImage = useCallback(() => {
     setSelectedImage(null);
     setImagePreview(null);
-  };
+  }, []);
 
   return {
     selectedImage,

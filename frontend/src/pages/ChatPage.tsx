@@ -21,6 +21,7 @@ import ScrollToBottomButton from '../components/ui/ScrollToBottomButton';
 import KeyboardShortcutsHelper from '../components/ui/KeyboardShortcutsHelper';
 import { chatService } from '../services/chatService';
 import { beautifyUsername } from '../utils/stringUtils';
+import { showToast } from '../utils/toast';
 import type { ChatHistory, BudgetOption } from '../types';
 
 type GuestGender = 'male' | 'female' | 'non-binary';
@@ -66,6 +67,7 @@ const ChatPage = () => {
     retryMessage,
     explainOutfit,
     clearMessages,
+    forgetChat,
     setOnNewMessage,
     selectOutfit,
     selectedOutfitIndex,
@@ -174,7 +176,7 @@ const ChatPage = () => {
         navigate(`/chat/${currentChatId}`, { replace: true });
       }
     }
-  }, [chatId, currentChatId, loadChatMessages, clearImage, clearMessages, isAuthenticated]);
+  }, [chatId, currentChatId, loadChatMessages, clearImage, clearMessages, isAuthenticated, navigate]);
 
   // Update URL when a new chat is created (and we have an ID but URL doesn't)
 
@@ -316,34 +318,32 @@ const ChatPage = () => {
         onRenameChat={async (chatId, newTitle) => {
           try {
             const success = await chatService.renameConversation(chatId, newTitle);
-            if (success) {
-              setChatHistory((prev) =>
-                prev.map((chat) =>
-                  chat.id === chatId ? { ...chat, title: newTitle } : chat
-                )
-              );
-              // Update current chat title if it's the active one
-              if (currentChatId === chatId) {
-                // We might need a way to update the title in useChatMessages or just rely on history
-              }
-            }
+            if (!success) throw new Error('Rename was not saved');
+            // The header reads the title from chatHistory, so this also renames the open chat
+            setChatHistory((prev) =>
+              prev.map((chat) =>
+                chat.id === chatId ? { ...chat, title: newTitle } : chat
+              )
+            );
           } catch (error) {
             console.error('Failed to rename chat:', error);
+            showToast.error('Could not rename the conversation');
           }
         }}
         onDeleteChat={async (chatId) => {
           try {
             const success = await chatService.deleteConversation(chatId);
-            if (success) {
-              setChatHistory((prev) => prev.filter((chat) => chat.id !== chatId));
+            if (!success) throw new Error('Delete was not saved');
+            setChatHistory((prev) => prev.filter((chat) => chat.id !== chatId));
+            forgetChat(chatId);
 
-              // If deleted chat was active, switch to new chat
-              if (currentChatId === chatId) {
-                handleNewChat();
-              }
+            // If deleted chat was active, switch to new chat
+            if (currentChatId === chatId) {
+              handleNewChat();
             }
           } catch (error) {
             console.error('Failed to delete chat:', error);
+            showToast.error('Could not delete the conversation');
           }
         }}
       />
@@ -359,7 +359,7 @@ const ChatPage = () => {
         {/* Drag and Drop Overlay */}
         {isDragging && <DragDropOverlay />}
 
-        <Header chatTitle={currentChatTitle || chatHistory.find(c => c.id === currentChatId)?.title} />
+        <Header chatTitle={chatHistory.find(c => c.id === currentChatId)?.title || currentChatTitle} />
 
         {/* Gender Selector for non-authenticated users */}
         {!isAuthenticated && (
