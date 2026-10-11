@@ -558,7 +558,7 @@ from google.genai import types
 
 def generate_outfit_plan(
         new_user_query: str,
-        chat_history: list[dict],
+        chat_history: list[dict],  # read-only: backend/app.py appends the new turns
         image_data: tuple[str, bytes] | None,
         past_images: dict[str, bytes] | None,
         user_preferences: dict | None,
@@ -659,9 +659,6 @@ def generate_outfit_plan(
     # Aggiungiamo il turno corrente alla storia PER L'API
     gemini_history.append({"role": "user", "parts": current_turn_parts})
 
-    # --- 3. AGGIORNAMENTO STORIA SEMPLICE (PER DB) ---
-    # Salviamo solo il prompt puro dell'utente, senza il blocco preferenze/gender
-    chat_history.append({"role": "user", "text": new_user_query, "image_id" : image_data[0] if image_data else None})
 
     has_images = image_data is not None or (past_images is not None and len(past_images) > 0)
     base_prompt = IMAGE_SYSTEM_PROMPT if has_images else TEXTUAL_SYSTEM_PROMPT
@@ -690,7 +687,6 @@ def generate_outfit_plan(
 
     # --- GESTIONE RISPOSTA ---
     if dialogue_state.get('status') == 'AWAITING_INPUT':
-        chat_history.append({"role": "model", "text": dialogue_state['missing_info']})
         return {
             'status': 'AWAITING_INPUT',
             'prompt_to_user': dialogue_state['missing_info'],
@@ -719,9 +715,6 @@ def generate_outfit_plan(
             )
             final_data = final_response.parsed
 
-            final_plan_text = json.dumps(final_data.get('outfits'))
-            chat_history.append({"role": "model", "text": final_plan_text})
-
             return {
                 'status': 'READY_TO_GENERATE',
                 'outfits': final_data.get('outfits'),
@@ -738,8 +731,6 @@ def generate_outfit_plan(
             return {'status': 'Error', 'message': "Failed to generate detailed outfit plan."}
 
     else:
-        if dialogue_state.get('message'):
-            chat_history.append({"role": "model", "text": dialogue_state['message']})
         return dialogue_state
 
 
