@@ -15,6 +15,8 @@ item_schema = types.Schema(
     required=["tag", "fit"]
 )
 
+FASHION_CATEGORIES = ['top', 'bottom', 'dresses', 'outerwear', 'swimwear', 'shoes', 'accessories']
+
 # Define the schema for a category (e.g., "top")
 category_schema = types.Schema(
     type=types.Type.OBJECT,
@@ -139,6 +141,12 @@ outfit_categories_schema = types.Schema(
 outfit_schema = types.Schema(
     type=types.Type.OBJECT,
     properties={
+        # Listed before 'outfits' so the model decides this first
+        "owned_categories": types.Schema(
+            type=types.Type.ARRAY,
+            items=types.Schema(type=types.Type.STRING, enum=FASHION_CATEGORIES),
+            description="Categories of the piece(s) the user ALREADY HAS and wants items to go with (e.g. the sweater in their photo when they ask for an outfit to match it). Empty if they want to find or buy that piece itself."
+        ),
         # The nested categories container
         "outfits": types.Schema(
             type=types.Type.ARRAY,
@@ -551,7 +559,6 @@ the field 'message' MUST BE PRESENT ONLY if a guardrail triggers.
 \n***********************
 """
 
-FASHION_CATEGORIES = ['top', 'bottom', 'dresses', 'outerwear', 'swimwear', 'shoes', 'accessories']
 
 import json
 from google.genai import types
@@ -700,7 +707,12 @@ def generate_outfit_plan(
         # Prompt tecnico
         final_generation_prompt = gemini_history + [{
             "role": "user",
-            "parts": [{"text": f"All constraints are now provided. Max Budget extracted: {dialogue_state.get('max_budget', 'Not Specified')}. Please generate the final, complete outfit plan immediately using the OutfitSchema."}]
+            "parts": [{"text": f"All constraints are now provided. Max Budget extracted: {dialogue_state.get('max_budget', 'Not Specified')}. Please generate the final outfit plan immediately using the OutfitSchema. "
+                     "Include ONLY the categories the user asked for: if they asked for a single item "
+                     "(e.g. 'a sweater like this one'), each outfit contains ONLY that category. "
+                     "Generate a full outfit only if the user asked for a whole look or for items to go with a piece. "
+                     "When they want items to go with a piece they already have (e.g. the one in their photo), "
+                     "do NOT include that piece's category: they already own it."}]
         }]
 
         try:
@@ -714,6 +726,7 @@ def generate_outfit_plan(
                 )
             )
             final_data = final_response.parsed
+            drop_owned_categories(final_data)
 
             return {
                 'status': 'READY_TO_GENERATE',
@@ -732,6 +745,18 @@ def generate_outfit_plan(
 
     else:
         return dialogue_state
+
+
+def drop_owned_categories(plan: dict) -> None:
+    """Removes from each outfit the categories the user already owns: the model tends to add them back anyway."""
+    owned = set(plan.get('owned_categories') or [])
+    for outfit in plan.get('outfits') or []:
+        if not isinstance(outfit, dict):
+            continue
+        for category in owned & outfit.keys():
+            # Keep it if it is all the outfit has: then the user wants that piece itself
+            if any(outfit.get(c) for c in set(FASHION_CATEGORIES) - owned):
+                outfit.pop(category)
 
 
 def create_text_prompt(gender: str, new_user_query: str, user_preferences: dict | None) -> str:
