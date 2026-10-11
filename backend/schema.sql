@@ -1,9 +1,14 @@
+-- pgvector for product embeddings
+CREATE EXTENSION IF NOT EXISTS vector;
+
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255),
     email VARCHAR(255) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
+    password VARCHAR(255), -- NULL for Google-only accounts
+    gender VARCHAR(50),
+    google_id VARCHAR(255) UNIQUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -54,6 +59,12 @@ CREATE TABLE IF NOT EXISTS product_data (
     detail_embedding VECTOR(512)
 );
 
+-- Materials (listed in preferences UI)
+CREATE TABLE IF NOT EXISTS materials (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) UNIQUE NOT NULL
+);
+
 -- Outfit Suggestions (Link between AI response and Products)
 CREATE TABLE IF NOT EXISTS outfit_suggestion (
     id SERIAL PRIMARY KEY,
@@ -84,3 +95,36 @@ INSERT INTO preferences (name) VALUES
 ('style'),
 ('budget_range')
 ON CONFLICT DO NOTHING;
+
+-- Vector search used by ai/src/outfit_retrieval_logic.py.
+-- One row per (query, candidate); query_index is 1-based, matching the order of `queries`.
+-- Brand/material are matched against the title since eBay search results don't carry them as fields.
+CREATE OR REPLACE FUNCTION search_outfits_batch(
+    queries jsonb, match_threshold float, match_count int, max_espense numeric, gender text
+)
+RETURNS TABLE (
+    query_index int, id int, title text, url text, price numeric, image_link text, brand text,
+    material text, schema_description text, schema_color text, main_category text, similarity float
+)
+LANGUAGE sql STABLE AS $$
+    SELECT q.ord::int, p.id, p.title, p.url, p.price, p.image_link, p.brand, p.material,
+           p.schema_description, p.schema_color, p.main_category, p.similarity
+    FROM jsonb_array_elements(queries) WITH ORDINALITY AS q(val, ord)
+    CROSS JOIN LATERAL (
+        SELECT pd.id, pd.title::text, pd.url, pd.price, pd.image_link, pd.brand::text, pd.material::text,
+               pd.schema_description, pd.schema_color, pd.main_category,
+               1 - (pd.img_embedding <=> (q.val->'embedding')::text::vector) AS similarity
+        FROM product_data pd
+        WHERE pd.main_category = q.val->>'category'
+          AND (search_outfits_batch.gender IS NULL OR search_outfits_batch.gender NOT IN ('male', 'female')
+               OR pd.audience = search_outfits_batch.gender)
+          AND (max_espense IS NULL OR max_espense <= 0 OR pd.price <= max_espense)
+          AND (q.val->>'color' IS NULL OR pd.schema_color ILIKE '%' || (q.val->>'color') || '%'
+               OR (q.val->>'color') ILIKE '%' || pd.schema_color || '%')
+          AND (q.val->>'brand' IS NULL OR pd.title ILIKE '%' || (q.val->>'brand') || '%')
+          AND (q.val->>'material' IS NULL OR pd.title ILIKE '%' || (q.val->>'material') || '%')
+          AND 1 - (pd.img_embedding <=> (q.val->'embedding')::text::vector) > match_threshold
+        ORDER BY pd.img_embedding <=> (q.val->'embedding')::text::vector
+        LIMIT match_count
+    ) p;
+$$;
