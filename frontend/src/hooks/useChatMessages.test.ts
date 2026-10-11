@@ -11,6 +11,7 @@ vi.mock('../services/chatService', () => ({
         getChatConversation: vi.fn(),
         sendMessage: vi.fn(),
         transformOutfitResponse: vi.fn(),
+        getProgress: vi.fn().mockResolvedValue(false),
     },
 }));
 
@@ -93,7 +94,8 @@ describe('useChatMessages', () => {
             undefined, // imageFile
             null,      // outfitIndex
             null,      // messageId
-            undefined  // guestGender
+            undefined, // guestGender
+            expect.any(String) // requestId
         );
 
         // Verify state updates after response
@@ -236,6 +238,38 @@ describe('useChatMessages', () => {
         });
 
         expect(result.current.isFetching).toBe(false);
+    });
+
+    it('says the outfit is being built once the backend stops asking questions', async () => {
+        vi.useFakeTimers();
+        let resolveSend: (value: any) => void = () => {};
+        (chatService.sendMessage as any).mockReturnValue(new Promise((resolve) => { resolveSend = resolve; }));
+        (chatService.transformOutfitResponse as any).mockReturnValue({
+            status: 'COMPLETED', hasOutfit: false, message: 'Here it is', items: [], totalPrice: 0, explanation: ''
+        });
+        (chatService.getProgress as any).mockResolvedValue(true);
+
+        const { result } = renderHook(() => useChatMessages());
+
+        let sending: Promise<void> = Promise.resolve();
+        act(() => {
+            sending = result.current.sendMessage('A black sweater');
+        });
+        expect(result.current.loadingStatus).toBe('Analyzing your request...');
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(1500);
+        });
+        expect(result.current.loadingStatus).toBe('Got everything I need! Putting your outfit together...');
+        const requestId = (chatService.sendMessage as any).mock.calls[0][7];
+        expect(chatService.getProgress).toHaveBeenCalledWith(requestId);
+
+        await act(async () => {
+            resolveSend({ status: 'COMPLETED', conv_id: 'chat-A', content: { message: 'Here it is' } });
+            await sending;
+        });
+        expect(result.current.loadingStatus).toBe('');
+        vi.useRealTimers();
     });
 
     it('retry removes the failed user message, not the latest one', async () => {

@@ -15,6 +15,7 @@ import os
 import title_generator
 
 from ai.src.app import outfit_recommendation_handler, generate_explanation_only
+from ai.src import progress
 from storage_manager import upload_image, compress_image, download_image
 from cachetools import LRUCache
 
@@ -33,7 +34,7 @@ CORS(app,
          "http://127.0.0.1:5174"
      ],
      supports_credentials=True,
-     allow_headers=["Content-Type", "Authorization"],
+     allow_headers=["Content-Type", "Authorization", "X-Request-Id"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
 app.teardown_appcontext(DBManager.close_db_connection)
@@ -441,10 +442,16 @@ def get_messages():
     except Exception as e:
         return server_error(e)
 
+@app.route('/api/messages/progress/<request_id>', methods=['GET'])
+def message_progress(request_id):
+    # Polled by the browser while a message is being answered
+    return {"generating": progress.is_generating(request_id)}, 200
+
 @app.route('/api/messages/send', methods=['POST', 'PUT'])
 def send_message():
     is_authenticated = current_user.is_authenticated
     user_id = int(current_user.get_id()) if is_authenticated else None
+    progress.current_request.set(request.headers.get('X-Request-Id'))
     
     try:
         image = None

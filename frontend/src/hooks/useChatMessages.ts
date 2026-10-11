@@ -190,6 +190,20 @@ export const useChatMessages = (guestGender?: string) => {
     setIsLoading(true);
     setLoadingStatus('Analyzing your request...');
 
+    // The backend answers in one go; poll it to tell when the questions are over and the outfit is being built
+    const requestId = crypto.randomUUID();
+    let answered = false;
+    const progressPoll = setInterval(async () => {
+      try {
+        if (await chatService.getProgress(requestId) && !answered && view === viewRef.current) {
+          setLoadingStatus("Got everything I need! Putting your outfit together...");
+          clearInterval(progressPoll);
+        }
+      } catch {
+        // Progress is cosmetic: keep the current text
+      }
+    }, 1500);
+
     try {
       const response = await chatService.sendMessage(
         message,
@@ -198,7 +212,8 @@ export const useChatMessages = (guestGender?: string) => {
         imageFile,
         outfitIndexToSend,
         messageIdToSend,
-        guestGenderRef.current // Pass guest gender for non-authenticated users
+        guestGenderRef.current, // Pass guest gender for non-authenticated users
+        requestId
       );
 
       if (view !== viewRef.current) {
@@ -222,7 +237,6 @@ export const useChatMessages = (guestGender?: string) => {
         setCurrentChatTitle(response.conv_title);
       }
 
-      setLoadingStatus('Finding the perfect outfit...');
 
       // Update user message image URL if backend returned one
       if (response.img_url) {
@@ -314,6 +328,8 @@ export const useChatMessages = (guestGender?: string) => {
         onNewMessageRef.current?.();
       }, 100);
     } finally {
+      answered = true;
+      clearInterval(progressPoll);
       setIsLoading(false);
       setLoadingStatus('');
     }

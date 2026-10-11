@@ -2,6 +2,7 @@ import json
 from google.genai import types
 
 from ai.src.model_fallback import generate_content_with_fallback
+from ai.src.progress import mark_generating
 
 # --- Schema Definitions ---
 
@@ -704,6 +705,7 @@ def generate_outfit_plan(
         }
 
     elif dialogue_state.get('status') == 'READY_TO_GENERATE':
+        mark_generating()  # the questions are over: lets the browser say so while the outfit is built
         # Prompt tecnico
         final_generation_prompt = gemini_history + [{
             "role": "user",

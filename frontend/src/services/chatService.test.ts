@@ -45,7 +45,7 @@ describe('chatService', () => {
         expect(postSpy).toHaveBeenCalledWith('/messages/send', {
             message: 'Hello',
             conv_id: undefined
-        });
+        }, undefined); // no request id: no progress header
         expect(result).toEqual(mockResponse);
     });
 

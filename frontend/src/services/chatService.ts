@@ -149,8 +149,10 @@ export const chatService = {
     imageFile?: File,
     selectedOutfitIndex?: number | null,
     selectedMessageId?: string | null,
-    guestGender?: string // Gender for non-authenticated users
+    guestGender?: string, // Gender for non-authenticated users
+    requestId?: string // Lets getProgress follow this request
   ): Promise<SendMessageResponse> => {
+    const progressHeader = requestId ? { 'X-Request-Id': requestId } : undefined;
     // If there's an image, use FormData
     if (imageFile) {
       const formData = new FormData();
@@ -172,6 +174,7 @@ export const chatService = {
       const response = await api.post<SendMessageResponse>('/messages/send', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
+          ...progressHeader,
         },
       });
       return response.data;
@@ -184,8 +187,14 @@ export const chatService = {
       selected_outfit_index: selectedOutfitIndex,
       selected_message_id: selectedMessageId,
       ...(guestGender && { gender: guestGender }),
-    });
+    }, progressHeader && { headers: progressHeader });
     return response.data;
+  },
+
+  // True once the backend has stopped asking questions and is building the outfit
+  getProgress: async (requestId: string): Promise<boolean> => {
+    const response = await api.get<{ generating: boolean }>(`/messages/progress/${requestId}`);
+    return response.data.generating;
   },
 
   // Generate explanation for an outfit
