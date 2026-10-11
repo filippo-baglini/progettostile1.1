@@ -23,7 +23,6 @@ app = Flask(__name__)
 if not os.getenv('SECRET_KEY'):
     raise RuntimeError("SECRET_KEY is missing from the environment / .env file.")
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
-cache = LRUCache(maxsize=100)
 
 # CORS configuration for frontend
 CORS(app, 
@@ -146,7 +145,7 @@ def login():
 
         user = DBManager.get_user_by_email(email)
 
-        if not user or not check_password_hash(user['password'], password):
+        if not user or not user['password'] or not check_password_hash(user['password'], password):
             return {"error": "Email or password not valid"}, 401
 
         preferences = DBManager.get_user_preferences(user['id'])
@@ -329,7 +328,7 @@ def change_password():
 
         # Verifica la vecchia password
         user_db = DBManager.get_user_by_id(int(current_user.get_id()))
-        if not user_db or not check_password_hash(user_db['password'], current_password):
+        if not user_db or not user_db['password'] or not check_password_hash(user_db['password'], current_password):
             return {"error": "Password attuale non corretta"}, 401
 
         # Aggiorna con la nuova password
@@ -546,44 +545,39 @@ def send_message():
                 if conv_id is None:
                     return {"error": "Error while creating a new conversation"}, 500
 
-                cache[conv_id] = (chat_history, past_images)
-
             else:
                 conv_title = None
-                success = DBManager.add_message_to_conversation(conv_id, msg_text, image_id=image_id)
-                if not success:
-                    return {"error": "Unable to save the message (Not authorized or generic db error)"}, 403
+                if not DBManager.conversation_belongs_to(user_id, conv_id):
+                    return {"error": "Conversation not found"}, 404
 
-                if conv_id in cache:
-                    chat_history, past_images = cache[conv_id]
-                else:
-                    chat_history, past_images = load_messages(conv_id, user_id)
-                    cache[conv_id] = (chat_history, past_images)
+                chat_history, past_images = load_messages(conv_id, user_id)
 
                 output = outfit_recommendation_handler(msg_text, chat_history, user_id, image_data=image_data, past_images=past_images, selected_outfit_index=selected_outfit_index, selected_message_id=selected_message_id)
+
+                # Saved only after the AI call: a failure no longer leaves a prompt without a reply
+                if not DBManager.add_message_to_conversation(conv_id, msg_text, image_id=image_id):
+                    return {"error": "Unable to save the message"}, 500
 
         status = output.get('status')
         if not status:
             raise Exception("Error while generating recommendations")
 
-        if status == "AWAITING_INPUT" or status == "Guardrail":
-            text = output.get("prompt_to_user", output.get("message"))
-            if is_authenticated:
-                DBManager.add_simple_ai_response(conv_id, text, status)
-        elif status == "COMPLETED" or status == "READY_TO_GENERATE":
+        new_ai_response_id = None
+        if status == "COMPLETED" or status == "READY_TO_GENERATE":
             text = output.get("message")
             if is_authenticated:
                 new_ai_response_id = DBManager.add_ai_response(conv_id, output)
-        elif status == "RESOURCE_EXHAUSTED":
-            text = "Gemini resources exhausted"
         else:
-            text = output.get("message")
+            # AWAITING_INPUT, Guardrail and Error: every saved prompt gets a saved reply
+            text = output.get("prompt_to_user", output.get("message"))
+            if is_authenticated:
+                DBManager.add_simple_ai_response(conv_id, text, status)
 
         # Update chat history
         chat_history.append({'role': 'user', 'text': msg_text, 'image_id': image_id})
         
         ai_msg = {'role': 'model', 'text': text, 'outfits': output.get('outfits', []), 'outfit_plan': output.get('outfit_plan')}
-        if is_authenticated and 'new_ai_response_id' in locals():
+        if new_ai_response_id:
             ai_msg['message_id'] = new_ai_response_id
             
         chat_history.append(ai_msg)
@@ -600,13 +594,10 @@ def send_message():
                 "budget_options": output.get("budget_options"),
                 "outfit_generation_options": output.get("outfit_generation_options"),
             },
-            "message_id": new_ai_response_id if is_authenticated and 'new_ai_response_id' in locals() else None
+            "message_id": new_ai_response_id
         }
         if conv_title:
             response['conv_title'] = conv_title
-
-        # Invalidate cache to force reload from DB on next request (ensures 'outfits' is fresh)
-        cache.pop(conv_id, None)
 
         return response, 200
 
@@ -638,14 +629,12 @@ def explain_outfit():
 
 def load_messages(conv_id, user_id):
     messages = DBManager.get_chat_messages(user_id, conv_id)
-    messages.pop()  # because is the current prompt
 
     chat_history = []
     past_images = dict()
 
     for message in messages:
         simple_message = {
-            "role": message.get("role"),
             "role": message.get("role"),
             "text": message.get("text"),
             "message_id": message.get("message_id")
@@ -744,11 +733,6 @@ def delete_all_conversations():
     try:
         user_id = int(current_user.get_id())
         deleted_count = DBManager.delete_all_user_conversations(user_id)
-        
-        # Pulisce anche la cache per questo utente
-        keys_to_remove = [key for key in cache.keys() if str(key).startswith(f"{user_id}_")]
-        for key in keys_to_remove:
-            cache.pop(key, None)
 
         return {"success": True, "deleted_count": deleted_count}, 200
     except Exception as e:

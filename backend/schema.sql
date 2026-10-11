@@ -89,12 +89,17 @@ CREATE TABLE IF NOT EXISTS user_preference (
     PRIMARY KEY (user_id, preference_id)
 );
 
--- Initial Data for Preferences (Example)
-INSERT INTO preferences (name) VALUES 
-('favorite_color'),
-('style'),
-('budget_range')
-ON CONFLICT DO NOTHING;
+-- Preferences shown on the preferences page. The ids are fixed: DBManager.preferences()
+-- fills the options for 2 (brands from product_data), 3 (materials table) and 4 (gender),
+-- and the frontend treats 'Genere' as the single-select gender (stored in users.gender).
+-- Re-running this also corrects rows inserted by older versions of this file.
+INSERT INTO preferences (id, name) VALUES
+(1, 'Color'),
+(2, 'Brand'),
+(3, 'Material'),
+(4, 'Genere')
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
+SELECT setval(pg_get_serial_sequence('preferences', 'id'), (SELECT MAX(id) FROM preferences));
 
 -- Vector search used by ai/src/outfit_retrieval_logic.py.
 -- One row per (query, candidate); query_index is 1-based, matching the order of `queries`.

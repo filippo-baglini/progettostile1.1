@@ -16,7 +16,9 @@ def format_results(outfit_list):
                 'price': item_match.get('price'),
                 'brand': item_match.get('brand'),
                 'material': item_match.get('material'),
-                'description': item_match.get('schema_description'),
+                'main_category': item_match.get('main_category'),
+                # Search results carry schema_description; locked items from a previous outfit carry description
+                'description': item_match.get('schema_description') or item_match.get('description'),
             })
         return formatted_list
 

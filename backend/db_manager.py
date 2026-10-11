@@ -603,6 +603,13 @@ class DBManager:
 
 
     @staticmethod
+    def conversation_belongs_to(user_id: int, conversation_id) -> bool:
+        conn = DBManager.get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT 1 FROM conversations WHERE id = %s AND user_id = %s", (conversation_id, user_id))
+            return cursor.fetchone() is not None
+
+    @staticmethod
     def add_message_to_conversation(conversation_id: int, text: str, image_id=None):
         """
         Aggiunge un messaggio a una conversazione esistente, ma solo se
@@ -667,9 +674,6 @@ class DBManager:
 
             images_to_delete = [str(row[0]) for row in cursor.fetchall()]
 
-            if images_to_delete:
-                delete_images(images_to_delete)
-
             cursor.execute(
                 "DELETE FROM conversations WHERE id = %s AND user_id = %s",
                 (conversation_id, user_id)
@@ -678,6 +682,10 @@ class DBManager:
             deleted = cursor.rowcount > 0
             conn.commit()
             cursor.close()
+
+            # Only after the commit: a failed delete must not leave rows pointing at deleted images
+            if images_to_delete:
+                delete_images(images_to_delete)
 
             return deleted
 
@@ -711,11 +719,7 @@ class DBManager:
 
             images_to_delete = [str(row[0]) for row in cursor.fetchall()]
 
-            # 2. Elimina le immagini dallo storage
-            if images_to_delete:
-                delete_images(images_to_delete)
-
-            # 3. Elimina tutte le conversazioni dell'utente (CASCADE elimina prompts e risposte)
+            # 2. Elimina tutte le conversazioni dell'utente (CASCADE elimina prompts e risposte)
             cursor.execute(
                 "DELETE FROM conversations WHERE user_id = %s",
                 (user_id,)
@@ -724,6 +728,10 @@ class DBManager:
             deleted_count = cursor.rowcount
             conn.commit()
             cursor.close()
+
+            # 3. Solo dopo il commit: elimina le immagini dallo storage
+            if images_to_delete:
+                delete_images(images_to_delete)
 
             return deleted_count
 
@@ -744,46 +752,27 @@ class DBManager:
             conn = DBManager.get_db_connection()
             cursor = conn.cursor()
 
-            # 1. Recupera tutte le conversazioni per eliminare le immagini
-            cursor.execute("SELECT id FROM conversations WHERE user_id = %s", (user_id,))
-            conversation_ids = [row[0] for row in cursor.fetchall()]
+            # 1. Immagini di tutte le conversazioni dell'utente (eliminate dallo storage dopo il commit)
+            cursor.execute(
+                """
+                SELECT p.image_id
+                FROM prompts p
+                         JOIN conversations c ON p.conversation_id = c.id
+                WHERE c.user_id = %s AND p.image_id IS NOT NULL
+                """,
+                (user_id,)
+            )
+            images_to_delete = [str(row[0]) for row in cursor.fetchall()]
 
-            for conv_id in conversation_ids:
-                # Riutilizziamo la logica di delete_conversation per pulire le immagini
-                # Nota: questo è un po' inefficiente fare N query, ma sicuro per le immagini.
-                # Possiamo ottimizzare se necessario, ma per ora va bene.
-                # Tuttavia, delete_conversation committa la transazione, il che rompe l'atomicità qui.
-                # Meglio reimplementare la logica di pulizia immagini qui o fare tutto in una query.
-                
-                # Recuperiamo immagini per questa conversazione
-                cursor.execute(
-                    """
-                    SELECT p.image_id
-                    FROM prompts p
-                    WHERE p.conversation_id = %s AND p.image_id IS NOT NULL
-                    """,
-                    (conv_id,)
-                )
-                images = [str(row[0]) for row in cursor.fetchall()]
-                if images:
-                    delete_images(images)
-
-            # 2. Elimina preferenze
-            cursor.execute("DELETE FROM user_preference WHERE user_id = %s", (user_id,))
-
-            # 3. Elimina conversazioni (cascade su prompts e ai_responses se configurato, 
-            # ma per sicurezza facciamo delete esplicito o ci affidiamo al DB)
-            # Assumiamo che il DB abbia ON DELETE CASCADE sulle foreign key.
-            # Se non lo ha, dovremmo cancellare prompts e ai_responses prima.
-            # Per ora proviamo a cancellare le conversazioni.
-            cursor.execute("DELETE FROM conversations WHERE user_id = %s", (user_id,))
-
-            # 4. Elimina utente
+            # 2. Elimina utente: ON DELETE CASCADE rimuove preferenze, conversazioni, prompt e risposte
             cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
             
             deleted = cursor.rowcount > 0
             conn.commit()
             cursor.close()
+
+            if images_to_delete:
+                delete_images(images_to_delete)
 
             return deleted
 
@@ -840,7 +829,7 @@ class DBManager:
                 for pref_id, pref_data in preferences.items():
                     match int(pref_id):
                         case 2: # Brand
-                            cursor.execute("SELECT brand FROM product_data GROUP BY brand")
+                            cursor.execute("SELECT brand FROM product_data WHERE brand IS NOT NULL GROUP BY brand")
                             brands = [row[0] for row in cursor.fetchall()]
                             pref_data["values"] = brands
 
