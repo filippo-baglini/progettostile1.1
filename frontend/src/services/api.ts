@@ -15,7 +15,9 @@ const api = axios.create({
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // The session check on page load gets a 401 for every guest: that only means "not logged in"
+    const isSessionCheck = error.config?.url === '/user/session';
+    if (error.response?.status === 401 && !isSessionCheck) {
       // Handle unauthorized - redirect to login (but not if already on login/signup page)
       const currentPath = window.location.pathname;
       if (currentPath !== '/login' && currentPath !== '/signup' && currentPath !== '/') {

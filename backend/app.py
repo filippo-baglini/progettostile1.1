@@ -1,4 +1,5 @@
 import base64
+import logging
 import uuid
 from urllib.parse import urlparse
 
@@ -18,8 +19,10 @@ from storage_manager import upload_image, compress_image, download_image
 from cachetools import LRUCache
 
 app = Flask(__name__)
-app.config.from_object(DBManager)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+# Signs the login cookies: a guessable fallback would let anyone forge a session
+if not os.getenv('SECRET_KEY'):
+    raise RuntimeError("SECRET_KEY is missing from the environment / .env file.")
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 cache = LRUCache(maxsize=100)
 
 # CORS configuration for frontend
@@ -39,9 +42,22 @@ app.teardown_appcontext(DBManager.close_db_connection)
 # Flask-Login setup
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = 'login'
 
-not_auth_convs = {}
+
+@login_manager.unauthorized_handler
+def unauthorized():
+    return {"error": "Not authenticated"}, 401
+
+
+# ponytail: in-memory guest chats (with image bytes), capped so guests can't grow it forever;
+# oldest conversations are evicted first and everything is lost on restart.
+not_auth_convs = LRUCache(maxsize=200)
+
+
+def server_error(e):
+    """Log the full error server-side; never send internal details to the client."""
+    logging.exception(e)
+    return {"error": "Internal server error"}, 500
 
 class AppUser(UserMixin):
     def __init__(self, user_dict):
@@ -77,8 +93,7 @@ def index():
         return {
             "message": "Welcome to StyleFinderAI API",
             "status": "running",
-            "database": "disconnected",
-            "error": db_status["error"]
+            "database": "disconnected"
         }, 500
 
 
@@ -109,7 +124,7 @@ def signup():
         return {"success": True}, 201
 
     except Exception as e:
-        return {"error": str(e)}, 500
+        return server_error(e)
     
 @app.route('/api/user/login', methods=['POST'])
 def login():
@@ -149,7 +164,7 @@ def login():
         }, 200
 
     except Exception as e:
-        return {"error": str(e)}, 500
+        return server_error(e)
 
 @app.route('/api/user/google-login', methods=['POST'])
 def google_login():
@@ -234,7 +249,7 @@ def google_login():
         }, 200
         
     except Exception as e:
-        return {"error": str(e)}, 500
+        return server_error(e)
 
 @app.route('/api/user/logout', methods=['GET'])
 @login_required
@@ -251,7 +266,7 @@ def logout():
         
         return {"success": True}, 200
     except Exception as e:
-        return {"error": str(e)}, 500
+        return server_error(e)
 
 @app.route('/api/user/session', methods=['GET'])
 @login_required
@@ -273,43 +288,7 @@ def check_session():
         user_payload = {"id": user_db['id'], "name": user_db['name'], "email": user_db['email'], "preferences": preferences} if user_db else {}
         return {"success": True, "user": user_payload}, 200
     except Exception as e:
-        return {"error": str(e)}, 500
-
-@app.route('/api/user/update', methods=['POST'])
-@login_required
-def update_user_credentials():
-    """Aggiorna email e/o password dell'utente autenticato.
-
-    Body JSON: {"email": "nuovaEmail"?, "password": "nuovaPassword"?}
-    Almeno uno tra email o password deve essere presente.
-    Usa current_user per identificare l'utente.
-    Errori:
-      - 401 se non autenticato
-      - 400 se nessun campo da aggiornare
-      - 404 utente non trovato
-    Successo: {success: true}
-    """
-    try:
-        data = request.get_json() or {}
-        new_email = data.get('email')
-        new_password = data.get('password')
-
-        if not new_email and not new_password:
-            return {"error": "Nessun campo da aggiornare"}, 400
-
-        password_hash = None
-        if new_password:
-            password_hash = generate_password_hash(new_password)
-
-        user_id = int(current_user.get_id())
-        updated = DBManager.update_user_credentials(user_id, new_email=new_email, new_password_hash=password_hash)
-
-        if not updated:
-            return {"error": "Utente non trovato"}, 404
-
-        return {"success": True}, 200
-    except Exception as e:
-        return {"error": str(e)}, 500
+        return server_error(e)
 
 @app.route('/api/user/delete', methods=['DELETE'])
 @login_required
@@ -331,7 +310,7 @@ def delete_account():
         logout_user()
         return {"success": True}, 200
     except Exception as e:
-        return {"error": str(e)}, 500
+        return server_error(e)
 
 @app.route('/api/user/change-password', methods=['POST'])
 @login_required
@@ -359,7 +338,7 @@ def change_password():
 
         return {"success": True}, 200
     except Exception as e:
-        return {"error": str(e)}, 500
+        return server_error(e)
 
 @app.route('/api/user/profile', methods=['PUT'])
 @login_required
@@ -402,7 +381,7 @@ def update_profile():
             }
         }, 200
     except Exception as e:
-        return {"error": str(e)}, 500
+        return server_error(e)
 
 
 @app.route('/api/preferences', methods=['PUT', 'POST'])
@@ -419,7 +398,7 @@ def update_user_preferences():
 
         return {"success": True}, 200
     except Exception as e:
-        return {"error": str(e)}, 500
+        return server_error(e)
 
 
 @app.route('/api/conversations', methods=['GET'])
@@ -438,7 +417,7 @@ def get_conversations():
 
         return {"success": True, "conversations" : conversations}, 200
     except Exception as e:
-        return {"error": str(e)}, 500
+        return server_error(e)
 
 @app.route('/api/chat', methods=['GET', 'POST'])
 @login_required
@@ -461,7 +440,7 @@ def get_messages():
         return messages, 200
 
     except Exception as e:
-        return {"error": str(e)}, 500
+        return server_error(e)
 
 @app.route('/api/messages/send', methods=['POST', 'PUT'])
 def send_message():
@@ -475,14 +454,12 @@ def send_message():
         
         if request.is_json:
             data = request.get_json() or {}
-            print(f"DEBUG: JSON Request Data: {data}")
             msg_text = data.get('message')
             conv_id = data.get('conv_id')
             selected_outfit_index = data.get('selected_outfit_index')
             selected_message_id = data.get('selected_message_id') # Extract from JSON
             guest_gender = data.get('gender')  # Get gender from request body
         else:
-            print(f"DEBUG: Form Request Data: {request.form}")
             msg_text = request.form.get('message')
             conv_id = request.form.get('conv_id')
             selected_outfit_index = request.form.get('selected_outfit_index')
@@ -634,10 +611,7 @@ def send_message():
         return response, 200
 
     except Exception as e:
-        import traceback
-        print(f"CRITICAL ERROR in send_message: {str(e)}")
-        print(traceback.format_exc())
-        return {"error": str(e)}, 500
+        return server_error(e)
 
 @app.route('/api/outfit/explain', methods=['POST'])
 def explain_outfit():
@@ -659,7 +633,7 @@ def explain_outfit():
         return {"success": True, "explanation": explanation}, 200
         
     except Exception as e:
-        return {"error": str(e)}, 500
+        return server_error(e)
 
 
 def load_messages(conv_id, user_id):
@@ -733,7 +707,7 @@ def rename_conversation():
 
         return {"success": True}, 200
     except Exception as e:
-        return {"error": str(e)}, 500
+        return server_error(e)
 
 @app.route('/api/conversations/delete', methods=['DELETE'])
 @login_required
@@ -756,7 +730,7 @@ def delete_conversation():
 
         return {"success": True}, 200
     except Exception as e:
-        return {"error": str(e)}, 500
+        return server_error(e)
 
 @app.route('/api/conversations/delete-all', methods=['DELETE'])
 @login_required
@@ -778,7 +752,7 @@ def delete_all_conversations():
 
         return {"success": True, "deleted_count": deleted_count}, 200
     except Exception as e:
-        return {"error": str(e)}, 500
+        return server_error(e)
 
 @app.route('/api/preferences/all', methods=['GET'])
 @login_required
@@ -786,8 +760,8 @@ def preferences_all():
     try:
         return DBManager.preferences()
     except Exception as e:
-        return {"error": str(e)}, 500
+        return server_error(e)
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000, debug=True)
+    app.run(port=5000)

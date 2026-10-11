@@ -11,5 +11,6 @@ transformers
 numpy
 pandas
 torchvision
-python-dotenv
 google-auth
+cachetools
+requests
