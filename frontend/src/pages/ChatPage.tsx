@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { flushSync } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useChatMessages } from '../hooks/useChatMessages';
+import { useChat } from '../context/ChatContext';
 import { useImageUpload } from '../hooks/useImageUpload';
 import { useScrollToBottom } from '../hooks/useScrollToBottom';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
@@ -54,7 +54,7 @@ const ChatPage = () => {
     localStorage.setItem('stylefinder_guest_gender', gender);
   };
 
-  // Custom hooks - pass guestGender for non-authenticated users
+  // Chat state is shared with the app (see ChatContext); guestGender is sent for non-authenticated users
   const {
     messages,
     isLoading,
@@ -72,8 +72,13 @@ const ChatPage = () => {
     setOnNewMessage,
     selectOutfit,
     selectedOutfitIndex,
-    selectedMessageId
-  } = useChatMessages(!isAuthenticated ? guestGender ?? undefined : undefined);
+    selectedMessageId,
+    setGuestGender: setChatGuestGender
+  } = useChat();
+
+  useEffect(() => {
+    setChatGuestGender(!isAuthenticated ? guestGender ?? undefined : undefined);
+  }, [isAuthenticated, guestGender, setChatGuestGender]);
 
   // Auto-scroll behavior
   const { scrollRef, showScrollButton, scrollToBottom, scrollToBottomIfNotScrolledUp, handleScroll } = useScrollToBottom(messages.length);

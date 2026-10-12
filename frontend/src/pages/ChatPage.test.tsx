@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import ChatPage from './ChatPage';
 import { ThemeProvider } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { useChatMessages } from '../hooks/useChatMessages';
+import { useChat } from '../context/ChatContext';
 import { useImageUpload } from '../hooks/useImageUpload';
 import { useScrollToBottom } from '../hooks/useScrollToBottom';
 import { chatService } from '../services/chatService';
@@ -15,8 +15,8 @@ vi.mock('../context/AuthContext', () => ({
     useAuth: vi.fn(),
 }));
 
-vi.mock('../hooks/useChatMessages', () => ({
-    useChatMessages: vi.fn(),
+vi.mock('../context/ChatContext', () => ({
+    useChat: vi.fn(),
 }));
 
 vi.mock('../hooks/useImageUpload', () => ({
@@ -112,6 +112,7 @@ describe('ChatPage', () => {
 
     const defaultChatMessages = {
         messages: [],
+        setGuestGender: vi.fn(),
         isLoading: false,
         isFetching: false,
         currentChatId: null,
@@ -152,7 +153,7 @@ describe('ChatPage', () => {
             user: { name: 'Test User' },
         });
 
-        (useChatMessages as any).mockReturnValue(defaultChatMessages);
+        (useChat as any).mockReturnValue(defaultChatMessages);
         (useImageUpload as any).mockReturnValue(defaultImageUpload);
         (useScrollToBottom as any).mockReturnValue(defaultScroll);
         (chatService.getChatHistory as any).mockResolvedValue([]);
@@ -164,7 +165,7 @@ describe('ChatPage', () => {
     });
 
     it('renders messages when available', () => {
-        (useChatMessages as any).mockReturnValue({
+        (useChat as any).mockReturnValue({
             ...defaultChatMessages,
             messages: mockMessages,
         });
@@ -175,7 +176,7 @@ describe('ChatPage', () => {
     });
 
     it('renders skeletons when fetching history', () => {
-        (useChatMessages as any).mockReturnValue({
+        (useChat as any).mockReturnValue({
             ...defaultChatMessages,
             isFetching: true,
         });
@@ -185,7 +186,7 @@ describe('ChatPage', () => {
     });
 
     it('renders typing indicator when loading', () => {
-        (useChatMessages as any).mockReturnValue({
+        (useChat as any).mockReturnValue({
             ...defaultChatMessages,
             messages: mockMessages,
             isLoading: true,
@@ -246,7 +247,7 @@ describe('ChatPage', () => {
     it('sends message and clears input', () => {
         // Mock sendMessage - note: ChatPage calls sendMessage(message, image) without a callback
         const sendMessageMock = vi.fn();
-        (useChatMessages as any).mockReturnValue({
+        (useChat as any).mockReturnValue({
             ...defaultChatMessages,
             sendMessage: sendMessageMock,
         });

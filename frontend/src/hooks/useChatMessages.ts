@@ -79,7 +79,7 @@ const getErrorDetails = (error: unknown): { title: string; message: string } => 
   };
 };
 
-export const useChatMessages = (guestGender?: string) => {
+export const useChatMessages = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState<string>('');
@@ -98,9 +98,11 @@ export const useChatMessages = (guestGender?: string) => {
   const [selectedOutfitIndex, setSelectedOutfitIndex] = useState<number | null>(null);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
 
-  // Store guestGender in a ref so it's always current
-  const guestGenderRef = useRef(guestGender);
-  guestGenderRef.current = guestGender;
+  // Set by the chat page; a ref so sendMessage always reads the current value
+  const guestGenderRef = useRef<string | undefined>(undefined);
+  const setGuestGender = useCallback((gender: string | undefined) => {
+    guestGenderRef.current = gender;
+  }, []);
 
   const setOnNewMessage = useCallback((callback: () => void) => {
     onNewMessageRef.current = callback;
@@ -501,6 +503,7 @@ export const useChatMessages = (guestGender?: string) => {
     setOnNewMessage,
     selectOutfit,
     selectedOutfitIndex,
-    selectedMessageId
+    selectedMessageId,
+    setGuestGender
   };
 };

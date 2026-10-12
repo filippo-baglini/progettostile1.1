@@ -5,6 +5,7 @@ import { lazy, Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ChatProvider } from './context/ChatContext';
 import { ThemeProvider } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -42,7 +43,7 @@ const PageTransition = ({ children }: { children: React.ReactNode }) => (
 
 const AnimatedRoutes = () => {
   const location = useLocation();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
   if (isLoading) {
     return <LoadingFallback />;
@@ -58,6 +59,8 @@ const AnimatedRoutes = () => {
   };
 
   return (
+    // Keyed by user: logging in or out starts from an empty chat state
+    <ChatProvider key={user?.id ?? 'guest'}>
     <AnimatePresence mode="wait">
       <Routes location={location} key={getRouteKey(location.pathname)}>
         <Route path="/" element={
@@ -85,6 +88,7 @@ const AnimatedRoutes = () => {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AnimatePresence>
+    </ChatProvider>
   );
 };
 
