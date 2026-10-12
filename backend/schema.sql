@@ -107,7 +107,7 @@ SELECT setval(pg_get_serial_sequence('preferences', 'id'), (SELECT MAX(id) FROM 
 
 -- Vector search used by ai/src/outfit_retrieval_logic.py.
 -- One row per (query, candidate); query_index is 1-based, matching the order of `queries`.
--- Brand/material are matched against the title since eBay search results don't carry them as fields.
+-- Brand/material are matched against their columns and the title (sellers often leave the item fields empty).
 CREATE OR REPLACE FUNCTION search_outfits_batch(
     queries jsonb, match_threshold float, match_count int, max_espense numeric, gender text
 )
@@ -130,8 +130,10 @@ LANGUAGE sql STABLE AS $$
           AND (max_espense IS NULL OR max_espense <= 0 OR pd.price <= max_espense)
           AND (q.val->>'color' IS NULL OR pd.schema_color ILIKE '%' || (q.val->>'color') || '%'
                OR (q.val->>'color') ILIKE '%' || pd.schema_color || '%')
-          AND (q.val->>'brand' IS NULL OR pd.title ILIKE '%' || (q.val->>'brand') || '%')
-          AND (q.val->>'material' IS NULL OR pd.title ILIKE '%' || (q.val->>'material') || '%')
+          AND (q.val->>'brand' IS NULL OR pd.brand ILIKE '%' || (q.val->>'brand') || '%'
+               OR pd.title ILIKE '%' || (q.val->>'brand') || '%')
+          AND (q.val->>'material' IS NULL OR pd.material ILIKE '%' || (q.val->>'material') || '%'
+               OR pd.title ILIKE '%' || (q.val->>'material') || '%')
           AND 1 - (pd.img_embedding <=> (q.val->'embedding')::text::vector) > match_threshold
         ORDER BY pd.img_embedding <=> (q.val->'embedding')::text::vector
         LIMIT match_count

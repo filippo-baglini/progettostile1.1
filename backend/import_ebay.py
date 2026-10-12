@@ -3,6 +3,7 @@
 Usage (from backend/):  venv/bin/python import_ebay.py
 Needs EBAY_CLIENT_ID and EBAY_CLIENT_SECRET (production keyset, developer.ebay.com) in .env.
 Safe to re-run: listings already in the DB (same URL) are skipped.
+Makes one getItem call per new listing (for brand/material): ~3800 of the 5000 Browse calls/day.
 """
 import io
 import os
@@ -72,6 +73,24 @@ def search(token, keywords):
     return r.json().get("itemSummaries", [])
 
 
+def get_details(token, item_id):
+    """Brand, material and colour live only on the full item, not in search results."""
+    r = requests.get(
+        "https://api.ebay.com/buy/browse/v1/item/" + requests.utils.quote(item_id, safe=""),
+        headers={"Authorization": f"Bearer {token}", "X-EBAY-C-MARKETPLACE-ID": MARKETPLACE},
+        timeout=30,
+    )
+    r.raise_for_status()
+    item = r.json()
+    aspects = {a["name"]: a["value"] for a in item.get("localizedAspects", [])}
+    brand = item.get("brand")
+    if brand and brand.lower() in ("unbranded", "does not apply"):
+        brand = None
+    material = (item.get("material") or aspects.get("Material") or aspects.get("Outer Shell Material")
+                or aspects.get("Upper Material"))
+    return brand and brand[:255], material and material[:255], item.get("color")  # columns are VARCHAR(255)
+
+
 def load_image(url):
     # eBay serves any size by changing s-l<N>; 500px is plenty for CLIP's 224px input.
     url = re.sub(r"s-l\d+\.", "s-l500.", url)
@@ -90,23 +109,29 @@ def main():
     seen = {row[0] for row in cur.fetchall()}
     token = get_token()
 
-    for category, audience, keywords in QUERIES:
+    for i, (category, audience, keywords) in enumerate(QUERIES, 1):
         rows, images = [], []
         for item in search(token, keywords):
-            url, price = item.get("itemWebUrl"), item.get("price", {})
+            # itemWebUrl carries per-search tracking params, so build a stable URL for dedup.
+            url = f"https://www.ebay.ie/itm/{item['legacyItemId']}" if item.get("legacyItemId") else None
+            price = item.get("price", {})
             image_url = item.get("image", {}).get("imageUrl")
             if not url or not image_url or url in seen or price.get("currency") != "EUR":
                 continue
             try:
-                images.append(load_image(image_url))
+                image = load_image(image_url)
+                brand, material, color = get_details(token, item["itemId"])
             except Exception as e:
-                print(f"  skip image {image_url}: {e}")
+                print(f"  skip {url}: {e}")
                 continue
+            images.append(image)
             seen.add(url)
             title = item["title"]
-            color = COLOR_RE.search(title)
+            if not color:
+                match = COLOR_RE.search(title)
+                color = match.group(1) if match else None
             rows.append((title, url, float(price["value"]), image_url, title, title,
-                         color.group(1).lower() if color else None, category, audience, "in_stock"))
+                         color.lower() if color else None, brand, material, category, audience, "in_stock"))
 
         if rows:
             with torch.no_grad():
@@ -115,12 +140,12 @@ def main():
             for row, vec in zip(rows, feats):
                 cur.execute(
                     "INSERT INTO product_data (title, url, price, image_link, description, schema_description,"
-                    " schema_color, main_category, audience, availability, img_embedding)"
-                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::vector)",
+                    " schema_color, brand, material, main_category, audience, availability, img_embedding)"
+                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::vector)",
                     (*row, str(vec.tolist())),
                 )
             conn.commit()
-        print(f"{keywords!r}: +{len(rows)}" + (f"  e.g. {rows[0][0]!r} €{rows[0][2]}" if rows else ""))
+        print(f"[{i}/{len(QUERIES)}] {keywords!r}: +{len(rows)}" + (f"  e.g. {rows[0][0]!r} €{rows[0][2]}" if rows else ""), flush=True)
 
     cur.execute("SELECT count(*) FROM product_data")
     print("Total products:", cur.fetchone()[0])
