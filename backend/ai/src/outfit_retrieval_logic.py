@@ -5,9 +5,10 @@ import pandas as pd
 from typing import List
 from supabase import Client
 
-def search_product_candidates_with_vector_db(client: Client, parsed_item_list: List[dict], budget: float|None, gender: str) -> List[List[dict]] | List[dict]:
+def search_product_candidates_with_vector_db(client: Client, parsed_item_list: List[dict], budget: float|None, gender: str) -> List[List[dict]]:
     """
     Finds best product matches using a SINGLE batch vector search in Supabase.
+    Returns [] if any item has no candidates or the search fails.
     """
 
     queries_payload = []
@@ -55,7 +56,7 @@ def search_product_candidates_with_vector_db(client: Client, parsed_item_list: L
                 item_desc = parsed_item_list[i].get('description', 'Unknown Item')
                 category = parsed_item_list[i].get('category')
                 print(f"Warning: No candidates found for {item_desc} ({category}).")
-                return [{"error": f"Failed to find candidates for {category}. Cannot proceed with Knapsack optimization."}]
+                return []
 
             candidates_list = item_candidates_df.drop(columns=['query_index']).to_dict('records')
             all_candidates.append(candidates_list)
@@ -64,4 +65,4 @@ def search_product_candidates_with_vector_db(client: Client, parsed_item_list: L
 
     except Exception as e:
         print(f"Supabase Batch RPC search error: {e}")
-        return [{"error": f"Database error: {str(e)}"}]
+        return []
