@@ -48,6 +48,7 @@ if not os.environ.get("MISTRAL_API_KEY"):
 
 # 3. CLIP Model Initialization (Heavy/Critical Resource)
 CLIP_MODEL_NAME = "patrickjohncyh/fashion-clip"
+SINGLE_ITEM_CATEGORIES = {'bottom', 'dresses', 'outerwear', 'swimwear', 'shoes'}  # 'top' and 'accessories' can layer
 try:
     DEVICE = torch.device("cpu")
     MODEL = CLIPModel.from_pretrained(CLIP_MODEL_NAME)
@@ -335,12 +336,17 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
                     # We don't add to items_to_search
                 
                 # 3. Process REPLACE and ADD to prepare new searches
+                # An outfit has one of each of these; the model tends to re-ADD items from earlier turns
+                kept_categories = {it.get('main_category') for it in active_previous_items.values()}
                 for mod in modifications:
                     action = mod.get('action')
                     if action in ['REPLACE', 'ADD']:
                         new_item_def = mod.get('new_item')
                         category = mod.get('category')
-                        
+                        if action == 'ADD' and category in SINGLE_ITEM_CATEGORIES & kept_categories:
+                            logging.info(f"Action ADD: outfit already has {category}, skipping.")
+                            continue
+
                         if new_item_def and category:
                             # Construct a parsed item object for search
                             search_item = {
@@ -455,11 +461,11 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
         logging.warning("No outfits within budget found. Returning all (potentially over-budget) results or empty.")
 
     if not final_outfits_results:
-        return {"status": "Error", "message": "Sorry but we don't have anything in our catalog that suits your request. Would you like to try look for something else?", "status_code": 500}
+        return {"status": "Error", "message": response.get('no_results_message') or "Sorry but we don't have anything in our catalog that suits your request. Would you like to try look for something else?", "status_code": 500}
 
     final_response = {
         'status': 'COMPLETED',
-        'message': "Here are your outfit options.",
+        'message': response.get('results_message') or "Here are your outfit options.",
         'status_code': 200,
         'chat_history': response.get('history', chat_history),
         'conversation_title': response.get('conversation_title'),

@@ -36,9 +36,8 @@ constraint_item_schema = types.Schema(
     type=types.Type.OBJECT,
     description="Any color, material, or brand constraints specified by the user for this category.",
     properties={
-
-        "material": types.Schema(type=types.Type.STRING),
-        "brand": types.Schema(type=types.Type.STRING),
+        "material": types.Schema(type=types.Type.STRING, description="A single English material word, with no adjectives."),
+        "brand": types.Schema(type=types.Type.STRING, description="Only a brand the user explicitly named; never a style, fit or quality word."),
     },
 )
 
@@ -89,7 +88,7 @@ input_gathering_schema = types.Schema(
             }
         ),
         "message": types.Schema(type=types.Type.STRING, description="field that must contain ONLY the error message if a guardrail condition triggers"),
-        "conversation_title": types.Schema(type=types.Type.STRING, description="A short, concise title for the conversation (max 5 words). Generate this ONLY if it is the first message in the conversation."),
+        "conversation_title": types.Schema(type=types.Type.STRING, description="A short, concise title for the conversation (max 5 words), written in the same language as the user's message. Generate this ONLY if it is the first message in the conversation."),
         "num_outfits": types.Schema(type=types.Type.INTEGER, description="The number of outfit options the user wants to see (default 1, max 3). Extract this from the user's request."),
         "budget_options": types.Schema(
             type=types.Type.ARRAY,
@@ -146,7 +145,7 @@ outfit_schema = types.Schema(
         "owned_categories": types.Schema(
             type=types.Type.ARRAY,
             items=types.Schema(type=types.Type.STRING, enum=FASHION_CATEGORIES),
-            description="Categories of the piece(s) the user ALREADY HAS and wants items to go with (e.g. the sweater in their photo when they ask for an outfit to match it). Empty if they want to find or buy that piece itself."
+            description="Categories of the piece(s) the user ALREADY HAS and wants items to go with (e.g. the sweater in their photo when they ask for an outfit to match it). Empty if they want to find or buy that piece itself. A piece the user names as part of the outfit they want is wanted, NOT owned."
         ),
         # The nested categories container
         "outfits": types.Schema(
@@ -179,14 +178,47 @@ outfit_schema = types.Schema(
         "modifications": types.Schema(
             type=types.Type.ARRAY,
             items=modification_schema,
-            description="A list of specific modifications to apply if refinement_type is REFINE_CURRENT. Leave empty if NEW_OUTFIT."
+            description="A list of specific modifications to apply if refinement_type is REFINE_CURRENT, only those asked for in the latest user message. Leave empty if NEW_OUTFIT."
         ),
         "message": types.Schema(
             type=types.Type.STRING,
             description="A message for non-fashion related inquiries. MUST ONLY be present for guardrail messages."
-        )
+        ),
+        # The search runs after this call, so both outcomes are worded up front in the user's language
+        "results_message": types.Schema(type=types.Type.STRING, description="One short sentence presenting the outfit options found, written in the same language as the user's messages."),
+        "no_results_message": types.Schema(type=types.Type.STRING, description="One short sentence saying the catalog has nothing that suits the request and asking if they want to look for something else, written in the same language as the user's messages.")
     },
-    required=["outfits", "max_budget", "refinement_type"]
+    required=["outfits", "max_budget", "refinement_type", "results_message", "no_results_message"]
+)
+
+# One call either asks a question or returns the plan: status first, then the question fields, then the plan fields
+_combined_properties = {**input_gathering_schema.properties, **outfit_schema.properties}
+_combined_properties['status'] = types.Schema(
+    type=types.Type.STRING, enum=["AWAITING_INPUT", "READY_TO_GENERATE", "Guardrail"],
+    description="'AWAITING_INPUT' to ask the user for missing information (fill only the question fields), "
+                "'READY_TO_GENERATE' when everything is known (fill the outfit plan fields in this same response).")
+response_schema = types.Schema(type=types.Type.OBJECT, properties=_combined_properties, required=["status"])
+
+# Appended to the latest user turn: the model follows rules there more reliably than in the system prompt
+PLAN_RULES = (
+    "\n\nIf you have everything you need, generate the outfit plan now (status 'READY_TO_GENERATE'). Rules for the plan: "
+    "Include ONLY the categories the user asked for: if they asked for a single item "
+    "(e.g. 'a sweater like this one'), each outfit contains ONLY that category. "
+    "Generate a full outfit only if the user asked for a whole look or for items to go with a piece. "
+    "When they want items to go with a piece they already have (e.g. the one in their photo), "
+    "do NOT include that piece's category: they already own it. "
+    "A piece only counts as owned if they say they have it or show it in a photo: "
+    "pieces they name as part of the outfit they want must be included "
+    "('an outfit with a white shirt' means they want the shirt). "
+    "Sweaters, jumpers, cardigans, hoodies and sweatshirts always go under 'top'; "
+    "'outerwear' is only for jackets and coats. "
+    "Every 'hard_constraints' value MUST be translated into English as product listings write it, "
+    "even when the user writes in another language. "
+    "'material' is a single material word: leave out any adjective about colour, weight or style. "
+    "Set 'brand' ONLY to a brand name the user explicitly named; "
+    "descriptive words about style, weight or quality are never brands, so leave 'brand' out. "
+    "When refining, 'modifications' contains ONLY what this latest user request asks for: \"{query}\". "
+    "Items added or changed in earlier messages are already in the current outfit, never add them again."
 )
 
 # --- 3. System Prompt and Guardrail ---
@@ -205,7 +237,7 @@ Analyze the ENTIRE conversation history.
 
 **GLOBAL RULE:** Before asking for ANY information (Style, Budget, or Options), **SCAN the ENTIRE conversation history**. If the user provided the information in a previous turn (e.g., budget was mentioned in the very first message), **COUNT IT AS PRESENT**. Do not ask for it again.
 
-If this is the FIRST message in the conversation, you MUST generate a 'conversation_title'. The title should be short, concise, and summarize the user's intent.
+If this is the FIRST message in the conversation, you MUST generate a 'conversation_title'. The title should be short, concise, and summarize the user's intent. Write it in the same language as the user's message.
 
 Determine if a 'max_budget' (a numerical or textual value in € or $) has been explicitly provided by the user.
 
@@ -275,7 +307,7 @@ Determine if a 'max_budget' (a numerical or textual value in € or $) has been 
 Make sure that, if the user's specifies any constraints, that they are applied ONLY TO THE SPECIFIED CLOTHING ITEMS.
 
 [STEP 2: OUTFIT GENERATION (Use OutfitSchema)]
-ONLY if the 'status' would be 'READY_TO_GENERATE', you MUST switch modes and generate the final outfit plan using the standard OutfitSchema. The final output MUST NOT contain the status/missing_info fields in this case. 
+ONLY if the 'status' is 'READY_TO_GENERATE', you MUST generate the final outfit plan in the same response: set 'status' to 'READY_TO_GENERATE', leave 'missing_info' empty and fill in the outfit plan fields. 
 
 [TOTAL BUDGET LOGIC]
 DEFAULT BEHAVIOR: If the user requests multiple options (e.g., "3 outfits") and provides a max budget, assume they are ALTERNATIVES.
@@ -297,6 +329,7 @@ If the user asks to change, remove, or add items to the PREVIOUS OUTFIT, you mus
 **EXCEPTION**: If the user asks for **MULTIPLE OPTIONS** or **VARIATIONS** (e.g. "show me 3 versions", "give me choices", "3 types of shoes"), you MUST use `refinement_type: 'NEW_OUTFIT'` and generate distinct full outfit objects. DO NOT use `REFINE_CURRENT`.
 
 The 'outfits' field should be left EMPTY [] when using REFINE_CURRENT, because the backend will reconstruct the outfit based on your modifications.
+The 'modifications' list must contain ONLY the changes asked for in the user's LATEST message. Changes asked for in earlier messages are already part of the current outfit: never repeat them.
 
 Types of Modifications:
 1.  **REMOVE an Item:**
@@ -342,6 +375,7 @@ If constraints are missing, assume flexibility and generate a well-curated outfi
 
 Extract all budget and hard constraints provided by the user in the history and populate the 'max_budget' and 'hard_constraints' fields, even if the status is 'AWAITING_INPUT'.
 Do not make up constraints, just extract constraints if the user explicitly inputs them.
+Write constraint values in English, as product listings name them, whatever language the user writes in: they are matched against English product data.
 
 GUARDRAIL: If the user's request is offensive towards any ethnicity, contains hatespeech or is in any way offensive towards anybody, you MUST immediately stop and return the following JSON object ONLY:
 {'status': 'Guardrail', 'message': "I cannot fulfill this request. Content that promotes hate speech, discrimination, or is offensive toward any group or individual violates my safety policy and is strictly forbidden."}
@@ -365,7 +399,7 @@ You are an expert conversational fashion stylist AI with a warm, friendly, and e
 
 Analyze the ENTIRE conversation history and the attached image.
 
-If this is the FIRST message in the conversation, you MUST generate a 'conversation_title'. The title should be short, concise, creative and summarize the user's intent.
+If this is the FIRST message in the conversation, you MUST generate a 'conversation_title'. The title should be short, concise, creative and summarize the user's intent. Write it in the same language as the user's message.
 
 Determine if the following two pieces of information are explicitly present:
 a. 'max_budget' (explicit or 0 if "don't care").
@@ -480,7 +514,7 @@ d. **VARIANT GENERATION (Specific Item Option):** If you are generating multiple
     - **RESULT:** Each object in the 'outfits' list must be a full outfit plan (e.g. Jacket A + Pants + Shoes, Jacket B + Pants + Shoes, etc.).
     - **FORBIDDEN:** Do NOT return objects containing *only* the new item. The backend does not auto-merge in `NEW_OUTFIT` mode for multiple options.
 
-ONLY if the 'status' would be 'READY_TO_GENERATE', you MUST switch modes and generate the final outfit plan using the standard OutfitSchema. The final output MUST NOT contain the status/missing_info fields in this case.
+ONLY if the 'status' is 'READY_TO_GENERATE', you MUST generate the final outfit plan in the same response: set 'status' to 'READY_TO_GENERATE', leave 'missing_info' empty and fill in the outfit plan fields.
 The final output MUST include the 'max_budget' (extracted from history) and 'hard_constraints' fields at the top level.
 For case (c) [Style Inspiration], the final output should be a full outfit, including at least 'top', 'bottom', 'shoes'.
 For cases (a) [Exact Match] and (b) [Complete Outfit], you MUST adhere strictly to the exclusions defined above (do not generate unasked items).
@@ -506,6 +540,7 @@ If the user asks to change, remove, or add items to the PREVIOUS OUTFIT, you mus
 **EXCEPTION**: If the user asks for **MULTIPLE OPTIONS** or **VARIATIONS** (e.g. "show me 3 versions", "give me choices", "3 types of shoes"), you MUST use `refinement_type: 'NEW_OUTFIT'` and generate distinct full outfit objects. DO NOT use `REFINE_CURRENT`.
 
 The 'outfits' field should be left EMPTY [] when using REFINE_CURRENT, because the backend will reconstruct the outfit based on your modifications.
+The 'modifications' list must contain ONLY the changes asked for in the user's LATEST message. Changes asked for in earlier messages are already part of the current outfit: never repeat them.
 
 Types of Modifications:
 1.  **REMOVE an Item:**
@@ -549,6 +584,7 @@ If constraints are missing, assume flexibility and generate a well-curated outfi
 [CONSTRAINT EXTRACTION]
 
 Extract all budget and hard constraints provided by the user in the history. If the user explicitly asks for an item with a feature that matches the image (e.g., "same color"), you MUST analyze the image to determine the feature's value and use that specific, descriptive value in the 'description' field, NOT in the 'hard_constraints' field. DO NOT use literal phrases like "same as in the picture."
+Write constraint values in English, as product listings name them, whatever language the user writes in: they are matched against English product data.
 
 GUARDRAIL: If the user's request is offensive towards any ethnicity, contains hatespeech or is in any way offensive towards anybody, you MUST immediately stop and return the following JSON object ONLY:
 {'status': 'Guardrail', 'message': "I cannot fulfill this request. Content that promotes hate speech, discrimination, or is offensive toward any group or individual violates my safety policy and is strictly forbidden."}
@@ -651,7 +687,7 @@ def generate_outfit_plan(
 
     full_text_prompt = create_text_prompt(gender, new_user_query, user_preferences)
 
-    current_turn_parts = [types.Part(text=full_text_prompt)]
+    current_turn_parts = [types.Part(text=full_text_prompt + PLAN_RULES.replace("{query}", new_user_query))]
 
     # Part B: Immagine (se presente)
     if image_data:
@@ -672,6 +708,7 @@ def generate_outfit_plan(
     base_prompt = IMAGE_SYSTEM_PROMPT if has_images else TEXTUAL_SYSTEM_PROMPT
 
     # --- 4. CHIAMATA API ---
+    # One call: the model either asks a question or returns the outfit plan straight away
     try:
         print("DEBUG: Calling generate_content (with fallback)...")
         response = generate_content_with_fallback(
@@ -679,74 +716,52 @@ def generate_outfit_plan(
             config=types.GenerateContentConfig(
                 system_instruction = base_prompt,
                 response_mime_type = "application/json",
-                response_schema = input_gathering_schema,
-                temperature = 1.0 # Reduced from 1.5 to be safer
+                response_schema = response_schema,
+                temperature = 1.0
             )
         )
-        print("DEBUG: generate_content returned. Parsing response...")
-        dialogue_state = response.parsed
-        print(f"DEBUG: Response parsed. Status: {dialogue_state.get('status')}")
-
+        data = response.parsed
+        print(f"DEBUG: Response parsed. Status: {data.get('status')}")
     except Exception as e:
-        print(f"Error during dialogue state check: {e}")
+        print(f"Error during outfit plan generation: {e}")
         import traceback
         traceback.print_exc()
         return {'error': 'Failed to process dialogue state.'}
 
-    # --- GESTIONE RISPOSTA ---
-    if dialogue_state.get('status') == 'AWAITING_INPUT':
+    if data.get('status') == 'AWAITING_INPUT':
         return {
             'status': 'AWAITING_INPUT',
-            'prompt_to_user': dialogue_state['missing_info'],
+            'prompt_to_user': data.get('missing_info'),
             'history': chat_history,
-            'conversation_title': dialogue_state.get('conversation_title'),
-            'budget_options': dialogue_state.get('budget_options'), # Pass this through
-            'outfit_generation_options': dialogue_state.get('outfit_generation_options') # Pass this through
+            'conversation_title': data.get('conversation_title'),
+            'budget_options': data.get('budget_options'),
+            'outfit_generation_options': data.get('outfit_generation_options')
         }
 
-    elif dialogue_state.get('status') == 'READY_TO_GENERATE':
+    if data.get('status') == 'READY_TO_GENERATE':
         mark_generating()  # the questions are over: lets the browser say so while the outfit is built
-        # Prompt tecnico
-        final_generation_prompt = gemini_history + [{
-            "role": "user",
-            "parts": [{"text": f"All constraints are now provided. Max Budget extracted: {dialogue_state.get('max_budget', 'Not Specified')}. Please generate the final outfit plan immediately using the OutfitSchema. "
-                     "Include ONLY the categories the user asked for: if they asked for a single item "
-                     "(e.g. 'a sweater like this one'), each outfit contains ONLY that category. "
-                     "Generate a full outfit only if the user asked for a whole look or for items to go with a piece. "
-                     "When they want items to go with a piece they already have (e.g. the one in their photo), "
-                     "do NOT include that piece's category: they already own it."}]
-        }]
+        drop_owned_categories(data)
+        return {
+            'status': 'READY_TO_GENERATE',
+            'outfits': data.get('outfits'),
+            'budget': data.get('max_budget'),
+            'hard_constraints': clean_constraints(data.get('hard_constraints')),
+            'refinement_type': data.get('refinement_type') or 'NEW_OUTFIT',
+            'modifications': data.get('modifications') or [],
+            'results_message': data.get('results_message'),
+            'no_results_message': data.get('no_results_message'),
+            'history': chat_history,
+            'conversation_title': data.get('conversation_title')
+        }
 
-        try:
-            final_response = generate_content_with_fallback(
-                contents=final_generation_prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction = base_prompt,
-                    response_mime_type = "application/json",
-                    response_schema = outfit_schema,
-                    temperature = 1.5   
-                )
-            )
-            final_data = final_response.parsed
-            drop_owned_categories(final_data)
+    return data
 
-            return {
-                'status': 'READY_TO_GENERATE',
-                'outfits': final_data.get('outfits'),
-                'budget': final_data.get('max_budget'),
-                'hard_constraints': final_data.get('hard_constraints'),
-                'refinement_type': final_data.get('refinement_type', 'NEW_OUTFIT'),
-                'modifications': final_data.get('modifications', []),
-                'history': chat_history,
-                'conversation_title': dialogue_state.get('conversation_title')
-            }
-        except Exception as e:
-            print(e)
-            print(f"Error during final outfit generation: {e}")
-            return {'status': 'Error', 'message': "Failed to generate detailed outfit plan."}
 
-    else:
-        return dialogue_state
+def clean_constraints(constraints: dict | None) -> dict:
+    """Keeps only the non-empty fields of constraint_item_schema: the model sometimes invents others (e.g. 'color': 'dark')."""
+    allowed = constraint_item_schema.properties.keys()
+    return {category: kept for category, fields in (constraints or {}).items() if isinstance(fields, dict)
+            if (kept := {k: v for k, v in fields.items() if k in allowed and v})}
 
 
 def drop_owned_categories(plan: dict) -> None:

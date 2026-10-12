@@ -8,7 +8,7 @@ load_dotenv()
 def generate_title(prompt: str) -> str:
     prompt_text = (
         f"Generate strictly ONE single title based on this prompt: '{prompt}'. "
-        "The title must be short, concise and informative. "
+        "The title must be short, concise and informative, and written in the same language as the prompt. "
         "Do not provide a list. Do not output intro text. Output ONLY the title."
     )
 
