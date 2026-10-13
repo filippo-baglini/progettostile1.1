@@ -11,6 +11,6 @@ transformers
 numpy
 pandas
 torchvision
-google-auth
+pyjwt[crypto]
 cachetools
 requests
