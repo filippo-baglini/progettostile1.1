@@ -862,4 +862,6 @@ def preferences_all():
 
 
 if __name__ == '__main__':
-    app.run(port=5000)
+    # Restarts the server when a .py file changes (dev only). ponytail: the watcher process imports
+    # app.py too, so the CLIP model is loaded twice (~850 MB extra); fine for development.
+    app.run(port=5000, use_reloader=True)
