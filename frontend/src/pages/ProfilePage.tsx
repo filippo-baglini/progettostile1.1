@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Lock, Save, ArrowLeft, Loader2, LogOut, SlidersHorizontal } from 'lucide-react';
+import { User, Lock, Save, ArrowLeft, Loader2, LogOut, Shirt, SlidersHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/authService';
@@ -16,6 +16,7 @@ import DeleteAccountModal from '../components/ui/DeleteAccountModal';
 import DeleteAllChatsModal from '../components/ui/DeleteAllChatsModal';
 import PreferencesSection from '../components/profile/PreferencesSection';
 import PhotoPicker from '../components/profile/PhotoPicker';
+import WardrobeSection from '../components/profile/WardrobeSection';
 
 const ProfilePage = () => {
     const navigate = useNavigate();
@@ -289,6 +290,22 @@ const ProfilePage = () => {
                             <h2 className="text-xl font-bold text-text-dark dark:text-white">Style Preferences</h2>
                         </div>
                         <PreferencesSection />
+                    </motion.div>
+
+                    {/* Wardrobe Card */}
+                    <motion.div
+                        className="bg-cream-100/95 dark:bg-surface-darker/90 backdrop-blur-xl rounded-2xl p-6 border border-cream-300 dark:border-surface-muted shadow-xl"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.18 }}
+                    >
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="p-2 bg-primary/10 rounded-lg">
+                                <Shirt className="w-5 h-5 text-primary" />
+                            </div>
+                            <h2 className="text-xl font-bold text-text-dark dark:text-white">My Wardrobe</h2>
+                        </div>
+                        <WardrobeSection />
                     </motion.div>
 
                     {/* Password Change Card */}

@@ -84,6 +84,10 @@ vi.mock('../components/profile/PreferencesSection', () => ({
     default: () => <div data-testid="preferences-section" />,
 }));
 
+vi.mock('../components/profile/WardrobeSection', () => ({
+    default: () => <div data-testid="wardrobe-section" />,
+}));
+
 // Mock DeleteAccountModal
 vi.mock('../components/ui/DeleteAccountModal', () => ({
     default: ({ isOpen, onConfirm, onClose }: any) => (
@@ -181,6 +185,7 @@ describe('ProfilePage', () => {
         expect(screen.getByDisplayValue('test@example.com')).toBeInTheDocument();
         expect(screen.getByDisplayValue('test-1')).toBeInTheDocument();
         expect(screen.getByTestId('preferences-section')).toBeInTheDocument();
+        expect(screen.getByTestId('wardrobe-section')).toBeInTheDocument();
     });
 
     it('updates username', async () => {

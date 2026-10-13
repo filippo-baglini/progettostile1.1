@@ -16,6 +16,7 @@ import os
 import title_generator
 
 from ai.src.app import outfit_recommendation_handler, generate_explanation_only
+from ai.src.wardrobe import WARDROBE_SECTIONS
 from ai.src import progress
 from storage_manager import upload_image, compress_image, download_image, get_image_url, delete_images
 import psycopg2.errors
@@ -402,6 +403,92 @@ def store_uploaded_image(bucket, max_size):
     if not upload_image(image_id, image, bucket):
         return None, None, ({"error": "Upload failed"}, 502)
     return image_id, image, None
+
+
+
+def wardrobe_details(data):
+    """Optional name/color/brand from a form or JSON body: trimmed, blank -> None, capped to the column sizes."""
+    return [(data.get(field) or '').strip()[:limit] or None for field, limit in (('name', 255), ('color', 100), ('brand', 255))]
+
+
+def wardrobe_payload(item):
+    return {
+        "id": item['id'],
+        "section": item['section'],
+        "image_url": get_image_url(f"public/{item['image_id']}.jpg", "wardrobe"),
+        "name": item['name'],
+        "color": item['color'],
+        "brand": item['brand'],
+    }
+
+
+@app.route('/api/wardrobe', methods=['GET'])
+@login_required
+def get_wardrobe():
+    try:
+        items = DBManager.get_wardrobe(int(current_user.get_id()))
+        return {"success": True, "items": [wardrobe_payload(item) for item in items]}, 200
+    except Exception as e:
+        return server_error(e)
+
+
+@app.route('/api/wardrobe', methods=['POST'])
+@login_required
+def add_wardrobe_item():
+    """Multipart: `image`, `section`, opzionali `name`, `color`, `brand`. Ritorna il capo creato."""
+    try:
+        section = request.form.get('section')
+        if section not in WARDROBE_SECTIONS:
+            return {"error": "Unknown wardrobe section"}, 400
+
+        image_id, _, error = store_uploaded_image("wardrobe", (1024, 1024))
+        if error:
+            return error
+
+        item = save_wardrobe_piece(int(current_user.get_id()), image_id, section, wardrobe_details(request.form))
+        return {"success": True, "item": wardrobe_payload(item)}, 201
+    except Exception as e:
+        return server_error(e)
+
+
+def save_wardrobe_piece(user_id, image_id, section, details):
+    """Saves a photo already in the wardrobe bucket as a piece. Removes the photo if saving fails."""
+    try:
+        return DBManager.add_wardrobe_item(user_id, section, image_id, *details)
+    except Exception:
+        delete_images([image_id], "wardrobe")  # don't leave an orphan photo in storage
+        raise
+
+
+@app.route('/api/wardrobe/<int:item_id>', methods=['PUT'])
+@login_required
+def update_wardrobe_item(item_id):
+    """JSON: `section`, `name`, `color`, `brand` (i dettagli mancanti vengono svuotati)."""
+    try:
+        data = request.get_json() or {}
+        section = data.get('section')
+        if section not in WARDROBE_SECTIONS:
+            return {"error": "Unknown wardrobe section"}, 400
+
+        item = DBManager.update_wardrobe_item(int(current_user.get_id()), item_id, section, *wardrobe_details(data))
+        if not item:
+            return {"error": "Item not found"}, 404
+        return {"success": True, "item": wardrobe_payload(item)}, 200
+    except Exception as e:
+        return server_error(e)
+
+
+@app.route('/api/wardrobe/<int:item_id>', methods=['DELETE'])
+@login_required
+def delete_wardrobe_item(item_id):
+    try:
+        image_id = DBManager.delete_wardrobe_item(int(current_user.get_id()), item_id)
+        if not image_id:
+            return {"error": "Item not found"}, 404
+        delete_images([image_id], "wardrobe")
+        return {"success": True}, 200
+    except Exception as e:
+        return server_error(e)
 
 
 @app.route('/api/preferences', methods=['PUT', 'POST'])

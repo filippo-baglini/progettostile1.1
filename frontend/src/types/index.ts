@@ -8,6 +8,22 @@ export interface User {
   preferences?: UserPreferences;
 }
 
+// A photo of one of the user's own clothes; `section` is a key of WARDROBE_SECTIONS
+export interface WardrobeItem {
+  id: number;
+  section: string;
+  imageUrl: string;
+  name?: string;
+  color?: string;
+  brand?: string;
+}
+
+export interface WardrobeDetails {
+  name?: string;
+  color?: string;
+  brand?: string;
+}
+
 export interface UserPreferences {
   gender: 'man' | 'woman' | 'non-binary';
   favoriteStyles: string[];

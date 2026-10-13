@@ -13,6 +13,7 @@ load_dotenv()
 
 USER_FIELDS = ("id", "name", "email", "password", "gender", "google_id", "username", "avatar_id")
 USER_COLUMNS = ", ".join(USER_FIELDS)
+WARDROBE_COLUMNS = "id, section, image_id, name, color, brand"
 
 class DBManager:
     # Configurazione database PostgreSQL
@@ -791,8 +792,10 @@ class DBManager:
                 (user_id,)
             )
             images_to_delete = [str(row[0]) for row in cursor.fetchall()]
+            cursor.execute("SELECT image_id FROM wardrobe_items WHERE user_id = %s", (user_id,))
+            wardrobe_images = [row[0] for row in cursor.fetchall()]
 
-            # 2. Elimina utente: ON DELETE CASCADE rimuove preferenze, conversazioni, prompt e risposte
+            # 2. Elimina utente: ON DELETE CASCADE rimuove preferenze, conversazioni, prompt, risposte e guardaroba
             cursor.execute("DELETE FROM users WHERE id = %s RETURNING avatar_id", (user_id,))
             avatar = cursor.fetchone()
 
@@ -804,6 +807,8 @@ class DBManager:
                 delete_images(images_to_delete)
             if avatar and avatar[0]:
                 delete_images([avatar[0]], "avatars")
+            if wardrobe_images:
+                delete_images(wardrobe_images, "wardrobe")
 
             return deleted
 
@@ -811,6 +816,64 @@ class DBManager:
             print(f"Errore durante l'eliminazione dell'utente {user_id}: {e}")
             if conn:
                 conn.rollback()
+            raise
+
+    # --- Guardaroba: ogni query filtra per user_id, così un utente tocca solo i propri capi ---
+
+    @staticmethod
+    def get_wardrobe(user_id: int) -> list[dict]:
+        conn = DBManager.get_db_connection()
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(f"SELECT {WARDROBE_COLUMNS} FROM wardrobe_items WHERE user_id = %s ORDER BY created_at DESC, id DESC", (user_id,))
+            return cursor.fetchall()
+
+    @staticmethod
+    def add_wardrobe_item(user_id: int, section: str, image_id: str, name, color, brand) -> dict:
+        conn = DBManager.get_db_connection()
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute(
+                    f"""INSERT INTO wardrobe_items (user_id, section, image_id, name, color, brand)
+                        VALUES (%s, %s, %s, %s, %s, %s) RETURNING {WARDROBE_COLUMNS}""",
+                    (user_id, section, image_id, name, color, brand)
+                )
+                item = cursor.fetchone()
+            conn.commit()
+            return item
+        except Exception:
+            conn.rollback()
+            raise
+
+    @staticmethod
+    def update_wardrobe_item(user_id: int, item_id: int, section: str, name, color, brand) -> dict | None:
+        """Ritorna il capo aggiornato, o None se non esiste o non è dell'utente."""
+        conn = DBManager.get_db_connection()
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute(
+                    f"""UPDATE wardrobe_items SET section = %s, name = %s, color = %s, brand = %s
+                        WHERE id = %s AND user_id = %s RETURNING {WARDROBE_COLUMNS}""",
+                    (section, name, color, brand, item_id, user_id)
+                )
+                item = cursor.fetchone()
+            conn.commit()
+            return item
+        except Exception:
+            conn.rollback()
+            raise
+
+    @staticmethod
+    def delete_wardrobe_item(user_id: int, item_id: int) -> str | None:
+        """Ritorna l'image_id del capo eliminato (da togliere dallo storage), o None se non trovato."""
+        conn = DBManager.get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("DELETE FROM wardrobe_items WHERE id = %s AND user_id = %s RETURNING image_id", (item_id, user_id))
+                row = cursor.fetchone()
+            conn.commit()
+            return row[0] if row else None
+        except Exception:
+            conn.rollback()
             raise
 
     @staticmethod
