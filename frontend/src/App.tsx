@@ -3,7 +3,6 @@ import { Toaster } from 'react-hot-toast';
 import { AnimatePresence, motion } from 'framer-motion';
 import { lazy, Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
-import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ChatProvider } from './context/ChatContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -14,6 +13,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const SignUpPage = lazy(() => import('./pages/SignUpPage'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const ChatPage = lazy(() => import('./pages/ChatPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const HowToUsePage = lazy(() => import('./pages/HowToUsePage'));
@@ -71,6 +71,7 @@ const AnimatedRoutes = () => {
         } />
         <Route path="/login" element={<PageTransition><LoginPage /></PageTransition>} />
         <Route path="/signup" element={<PageTransition><SignUpPage /></PageTransition>} />
+        <Route path="/reset-password" element={<PageTransition><ResetPasswordPage /></PageTransition>} />
         {/* Preferences now live on the profile page */}
         <Route path="/preferences" element={<Navigate to="/profile" replace />} />
         <Route path="/chat" element={<PageTransition><ChatPage /></PageTransition>} />
@@ -89,26 +90,22 @@ const AnimatedRoutes = () => {
 };
 
 function App() {
-  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
-
   return (
     <ErrorBoundary>
-      <GoogleOAuthProvider clientId={googleClientId}>
-        <ThemeProvider>
-          <AuthProvider>
-            <BrowserRouter>
-              <Toaster
-                position="top-right"
-                reverseOrder={false}
-                containerStyle={{
-                  top: 80, // Avoid overlap with header
-                }}
-              />
-              <AnimatedRoutes />
-            </BrowserRouter>
-          </AuthProvider>
-        </ThemeProvider>
-      </GoogleOAuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <BrowserRouter>
+            <Toaster
+              position="top-right"
+              reverseOrder={false}
+              containerStyle={{
+                top: 80, // Avoid overlap with header
+              }}
+            />
+            <AnimatedRoutes />
+          </BrowserRouter>
+        </AuthProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

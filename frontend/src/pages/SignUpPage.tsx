@@ -7,6 +7,7 @@ import Button from '../components/ui/Button';
 import ParticleBackground from '../components/ui/ParticleBackground';
 import GoogleLoginButton from '../components/ui/GoogleLoginButton';
 import { showToast } from '../utils/toast';
+import { passwordProblem, PASSWORD_HINT } from '../utils/password';
 
 const SignUpPage = () => {
   const [name, setName] = useState('');
@@ -21,14 +22,25 @@ const SignUpPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    const problem = passwordProblem(password);
+    if (problem) {
+      setError(problem);
+      return;
+    }
     setIsLoading(true);
 
     try {
-      await signUp(name, email, password);
-      showToast.success('Account created successfully!');
-      navigate('/profile');
+      const loggedIn = await signUp(name, email, password);
+      if (loggedIn) {
+        showToast.success('Account created successfully!');
+        navigate('/profile');
+      } else {
+        showToast.success('Almost there! Confirm your email with the link we sent you, then log in.');
+        navigate('/login');
+      }
     } catch (err) {
-      const errorMessage = 'Failed to create account. Please try again.';
+      // Supabase's reason, e.g. "User already registered"
+      const errorMessage = err instanceof Error && err.message ? err.message : 'Failed to create account. Please try again.';
       setError(errorMessage);
       showToast.error(errorMessage);
       console.error('SignUp error:', err);
@@ -82,8 +94,9 @@ const SignUpPage = () => {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            minLength={6}
+            minLength={8}
           />
+          <p className="-mt-2 text-xs font-inter text-text-medium dark:text-stone-400">{PASSWORD_HINT}</p>
 
           {error && (
             <div className="text-red-500 text-sm text-center">{error}</div>

@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom';
 import SignUpPage from './SignUpPage';
 import { useAuth } from '../context/AuthContext';
 import { showToast } from '../utils/toast';
+import { PASSWORD_HINT } from '../utils/password';
 
 // Mock hooks
 vi.mock('../context/AuthContext', () => ({
@@ -113,7 +114,7 @@ describe('SignUpPage', () => {
     });
 
     it('submits form successfully', async () => {
-        mockSignUp.mockResolvedValue(undefined);
+        mockSignUp.mockResolvedValue(true);
 
         render(
             <BrowserRouter>
@@ -123,19 +124,19 @@ describe('SignUpPage', () => {
 
         fireEvent.change(screen.getByTestId('input-name'), { target: { value: 'John Doe' } });
         fireEvent.change(screen.getByTestId('input-email'), { target: { value: 'test@example.com' } });
-        fireEvent.change(screen.getByTestId('input-password'), { target: { value: 'password123' } });
+        fireEvent.change(screen.getByTestId('input-password'), { target: { value: 'Ciao123!' } });
 
         fireEvent.click(screen.getByText('Sign Up', { selector: 'button' }));
 
         await waitFor(() => {
-            expect(mockSignUp).toHaveBeenCalledWith('John Doe', 'test@example.com', 'password123');
+            expect(mockSignUp).toHaveBeenCalledWith('John Doe', 'test@example.com', 'Ciao123!');
             expect(showToast.success).toHaveBeenCalledWith('Account created successfully!');
             expect(mockNavigate).toHaveBeenCalledWith('/profile');
         });
     });
 
-    it('handles signup failure', async () => {
-        mockSignUp.mockRejectedValue(new Error('Signup failed'));
+    it("shows Supabase's reason when signup fails", async () => {
+        mockSignUp.mockRejectedValue(new Error('User already registered'));
 
         render(
             <BrowserRouter>
@@ -145,14 +146,41 @@ describe('SignUpPage', () => {
 
         fireEvent.change(screen.getByTestId('input-name'), { target: { value: 'John Doe' } });
         fireEvent.change(screen.getByTestId('input-email'), { target: { value: 'test@example.com' } });
-        fireEvent.change(screen.getByTestId('input-password'), { target: { value: 'password123' } });
+        fireEvent.change(screen.getByTestId('input-password'), { target: { value: 'Ciao123!' } });
 
         fireEvent.click(screen.getByText('Sign Up', { selector: 'button' }));
 
         await waitFor(() => {
             expect(mockSignUp).toHaveBeenCalled();
-            expect(screen.getByText('Failed to create account. Please try again.')).toBeInTheDocument();
-            expect(showToast.error).toHaveBeenCalledWith('Failed to create account. Please try again.');
+            expect(screen.getByText('User already registered')).toBeInTheDocument();
+            expect(showToast.error).toHaveBeenCalledWith('User already registered');
         });
+    });
+
+    it('asks to confirm the email when Supabase sent a link', async () => {
+        mockSignUp.mockResolvedValue(false);
+        render(<BrowserRouter><SignUpPage /></BrowserRouter>);
+
+        fireEvent.change(screen.getByTestId('input-name'), { target: { value: 'John Doe' } });
+        fireEvent.change(screen.getByTestId('input-email'), { target: { value: 'test@example.com' } });
+        fireEvent.change(screen.getByTestId('input-password'), { target: { value: 'Ciao123!' } });
+        fireEvent.click(screen.getByText('Sign Up', { selector: 'button' }));
+
+        await waitFor(() => {
+            expect(showToast.success).toHaveBeenCalledWith('Almost there! Confirm your email with the link we sent you, then log in.');
+            expect(mockNavigate).toHaveBeenCalledWith('/login');
+        });
+    });
+
+    it('explains a password that breaks the rule without calling Supabase', async () => {
+        render(<BrowserRouter><SignUpPage /></BrowserRouter>);
+
+        fireEvent.change(screen.getByTestId('input-name'), { target: { value: 'John Doe' } });
+        fireEvent.change(screen.getByTestId('input-email'), { target: { value: 'test@example.com' } });
+        fireEvent.change(screen.getByTestId('input-password'), { target: { value: 'ciao1234' } });
+        fireEvent.click(screen.getByText('Sign Up', { selector: 'button' }));
+
+        expect(await screen.findByText(PASSWORD_HINT, { selector: 'div' })).toBeInTheDocument();
+        expect(mockSignUp).not.toHaveBeenCalled();
     });
 });

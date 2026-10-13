@@ -7,6 +7,7 @@ import Button from '../components/ui/Button';
 import ParticleBackground from '../components/ui/ParticleBackground';
 import GoogleLoginButton from '../components/ui/GoogleLoginButton';
 import { showToast } from '../utils/toast';
+import { authService } from '../services/authService';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
@@ -27,12 +28,28 @@ const LoginPage = () => {
       showToast.success('Welcome back!');
       navigate('/chat');
     } catch (err) {
-      const errorMessage = 'Invalid email or password';
+      const errorMessage = err instanceof Error && err.message === 'Email not confirmed'
+        ? 'Confirm your email first: check your inbox for the link'
+        : 'Invalid email or password';
       setError(errorMessage);
       showToast.error(errorMessage);
       console.error('Login error:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError('Type your email first, then press "Forgot password?"');
+      return;
+    }
+    setError('');
+    try {
+      await authService.requestPasswordReset(email);
+      showToast.success('Check your email for a link to reset your password');
+    } catch {
+      showToast.error('Could not send the reset email. Please try again.');
     }
   };
 
@@ -73,6 +90,10 @@ const LoginPage = () => {
             onChange={(e) => setPassword(e.target.value)}
             required
           />
+
+          <button type="button" onClick={handleForgotPassword} className="-mt-2 text-sm font-inter text-primary hover:underline">
+            Forgot password?
+          </button>
 
           {error && (
             <div className="text-red-500 text-sm text-center">{error}</div>

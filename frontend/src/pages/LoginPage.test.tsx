@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom';
 import LoginPage from './LoginPage';
 import { useAuth } from '../context/AuthContext';
 import { showToast } from '../utils/toast';
+import { authService } from '../services/authService';
 
 // Mock hooks
 vi.mock('../context/AuthContext', () => ({
@@ -63,6 +64,10 @@ vi.mock('framer-motion', () => ({
 // Mock ParticleBackground to avoid ThemeProvider dependency
 vi.mock('../components/ui/ParticleBackground', () => ({
     default: () => <div data-testid="particle-background" />,
+}));
+
+vi.mock('../services/authService', () => ({
+    authService: { requestPasswordReset: vi.fn() },
 }));
 
 // Mock GoogleLoginButton
@@ -148,5 +153,38 @@ describe('LoginPage', () => {
             expect(screen.getByText('Invalid email or password')).toBeInTheDocument();
             expect(showToast.error).toHaveBeenCalledWith('Invalid email or password');
         });
+    });
+
+    it('says to confirm the email first when Supabase refuses an unconfirmed one', async () => {
+        mockLogin.mockRejectedValue(new Error('Email not confirmed'));
+        render(<BrowserRouter><LoginPage /></BrowserRouter>);
+
+        fireEvent.change(screen.getByTestId('input-email'), { target: { value: 'test@example.com' } });
+        fireEvent.change(screen.getByTestId('input-password'), { target: { value: 'Ciao123!' } });
+        fireEvent.click(screen.getByText('Log In', { selector: 'button' }));
+
+        expect(await screen.findByText('Confirm your email first: check your inbox for the link')).toBeInTheDocument();
+    });
+
+    it('sends a password reset email for the typed address', async () => {
+        vi.mocked(authService.requestPasswordReset).mockResolvedValue();
+        render(<BrowserRouter><LoginPage /></BrowserRouter>);
+
+        fireEvent.change(screen.getByTestId('input-email'), { target: { value: 'a@b.co' } });
+        fireEvent.click(screen.getByText('Forgot password?'));
+
+        await waitFor(() => {
+            expect(authService.requestPasswordReset).toHaveBeenCalledWith('a@b.co');
+            expect(showToast.success).toHaveBeenCalledWith('Check your email for a link to reset your password');
+        });
+    });
+
+    it('asks for the email before sending a reset link', () => {
+        render(<BrowserRouter><LoginPage /></BrowserRouter>);
+
+        fireEvent.click(screen.getByText('Forgot password?'));
+
+        expect(screen.getByText('Type your email first, then press "Forgot password?"')).toBeInTheDocument();
+        expect(authService.requestPasswordReset).not.toHaveBeenCalled();
     });
 });

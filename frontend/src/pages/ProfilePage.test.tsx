@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom';
 import ProfilePage from './ProfilePage';
 import { authService } from '../services/authService';
 import { showToast } from '../utils/toast';
+import { PASSWORD_HINT } from '../utils/password';
 
 // Mock framer-motion
 vi.mock('framer-motion', () => ({
@@ -274,7 +275,7 @@ describe('ProfilePage', () => {
         renderWithAuth(<ProfilePage />);
 
         const currentPassInput = screen.getByPlaceholderText('Enter current password');
-        const newPassInput = screen.getByPlaceholderText('Min. 6 characters');
+        const newPassInput = screen.getByPlaceholderText('Min. 8 characters');
         const confirmPassInput = screen.getByPlaceholderText('Re-enter new password');
 
         fireEvent.change(currentPassInput, { target: { value: 'oldpass' } });
@@ -292,12 +293,12 @@ describe('ProfilePage', () => {
         renderWithAuth(<ProfilePage />);
 
         const currentPassInput = screen.getByPlaceholderText('Enter current password');
-        const newPassInput = screen.getByPlaceholderText('Min. 6 characters');
+        const newPassInput = screen.getByPlaceholderText('Min. 8 characters');
         const confirmPassInput = screen.getByPlaceholderText('Re-enter new password');
 
         fireEvent.change(currentPassInput, { target: { value: 'oldpass' } });
-        fireEvent.change(newPassInput, { target: { value: 'newpass' } });
-        fireEvent.change(confirmPassInput, { target: { value: 'newpass' } });
+        fireEvent.change(newPassInput, { target: { value: 'Newpass1!' } });
+        fireEvent.change(confirmPassInput, { target: { value: 'Newpass1!' } });
 
         const changePassButton = screen.getByText('Save Changes').closest('button');
         fireEvent.click(changePassButton!);
@@ -305,10 +306,33 @@ describe('ProfilePage', () => {
         await waitFor(() => {
             expect(authService.changePassword).toHaveBeenCalledWith({
                 current: 'oldpass',
-                new: 'newpass',
+                new: 'Newpass1!',
             });
             expect(showToast.success).toHaveBeenCalledWith('Password updated successfully');
         });
+    });
+
+    const submitPasswords = (current: string, next: string) => {
+        fireEvent.change(screen.getByPlaceholderText('Enter current password'), { target: { value: current } });
+        fireEvent.change(screen.getByPlaceholderText('Min. 8 characters'), { target: { value: next } });
+        fireEvent.change(screen.getByPlaceholderText('Re-enter new password'), { target: { value: next } });
+        fireEvent.click(screen.getByText('Save Changes').closest('button')!);
+    };
+
+    it('explains a new password that breaks the rule', () => {
+        renderWithAuth(<ProfilePage />);
+        submitPasswords('oldpass', 'newpass1');
+
+        expect(showToast.error).toHaveBeenCalledWith(PASSWORD_HINT);
+        expect(authService.changePassword).not.toHaveBeenCalled();
+    });
+
+    it('shows why the password change failed', async () => {
+        vi.mocked(authService.changePassword).mockRejectedValue(new Error('Current password is not correct'));
+        renderWithAuth(<ProfilePage />);
+        submitPasswords('wrong', 'Newpass1!');
+
+        await waitFor(() => expect(showToast.error).toHaveBeenCalledWith('Current password is not correct'));
     });
 
     it('opens delete account modal', () => {

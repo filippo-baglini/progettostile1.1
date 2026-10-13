@@ -10,6 +10,7 @@ import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 import ParticleBackground from '../components/ui/ParticleBackground';
 import { showToast } from '../utils/toast';
+import { passwordProblem } from '../utils/password';
 import { fadeInUp } from '../utils/animations';
 import ProfileSkeleton from '../components/ui/ProfileSkeleton';
 import DeleteAccountModal from '../components/ui/DeleteAccountModal';
@@ -95,8 +96,9 @@ const ProfilePage = () => {
             return;
         }
 
-        if (passwords.new.length < 6) {
-            showToast.error('Password must be at least 6 characters');
+        const problem = passwordProblem(passwords.new);
+        if (problem) {
+            showToast.error(problem);
             return;
         }
 
@@ -109,8 +111,9 @@ const ProfilePage = () => {
             });
             showToast.success('Password updated successfully');
             setPasswords({ current: '', new: '', confirm: '' });
-        } catch {
-            showToast.error('Failed to update password');
+        } catch (err) {
+            // e.g. "Current password is not correct"
+            showToast.error(err instanceof Error && err.message ? err.message : 'Failed to update password');
         } finally {
             setIsLoading(false);
         }
@@ -339,7 +342,7 @@ const ProfilePage = () => {
                                     label="New Password"
                                     value={passwords.new}
                                     onChange={(e) => setPasswords({ ...passwords, new: e.target.value })}
-                                    placeholder="Min. 6 characters"
+                                    placeholder="Min. 8 characters"
                                     className="dark:bg-surface-muted dark:border-surface-border dark:text-white"
                                     required
                                 />
