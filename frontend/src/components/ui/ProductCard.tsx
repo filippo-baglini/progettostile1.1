@@ -88,8 +88,12 @@ const ProductCard = ({ item, onImageClick }: ProductCardProps) => {
         )}
 
 
-        {/* Availability Badge */}
-        {item.available === false ? (
+        {/* Availability Badge (the user's own pieces get theirs instead) */}
+        {item.owned ? (
+          <div className="absolute top-2 right-2 bg-white/90 dark:bg-surface-dark/90 backdrop-blur-sm border-2 border-primary text-primary dark:text-primary-light text-[9px] font-bold px-2 py-1 rounded-full shadow-sm z-10 flex items-center justify-center leading-none">
+            YOUR WARDROBE
+          </div>
+        ) : item.available === false ? (
           <div className="absolute top-2 right-2 bg-white/90 dark:bg-surface-dark/90 backdrop-blur-sm border-2 border-red-500 text-red-600 dark:text-red-400 text-[9px] font-bold px-2 py-1 rounded-full shadow-sm z-10 flex items-center justify-center leading-none">
             OUT OF STOCK
           </div>
@@ -116,7 +120,10 @@ const ProductCard = ({ item, onImageClick }: ProductCardProps) => {
           {item.name}
         </h3>
 
-        {/* Price and Shop */}
+        {/* Price and Shop: nothing to buy for an owned piece */}
+        {item.owned ? (
+          <p className="pt-1 text-[11px] font-medium text-text-muted dark:text-stone-400">From your wardrobe</p>
+        ) : (
         <div className="flex items-center justify-between pt-1">
           <span className="text-primary dark:text-primary-light font-bold text-[13.5px]">
             ${item.price.toFixed(2)}
@@ -143,6 +150,7 @@ const ProductCard = ({ item, onImageClick }: ProductCardProps) => {
             </span>
           )}
         </div>
+        )}
       </div>
     </motion.div>
   );

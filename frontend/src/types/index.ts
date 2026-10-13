@@ -51,12 +51,20 @@ export interface ChatMessage {
   errorDetails?: {
     originalMessage: string;
     originalImage?: File;
+    originalWardrobe?: PickedPiece[];
     errorTitle?: string;
     errorMessage?: string;
   };
   outfits?: Outfit[]; // Support for multiple outfit options
   budgetOptions?: BudgetOption[]; // Interactive budget poll options
   outfitGenerationOptions?: OutfitGenerationOption[]; // Interactive outfit generation options poll
+  wardrobeItems?: PickedPiece[]; // Wardrobe pieces the user picked for this message
+}
+
+// A wardrobe piece attached to a chat message
+export interface PickedPiece {
+  id: number;
+  imageUrl: string;
 }
 
 export interface BudgetOption {
@@ -91,6 +99,7 @@ export interface OutfitItem {
   link?: string;
   available?: boolean;
   description?: string;
+  owned?: boolean; // One of the user's own wardrobe pieces: no price, no shop link
 }
 
 // Filter types

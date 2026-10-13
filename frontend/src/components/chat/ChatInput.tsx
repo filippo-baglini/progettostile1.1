@@ -13,6 +13,9 @@ interface ChatInputProps {
   isLoading: boolean;
   disabled?: boolean;
   disabledMessage?: string;
+  toolbarSlot?: React.ReactNode; // extra button next to the image one (the wardrobe picker)
+  attachmentsSlot?: React.ReactNode; // shown above the input box (picked wardrobe pieces)
+  hasAttachments?: boolean; // something besides text/image is attached, so an empty message can be sent
 }
 
 const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
@@ -28,6 +31,9 @@ const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       isLoading,
       disabled = false,
       disabledMessage,
+      toolbarSlot,
+      attachmentsSlot,
+      hasAttachments = false,
     },
     ref
   ) => {
@@ -102,6 +108,8 @@ const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
             )}
           </AnimatePresence>
 
+          {attachmentsSlot}
+
           {/* Input Box */}
           <div className={`flex gap-3 items-end bg-cream-100 dark:bg-surface-darker border border-cream-400 dark:border-surface-border rounded-2xl shadow-sm hover:shadow-md transition-shadow p-2 pl-4 focus-within:ring-4 focus-within:ring-primary/20 focus-within:border-primary ${disabled ? 'opacity-60' : ''}`}>
             <input
@@ -123,6 +131,7 @@ const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
             >
               <Plus className="w-5 h-5" />
             </button>
+            {toolbarSlot}
 
             <textarea
               ref={(node) => {
@@ -155,15 +164,15 @@ const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
             <motion.button
               onClick={onSendMessage}
-              disabled={disabled || (!inputMessage.trim() && !selectedImage) || isLoading}
+              disabled={disabled || (!inputMessage.trim() && !selectedImage && !hasAttachments) || isLoading}
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{
-                scale: (disabled || (!inputMessage.trim() && !selectedImage)) ? 0.8 : 1,
-                opacity: (disabled || (!inputMessage.trim() && !selectedImage)) ? 0.5 : 1
+                scale: (disabled || (!inputMessage.trim() && !selectedImage && !hasAttachments)) ? 0.8 : 1,
+                opacity: (disabled || (!inputMessage.trim() && !selectedImage && !hasAttachments)) ? 0.5 : 1
               }}
               whileHover={{ scale: disabled ? 1 : 1.05 }}
               whileTap={{ scale: disabled ? 1 : 0.95 }}
-              className={`rounded-full w-10 h-10 p-0 flex items-center justify-center mb-1 transition-colors shadow-sm ${disabled || (!inputMessage.trim() && !selectedImage) || isLoading
+              className={`rounded-full w-10 h-10 p-0 flex items-center justify-center mb-1 transition-colors shadow-sm ${disabled || (!inputMessage.trim() && !selectedImage && !hasAttachments) || isLoading
                 ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 : 'bg-primary text-white shadow-md hover:shadow-lg hover:bg-primary-hover'
                 }`}

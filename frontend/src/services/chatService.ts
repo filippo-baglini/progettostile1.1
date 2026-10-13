@@ -26,6 +26,7 @@ interface BackendOutfitItem {
   link?: string;
   availability?: boolean;
   description?: string;
+  source?: string; // 'wardrobe' for the user's own pieces
 }
 
 // New response status types from backend
@@ -90,6 +91,7 @@ interface BackendMessage {
   created_at?: string;  // Backend uses 'created_at', not 'timestamp'
   budget_options?: any[];
   outfit_generation_options?: any[];
+  wardrobe_items?: { id: number; image_url: string }[];
 }
 
 interface BackendConversation {
@@ -130,7 +132,8 @@ const transformOutfitItems = (backendItems: BackendOutfitItem[]): OutfitItem[] =
       brand: item.brand,
       link: item.url || item.link, // Handle both url and link properties
       available: item.availability !== false, // Default to true if undefined, or strictly check false
-      description: item.description
+      description: item.description,
+      owned: item.source === 'wardrobe',
     };
   });
 };
@@ -150,7 +153,8 @@ export const chatService = {
     selectedOutfitIndex?: number | null,
     selectedMessageId?: string | null,
     guestGender?: string, // Gender for non-authenticated users
-    requestId?: string // Lets getProgress follow this request
+    requestId?: string, // Lets getProgress follow this request
+    wardrobe?: { itemIds: number[]; onlyWardrobe: boolean } // Picked pieces and "only my clothes"
   ): Promise<SendMessageResponse> => {
     const progressHeader = requestId ? { 'X-Request-Id': requestId } : undefined;
     // If there's an image, use FormData
@@ -170,6 +174,10 @@ export const chatService = {
       if (guestGender) {
         formData.append('gender', guestGender);
       }
+      wardrobe?.itemIds.forEach((id) => formData.append('wardrobe_item_ids', String(id)));
+      if (wardrobe?.onlyWardrobe) {
+        formData.append('only_wardrobe', 'true');
+      }
 
       const response = await api.post<SendMessageResponse>('/messages/send', formData, {
         headers: {
@@ -187,6 +195,8 @@ export const chatService = {
       selected_outfit_index: selectedOutfitIndex,
       selected_message_id: selectedMessageId,
       ...(guestGender && { gender: guestGender }),
+      ...(wardrobe?.itemIds.length && { wardrobe_item_ids: wardrobe.itemIds }),
+      ...(wardrobe?.onlyWardrobe && { only_wardrobe: true }),
     }, progressHeader && { headers: progressHeader });
     return response.data;
   },
@@ -269,6 +279,9 @@ export const chatService = {
         outfit: processedOutfits ? processedOutfits[0] : undefined,
         budgetOptions: msg.budget_options,
         outfitGenerationOptions: msg.outfit_generation_options,
+        wardrobeItems: msg.wardrobe_items?.length
+          ? msg.wardrobe_items.map((piece) => ({ id: piece.id, imageUrl: piece.image_url }))
+          : undefined,
       };
     });
 

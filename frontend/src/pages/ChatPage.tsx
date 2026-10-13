@@ -6,6 +6,8 @@ import { useChat } from '../context/ChatContext';
 import { useImageUpload } from '../hooks/useImageUpload';
 import { useScrollToBottom } from '../hooks/useScrollToBottom';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import { useWardrobePicks } from '../hooks/useWardrobePicks';
+import { Shirt } from 'lucide-react';
 import Sidebar from '../components/layout/Sidebar';
 import Header from '../components/layout/Header';
 import HamburgerMenu from '../components/ui/HamburgerMenu';
@@ -15,6 +17,7 @@ import ChatMessage from '../components/chat/ChatMessage';
 import ChatInput from '../components/chat/ChatInput';
 import DragDropOverlay from '../components/chat/DragDropOverlay';
 import GenderSelector from '../components/chat/GenderSelector';
+import WardrobePicker, { WardrobeAttachments } from '../components/chat/WardrobePicker';
 import TypingIndicator from '../components/ui/TypingIndicator';
 import ParticleBackground from '../components/ui/ParticleBackground';
 import ScrollToBottomButton from '../components/ui/ScrollToBottomButton';
@@ -73,8 +76,15 @@ const ChatPage = () => {
     selectOutfit,
     selectedOutfitIndex,
     selectedMessageId,
-    setGuestGender: setChatGuestGender
+    setGuestGender: setChatGuestGender,
+    setOnlyWardrobe: setChatOnlyWardrobe
   } = useChat();
+
+  const wardrobe = useWardrobePicks(isAuthenticated);
+  const [isWardrobeOpen, setIsWardrobeOpen] = useState(false);
+  useEffect(() => {
+    setChatOnlyWardrobe(wardrobe.onlyWardrobe);
+  }, [wardrobe.onlyWardrobe, setChatOnlyWardrobe]);
 
   useEffect(() => {
     setChatGuestGender(!isAuthenticated ? guestGender ?? undefined : undefined);
@@ -262,6 +272,7 @@ const ChatPage = () => {
       guestSessionActiveRef.current = false;
       setInputMessage('');
       clearImage();
+      wardrobe.clearPicks();
       clearMessages();
       // Reset guest gender for a fresh start
       if (!isAuthenticated) {
@@ -276,14 +287,16 @@ const ChatPage = () => {
     // Clear input immediately for better UX
     const messageToSend = inputMessage;
     const imageToSend = selectedImage || undefined;
+    const piecesToSend = wardrobe.picked;
 
     setInputMessage('');
     clearImage();
+    wardrobe.clearPicks();
 
     // Scroll to bottom when sending a message
     scrollToBottom();
 
-    sendMessage(messageToSend, imageToSend);
+    sendMessage(messageToSend, imageToSend, undefined, undefined, undefined, undefined, piecesToSend);
   };
 
   const handleOptionSelect = (option: BudgetOption) => {
@@ -438,6 +451,41 @@ const ChatPage = () => {
           isLoading={isLoading}
           disabled={!isAuthenticated && !guestGender}
           disabledMessage={!isAuthenticated && !guestGender ? "Please select your style preference above to start chatting" : undefined}
+          hasAttachments={wardrobe.picked.length > 0}
+          toolbarSlot={wardrobe.hasWardrobe && (
+            <button
+              onClick={() => setIsWardrobeOpen(true)}
+              className="relative mb-2 text-primary/70 hover:text-primary transition-colors p-1.5 hover:bg-primary/10 dark:hover:bg-primary/20 rounded-full border border-primary/20 hover:border-primary/40"
+              title="Use your wardrobe"
+              type="button"
+              aria-label="Use your wardrobe"
+            >
+              <Shirt className="w-5 h-5" />
+              {wardrobe.picked.length > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-primary text-white text-[10px] font-bold flex items-center justify-center">
+                  {wardrobe.picked.length}
+                </span>
+              )}
+            </button>
+          )}
+          attachmentsSlot={
+            <WardrobeAttachments
+              picked={wardrobe.picked}
+              onRemovePiece={wardrobe.togglePiece}
+              onlyWardrobe={wardrobe.onlyWardrobe}
+              onTurnOffOnlyWardrobe={() => wardrobe.setOnlyWardrobe(false)}
+            />
+          }
+        />
+
+        <WardrobePicker
+          isOpen={isWardrobeOpen}
+          onClose={() => setIsWardrobeOpen(false)}
+          items={wardrobe.items}
+          pickedIds={wardrobe.picked.map((p) => p.id)}
+          onTogglePiece={wardrobe.togglePiece}
+          onlyWardrobe={wardrobe.onlyWardrobe}
+          onOnlyWardrobeChange={wardrobe.setOnlyWardrobe}
         />
 
         {/* Accessibility: Announce new messages to screen readers */}

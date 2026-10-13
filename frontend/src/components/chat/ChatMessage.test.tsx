@@ -94,6 +94,20 @@ describe('ChatMessage', () => {
         expect(screen.getByRole('article')).toHaveAttribute('aria-label', 'User message');
     });
 
+    it('renders the wardrobe pieces picked for a user message', () => {
+        const message: ChatMessageType = {
+            id: '1',
+            role: 'user',
+            content: 'Complete my outfit with these pieces',
+            timestamp: new Date(),
+            wardrobeItems: [{ id: 3, imageUrl: 'https://x/3.jpg' }, { id: 4, imageUrl: 'https://x/4.jpg' }],
+        };
+
+        render(<ChatMessage message={message} onExplainOutfit={mockOnExplainOutfit} />);
+
+        expect(screen.getAllByAltText('Wardrobe piece').map((img) => img.getAttribute('src'))).toEqual(['https://x/3.jpg', 'https://x/4.jpg']);
+    });
+
     it('renders user message with image', () => {
         const message: ChatMessageType = {
             id: '1',

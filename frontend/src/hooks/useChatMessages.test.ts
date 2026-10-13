@@ -95,7 +95,8 @@ describe('useChatMessages', () => {
             null,      // outfitIndex
             null,      // messageId
             undefined, // guestGender
-            expect.any(String) // requestId
+            expect.any(String), // requestId
+            { itemIds: [], onlyWardrobe: false } // no wardrobe pieces
         );
 
         // Verify state updates after response
@@ -104,6 +105,26 @@ describe('useChatMessages', () => {
 
         // Verify assistant message added
         expect(result.current.messages.some(m => m.content === 'Response' && m.role === 'assistant')).toBe(true);
+    });
+
+    it('sendMessage sends picked wardrobe pieces and "only my clothes"', async () => {
+        (chatService.sendMessage as any).mockResolvedValue({ status: 'COMPLETED', conv_id: 'c1', content: { message: 'Done', outfits: [] } });
+        (chatService.transformOutfitResponse as any).mockReturnValue({ status: 'COMPLETED', hasOutfit: false, message: 'Done', items: [], totalPrice: 0 });
+        const pieces = [{ id: 7, imageUrl: 'https://x/7.jpg' }];
+
+        const { result } = renderHook(() => useChatMessages());
+        act(() => result.current.setOnlyWardrobe(true));
+        await act(async () => {
+            // No text: the pieces alone are enough
+            await result.current.sendMessage('', undefined, undefined, undefined, undefined, undefined, pieces);
+        });
+
+        const userMessage = result.current.messages.find((m) => m.role === 'user')!;
+        expect(userMessage.content).toBe('Complete my outfit with these pieces');
+        expect(userMessage.wardrobeItems).toEqual(pieces);
+        const args = (chatService.sendMessage as any).mock.calls[0];
+        expect(args[0]).toBe('Complete my outfit with these pieces');
+        expect(args[8]).toEqual({ itemIds: [7], onlyWardrobe: true });
     });
 
     it('sendMessage handles error and reverts optimistic update', async () => {

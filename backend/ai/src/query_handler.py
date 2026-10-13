@@ -3,6 +3,7 @@ from google.genai import types
 
 from ai.src.model_fallback import generate_content_with_fallback
 from ai.src.progress import mark_generating
+from ai.src.wardrobe import describe_piece
 
 # --- Schema Definitions ---
 
@@ -17,6 +18,7 @@ item_schema = types.Schema(
 )
 
 FASHION_CATEGORIES = ['top', 'bottom', 'dresses', 'outerwear', 'swimwear', 'shoes', 'accessories']
+SINGLE_ITEM_CATEGORIES = {'bottom', 'dresses', 'outerwear', 'swimwear', 'shoes'}  # 'top' and 'accessories' can layer
 
 # Define the schema for a category (e.g., "top")
 category_schema = types.Schema(
@@ -219,6 +221,18 @@ PLAN_RULES = (
     "descriptive words about style, weight or quality are never brands, so leave 'brand' out. "
     "When refining, 'modifications' contains ONLY what this latest user request asks for: \"{query}\". "
     "Items added or changed in earlier messages are already in the current outfit, never add them again."
+)
+
+PICKED_PIECES_NOTE = (
+    "\n\nThe user picked these pieces from their own wardrobe (photos attached): {pieces}. "
+    "They already own them and they will be part of the outfit: when you generate it, plan only the rest, "
+    "matching their colours and style, and do NOT plan these pieces again. "
+    "The picked pieces do not answer any of your usual questions: follow the same steps as for any request "
+    "(occasion or vibe, style options, budget for the new pieces) and ask whatever is still missing before generating."
+)
+ONLY_WARDROBE_NOTE = (
+    "\n\nThe user wants an outfit made only of clothes they already own, so nothing will be bought: "
+    "do NOT ask about the budget and set 'max_budget' to 0."
 )
 
 # --- 3. System Prompt and Guardrail ---
@@ -608,7 +622,9 @@ def generate_outfit_plan(
         user_preferences: dict | None,
         gender: str | None,
         focus_outfit_index: int | None = None,  # NEW: Optional index to focus LLM context
-        focus_message_id: str | None = None
+        focus_message_id: str | None = None,
+        picked_items: list[dict] | None = None,  # wardrobe pieces the user picked, with their 'image_bytes'
+        only_wardrobe: bool = False
 ) -> dict:
     if gender is None:
         gender = "male"
@@ -700,6 +716,16 @@ def generate_outfit_plan(
         except Exception as e:
             print(f"Error packing image data: {e}")
 
+    # Wardrobe: the photos of picked pieces don't count as 'has_images' below. The image prompt would ask
+    # whether to copy the look; here the user already said what they want: the rest of the outfit.
+    if picked_items:
+        pieces = "; ".join(describe_piece(p) for p in picked_items)
+        current_turn_parts.append(types.Part(text=PICKED_PIECES_NOTE.format(pieces=pieces)))
+        current_turn_parts.extend(types.Part.from_bytes(data=p['image_bytes'], mime_type="image/jpeg")
+                                  for p in picked_items if p.get('image_bytes'))
+    if only_wardrobe:
+        current_turn_parts.append(types.Part(text=ONLY_WARDROBE_NOTE))
+
     # Aggiungiamo il turno corrente alla storia PER L'API
     gemini_history.append({"role": "user", "parts": current_turn_parts})
 
@@ -741,6 +767,7 @@ def generate_outfit_plan(
     if data.get('status') == 'READY_TO_GENERATE':
         mark_generating()  # the questions are over: lets the browser say so while the outfit is built
         drop_owned_categories(data)
+        drop_picked_categories(data, {p['main_category'] for p in picked_items or []})
         return {
             'status': 'READY_TO_GENERATE',
             'outfits': data.get('outfits'),
@@ -751,7 +778,7 @@ def generate_outfit_plan(
             'results_message': data.get('results_message'),
             'no_results_message': data.get('no_results_message'),
             'history': chat_history,
-            'conversation_title': data.get('conversation_title')
+            'conversation_title': data.get('conversation_title'),
         }
 
     return data
@@ -774,6 +801,15 @@ def drop_owned_categories(plan: dict) -> None:
             # Keep it if it is all the outfit has: then the user wants that piece itself
             if any(outfit.get(c) for c in set(FASHION_CATEGORIES) - owned):
                 outfit.pop(category)
+
+
+def drop_picked_categories(plan: dict, picked_categories: set[str]) -> None:
+    """Removes from each outfit the one-per-outfit categories the user's picked pieces already fill
+    (the model tends to add them back). Tops and accessories stay: a sweater can go over a picked t-shirt."""
+    for outfit in plan.get('outfits') or []:
+        if isinstance(outfit, dict):
+            for category in picked_categories & SINGLE_ITEM_CATEGORIES:
+                outfit.pop(category, None)
 
 
 def create_text_prompt(gender: str, new_user_query: str, user_preferences: dict | None) -> str:

@@ -192,6 +192,14 @@ const ChatMessage = ({ message, onExplainOutfit, isLoadingExplanation, onRetry, 
                 <ImageAttachment imageUrl={message.imageUrl} altText="User uploaded" />
               </div>
             )}
+            {message.wardrobeItems && (
+              <div className="flex flex-wrap gap-2 mb-3" aria-label="Pieces from your wardrobe">
+                {message.wardrobeItems.map((piece) => (
+                  <img key={piece.id} src={piece.imageUrl} alt="Wardrobe piece"
+                    className="w-14 h-14 object-cover rounded-lg border-2 border-white/40" />
+                ))}
+              </div>
+            )}
             {message.content}
           </div>
           )}

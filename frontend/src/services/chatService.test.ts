@@ -67,6 +67,39 @@ describe('chatService', () => {
         expect(formData.get('image')).toBe(file);
     });
 
+    it('sendMessage sends wardrobe pieces and "only my clothes" (JSON and FormData)', async () => {
+        const postSpy = vi.spyOn(api, 'post').mockResolvedValue({ data: {} });
+
+        await chatService.sendMessage('Hi', {} as any, '1', undefined, null, null, undefined, undefined, { itemIds: [3, 4], onlyWardrobe: true });
+        expect(postSpy.mock.calls[0][1]).toMatchObject({ wardrobe_item_ids: [3, 4], only_wardrobe: true });
+
+        await chatService.sendMessage('Hi', {} as any, '1', undefined, null, null, undefined, undefined, { itemIds: [], onlyWardrobe: false });
+        expect(postSpy.mock.calls[1][1]).not.toHaveProperty('wardrobe_item_ids');
+        expect(postSpy.mock.calls[1][1]).not.toHaveProperty('only_wardrobe');
+
+        const file = new File(['x'], 'a.png', { type: 'image/png' });
+        await chatService.sendMessage('Hi', {} as any, '1', file, null, null, undefined, undefined, { itemIds: [3, 4], onlyWardrobe: true });
+        const form = postSpy.mock.calls[2][1] as FormData;
+        expect(form.getAll('wardrobe_item_ids')).toEqual(['3', '4']);
+        expect(form.get('only_wardrobe')).toBe('true');
+    });
+
+    it('getChatConversation maps owned pieces and picked pieces', async () => {
+        vi.spyOn(api, 'post').mockResolvedValue({ data: [
+            { message_id: 1, role: 'user', text: 'complete this', wardrobe_items: [{ id: 3, image_url: 'https://x/3.jpg' }] },
+            { message_id: 2, role: 'model', text: 'Here', outfits: [{ cost: 20, outfit: [
+                { id: 'w3', title: 'Your shirt', price: 0, image_link: 'https://x/3.jpg', url: null, source: 'wardrobe' },
+                { id: '9', title: 'Shoes', price: 20, image_link: 'https://x/9.jpg', url: 'https://shop/9' },
+            ] }] },
+        ] });
+
+        const messages = await chatService.getChatConversation('1');
+
+        expect(messages[0].wardrobeItems).toEqual([{ id: 3, imageUrl: 'https://x/3.jpg' }]);
+        expect(messages[1].outfits![0].items.map((i) => i.owned)).toEqual([true, false]);
+        expect(messages[1].outfits![0].totalPrice).toBe(20);
+    });
+
     it('getChatHistory transforms conversations correctly', async () => {
         const mockConversations = [
             { id: 1, title: 'Chat 1', updated_at: '2023-01-01T10:00:00Z' },

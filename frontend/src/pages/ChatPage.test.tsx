@@ -19,6 +19,10 @@ vi.mock('../context/ChatContext', () => ({
     useChat: vi.fn(),
 }));
 
+vi.mock('../services/wardrobeService', () => ({
+    wardrobeService: { list: vi.fn().mockResolvedValue([]) },
+}));
+
 vi.mock('../hooks/useImageUpload', () => ({
     useImageUpload: vi.fn(),
 }));
@@ -113,6 +117,7 @@ describe('ChatPage', () => {
     const defaultChatMessages = {
         messages: [],
         setGuestGender: vi.fn(),
+        setOnlyWardrobe: vi.fn(),
         isLoading: false,
         isFetching: false,
         currentChatId: null,

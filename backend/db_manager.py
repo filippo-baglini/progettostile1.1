@@ -7,13 +7,14 @@ from flask_login import current_user
 from psycopg2.extras import RealDictCursor
 
 from storage_manager import delete_images, get_image_url
+from ai.src.wardrobe import wardrobe_candidate
 
 # Carica le variabili d'ambiente dal file .env
 load_dotenv()
 
 USER_FIELDS = ("id", "name", "email", "password", "gender", "google_id", "username", "avatar_id")
 USER_COLUMNS = ", ".join(USER_FIELDS)
-WARDROBE_COLUMNS = "id, section, image_id, name, color, brand"
+WARDROBE_COLUMNS = "id, section, image_id, name, color, brand, main_category"
 
 class DBManager:
     # Configurazione database PostgreSQL
@@ -405,7 +406,11 @@ class DBManager:
                             p.image_id,
                             NULL as status,
                             NULL::jsonb AS budget_options,
-                            NULL::jsonb AS outfit_generation_options
+                            NULL::jsonb AS outfit_generation_options,
+                            -- Wardrobe pieces the user picked for this message (deleted ones drop out)
+                            (SELECT json_agg(json_build_object('id', wi.id, 'image_id', wi.image_id) ORDER BY wi.id)
+                             FROM wardrobe_items wi
+                             WHERE wi.id = ANY(p.wardrobe_item_ids) AND wi.user_id = c.user_id) AS wardrobe_items
                         FROM prompts p
                                  JOIN conversations c ON p.conversation_id = c.id
                         WHERE p.conversation_id = %s AND c.user_id = %s
@@ -433,7 +438,19 @@ class DBManager:
                                         SELECT 
                                             os.outfit_index,
                                             json_agg(
-                                                json_build_object(
+                                                CASE WHEN os.wardrobe_item_id IS NOT NULL THEN
+                                                    -- The user's own piece: completed by wardrobe_candidate() below
+                                                    json_build_object(
+                                                        'source', 'wardrobe',
+                                                        'id', wi.id,
+                                                        'section', wi.section,
+                                                        'image_id', wi.image_id,
+                                                        'name', wi.name,
+                                                        'color', wi.color,
+                                                        'brand', wi.brand,
+                                                        'main_category', wi.main_category
+                                                    )
+                                                ELSE json_build_object(
                                                     'id', pd.id,
                                                     'title', pd.title,
                                                     'url', pd.url,
@@ -444,12 +461,13 @@ class DBManager:
                                                     'availability', pd.availability,
                                                     'main_category', pd.main_category,
                                                     'description', pd.schema_description
-                                                )
+                                                ) END
                                             ) AS items,
-                                            SUM(pd.price) as cost,
+                                            SUM(COALESCE(pd.price, 0)) as cost,
                                             MAX(os.budget) as budget -- Since budget is replicated for items in same outfit, MAX/MIN is fine
                                         FROM outfit_suggestion os
-                                        JOIN product_data pd ON os.product_id = pd.id
+                                        LEFT JOIN product_data pd ON os.product_id = pd.id
+                                        LEFT JOIN wardrobe_items wi ON os.wardrobe_item_id = wi.id
                                         WHERE os.ai_response_id = ar.id
                                         GROUP BY os.outfit_index
                                     ) grouped_outfits
@@ -459,7 +477,8 @@ class DBManager:
                             NULL AS image_id,
                             ar.status as status,
                             ar.budget_options,
-                            ar.outfit_generation_options
+                            ar.outfit_generation_options,
+                            NULL::json AS wardrobe_items
                         FROM ai_responses ar
                                  JOIN conversations c ON ar.conversation_id = c.id
                         WHERE ar.conversation_id = %s AND c.user_id = %s
@@ -482,6 +501,15 @@ class DBManager:
                     if message['image_id']:
                         file_path = f"public/{message['image_id']}.jpg"
                         message['image_id'] = get_image_url(file_path)
+                    message['wardrobe_items'] = [
+                        {"id": piece['id'], "image_url": get_image_url(f"public/{piece['image_id']}.jpg", "wardrobe")}
+                        for piece in message['wardrobe_items'] or []
+                    ]
+                else:
+                    del message['wardrobe_items']
+                    for outfit in message['outfits']:
+                        outfit['outfit'] = [wardrobe_candidate(item) if item.get('source') == 'wardrobe' else item
+                                            for item in outfit['outfit']]
 
             return results
 
@@ -490,7 +518,7 @@ class DBManager:
             return []
 
     @staticmethod
-    def create_conversation_with_message(user_id: int, title: str, message_text: str, image_id = None):
+    def create_conversation_with_message(user_id: int, title: str, message_text: str, image_id = None, wardrobe_item_ids=None):
         """
         Crea una nuova conversazione per un utente e inserisce il primo messaggio.
 
@@ -508,8 +536,8 @@ class DBManager:
             conversation_id = cursor.fetchone()[0]
 
             cursor.execute(
-                "INSERT INTO prompts (conversation_id, prompt, image_id) VALUES (%s, %s, %s)",
-                (conversation_id, message_text, image_id)
+                "INSERT INTO prompts (conversation_id, prompt, image_id, wardrobe_item_ids) VALUES (%s, %s, %s, %s)",
+                (conversation_id, message_text, image_id, wardrobe_item_ids or None)
             )
 
             conn.commit()
@@ -571,21 +599,27 @@ class DBManager:
                 for idx, outfit_obj in enumerate(outfits_list):
                     items = outfit_obj.get('outfit', [])
                     for item in items:
-                        product_id = item.get('id')
-                        if not product_id:
+                        item_id = item.get('id')
+                        if not item_id:
                             continue
+
+                        # A catalogue product, or one of the user's wardrobe pieces ('w<id>')
+                        if item.get('source') == 'wardrobe':
+                            product_id, wardrobe_item_id = None, int(str(item_id).removeprefix('w'))
+                        else:
+                            product_id, wardrobe_item_id = item_id, None
 
                         # Inserisci il collegamento in outfit_suggestion con outfit_index e BUDGET
                         insert_suggestion_query = """
-                                                  INSERT INTO outfit_suggestion (ai_response_id, product_id, outfit_index, budget)
-                                                  VALUES (%s, %s, %s, %s)
-                                                  ON CONFLICT (ai_response_id, product_id, outfit_index) DO NOTHING; \
+                                                  INSERT INTO outfit_suggestion (ai_response_id, product_id, wardrobe_item_id, outfit_index, budget)
+                                                  VALUES (%s, %s, %s, %s, %s)
+                                                  ON CONFLICT DO NOTHING; \
                                                   """
                         # Extract budget from the outfit object (passed from app.py/LLM)
                         # We use 0 as default if not present, similar to logic in app.py
                         outfit_budget = outfit_obj.get('budget', 0)
                         
-                        cursor.execute(insert_suggestion_query, (new_ai_response_id, product_id, idx, outfit_budget))
+                        cursor.execute(insert_suggestion_query, (new_ai_response_id, product_id, wardrobe_item_id, idx, outfit_budget))
 
             # Conferma le modifiche (Commit)
             conn.commit()
@@ -639,7 +673,7 @@ class DBManager:
             return cursor.fetchone() is not None
 
     @staticmethod
-    def add_message_to_conversation(conversation_id: int, text: str, image_id=None):
+    def add_message_to_conversation(conversation_id: int, text: str, image_id=None, wardrobe_item_ids=None):
         """
         Aggiunge un messaggio a una conversazione esistente, ma solo se
         la conversazione appartiene all'utente corrente.
@@ -666,8 +700,8 @@ class DBManager:
 
             # Altrimenti tutto bene!!
             cursor.execute(
-                "INSERT INTO prompts (conversation_id, prompt, image_id) VALUES (%s, %s, %s)",
-                (conversation_id, text, image_id)
+                "INSERT INTO prompts (conversation_id, prompt, image_id, wardrobe_item_ids) VALUES (%s, %s, %s, %s)",
+                (conversation_id, text, image_id, wardrobe_item_ids or None)
             )
 
             conn.commit()
@@ -828,14 +862,22 @@ class DBManager:
             return cursor.fetchall()
 
     @staticmethod
-    def add_wardrobe_item(user_id: int, section: str, image_id: str, name, color, brand) -> dict:
+    def get_wardrobe_items(user_id: int, item_ids: list[int]) -> list[dict]:
+        """The user's pieces among `item_ids`: ids of other users or deleted pieces are left out."""
+        conn = DBManager.get_db_connection()
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(f"SELECT {WARDROBE_COLUMNS} FROM wardrobe_items WHERE user_id = %s AND id = ANY(%s)", (user_id, list(item_ids)))
+            return cursor.fetchall()
+
+    @staticmethod
+    def add_wardrobe_item(user_id: int, section: str, main_category: str, image_id: str, embedding: list[float], name, color, brand) -> dict:
         conn = DBManager.get_db_connection()
         try:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute(
-                    f"""INSERT INTO wardrobe_items (user_id, section, image_id, name, color, brand)
-                        VALUES (%s, %s, %s, %s, %s, %s) RETURNING {WARDROBE_COLUMNS}""",
-                    (user_id, section, image_id, name, color, brand)
+                    f"""INSERT INTO wardrobe_items (user_id, section, main_category, image_id, img_embedding, name, color, brand)
+                        VALUES (%s, %s, %s, %s, %s::vector, %s, %s, %s) RETURNING {WARDROBE_COLUMNS}""",
+                    (user_id, section, main_category, image_id, str(embedding), name, color, brand)
                 )
                 item = cursor.fetchone()
             conn.commit()
@@ -845,15 +887,15 @@ class DBManager:
             raise
 
     @staticmethod
-    def update_wardrobe_item(user_id: int, item_id: int, section: str, name, color, brand) -> dict | None:
+    def update_wardrobe_item(user_id: int, item_id: int, section: str, main_category: str, name, color, brand) -> dict | None:
         """Ritorna il capo aggiornato, o None se non esiste o non è dell'utente."""
         conn = DBManager.get_db_connection()
         try:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute(
-                    f"""UPDATE wardrobe_items SET section = %s, name = %s, color = %s, brand = %s
+                    f"""UPDATE wardrobe_items SET section = %s, main_category = %s, name = %s, color = %s, brand = %s
                         WHERE id = %s AND user_id = %s RETURNING {WARDROBE_COLUMNS}""",
-                    (section, name, color, brand, item_id, user_id)
+                    (section, main_category, name, color, brand, item_id, user_id)
                 )
                 item = cursor.fetchone()
             conn.commit()

@@ -1,5 +1,7 @@
 # src/ai/query_embedder.py (Updated)
 
+import io
+
 import torch
 import numpy as np
 from PIL import Image 
@@ -33,6 +35,13 @@ def get_text_embedding_vector(MODEL, PROC, DEVICE, text: str) -> np.ndarray:
     
     # Convert to a NumPy array (1, 512) and return the 1D vector
     return txt_embed[0].cpu().numpy()
+
+def get_image_embedding_vector(MODEL, PROC, DEVICE, image_bytes: bytes) -> np.ndarray:
+    """Normalized FashionCLIP image embedding: the same space as product_data.img_embedding (see import_ebay.py)."""
+    image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+    with torch.no_grad():
+        feats = MODEL.get_image_features(**{k: v.to(DEVICE) for k, v in PROC(images=[image], return_tensors="pt").items()})
+    return torch.nn.functional.normalize(feats, dim=-1)[0].cpu().numpy()
 
 #ONLY USED FOR LOCAL AND TARGETED TESTING
 if __name__ == '__main__':

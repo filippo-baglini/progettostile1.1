@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import type { ChatMessage, OutfitFilters } from '../types';
+import type { ChatMessage, OutfitFilters, PickedPiece } from '../types';
 import { chatService } from '../services/chatService';
 import { showToast } from '../utils/toast';
 import axios from 'axios';
@@ -104,6 +104,12 @@ export const useChatMessages = () => {
     guestGenderRef.current = gender;
   }, []);
 
+  // "Only my clothes": also set by the chat page, and sent with every message (answers to questions too)
+  const onlyWardrobeRef = useRef(false);
+  const setOnlyWardrobe = useCallback((value: boolean) => {
+    onlyWardrobeRef.current = value;
+  }, []);
+
   const setOnNewMessage = useCallback((callback: () => void) => {
     onNewMessageRef.current = callback;
   }, []);
@@ -165,11 +171,16 @@ export const useChatMessages = () => {
     filters?: OutfitFilters,
     onSuccess?: () => void,
     explicitOutfitIndex?: number | null,
-    explicitMessageId?: string | null
+    explicitMessageId?: string | null,
+    wardrobePieces: PickedPiece[] = [] // Wardrobe pieces the user picked for this message
   ) => {
-    if (!message.trim() && !imageFile) {
+    if (!message.trim() && !imageFile && wardrobePieces.length === 0) {
       showToast.error('Please enter a message or attach an image');
       return;
+    }
+    // Picked pieces are enough on their own: the AI completes the outfit around them
+    if (!message.trim() && wardrobePieces.length > 0) {
+      message = 'Complete my outfit with these pieces';
     }
 
     const view = viewRef.current;
@@ -185,6 +196,7 @@ export const useChatMessages = () => {
       content: message || 'Attached an image',
       timestamp: new Date(),
       imageUrl: imageFile ? URL.createObjectURL(imageFile) : undefined,
+      wardrobeItems: wardrobePieces.length > 0 ? wardrobePieces : undefined,
     };
 
     // Show the user message immediately (optimistic)
@@ -215,7 +227,8 @@ export const useChatMessages = () => {
         outfitIndexToSend,
         messageIdToSend,
         guestGenderRef.current, // Pass guest gender for non-authenticated users
-        requestId
+        requestId,
+        { itemIds: wardrobePieces.map((piece) => piece.id), onlyWardrobe: onlyWardrobeRef.current }
       );
 
       if (view !== viewRef.current) {
@@ -317,6 +330,7 @@ export const useChatMessages = () => {
         errorDetails: {
           originalMessage: message,
           originalImage: imageFile,
+          originalWardrobe: wardrobePieces,
           errorTitle: errorInfo.title,
           errorMessage: errorInfo.message,
         },
@@ -342,6 +356,7 @@ export const useChatMessages = () => {
     originalMessage: string,
     originalImage?: File
   ) => {
+    const originalWardrobe = messages.find((msg) => msg.id === errorMessageId)?.errorDetails?.originalWardrobe;
     // Remove the error message and the user message it answered (the one right before it,
     // not simply the last user message: there may be newer messages after a failed one)
     updateMessages(currentChatId, (prev) => {
@@ -357,7 +372,7 @@ export const useChatMessages = () => {
     });
 
     // Retry sending the message
-    await sendMessage(originalMessage, originalImage, undefined, undefined, undefined, undefined);
+    await sendMessage(originalMessage, originalImage, undefined, undefined, undefined, undefined, originalWardrobe);
   };
 
   const explainOutfit = async (messageId: string, outfitId?: string) => {
@@ -504,6 +519,7 @@ export const useChatMessages = () => {
     selectOutfit,
     selectedOutfitIndex,
     selectedMessageId,
-    setGuestGender
+    setGuestGender,
+    setOnlyWardrobe
   };
 };

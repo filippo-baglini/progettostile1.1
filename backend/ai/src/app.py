@@ -12,9 +12,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Import custom modules
 from ai.src.preferences_management import get_user_preferences
-from ai.src.query_handler import generate_outfit_plan, parse_outfit_plan
+from ai.src.query_handler import generate_outfit_plan, parse_outfit_plan, SINGLE_ITEM_CATEGORIES
 from ai.src.query_embedder import get_text_embedding_vector
 from ai.src.outfit_retrieval_logic import search_product_candidates_with_vector_db
+from ai.src.wardrobe import search_wardrobe_candidates, wardrobe_candidate
 from ai.src.assemble_outfit import get_outfit, select_final_outfit_and_metrics
 from ai.src.get_explanations import explain_selected_outfit
 
@@ -48,7 +49,6 @@ if not os.environ.get("MISTRAL_API_KEY"):
 
 # 3. CLIP Model Initialization (Heavy/Critical Resource)
 CLIP_MODEL_NAME = "patrickjohncyh/fashion-clip"
-SINGLE_ITEM_CATEGORIES = {'bottom', 'dresses', 'outerwear', 'swimwear', 'shoes'}  # 'top' and 'accessories' can layer
 try:
     DEVICE = torch.device("cpu")
     MODEL = CLIPModel.from_pretrained(CLIP_MODEL_NAME)
@@ -61,7 +61,9 @@ except Exception as e:
     logging.critical(f"❌ Error initializing CLIP model: {e}", exc_info=True)
     raise RuntimeError("Failed to load the CLIP model and processor.") from e
 
-def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str, Any]], user_id_key: int | None, image_data:tuple[str, bytes] | None, past_images:dict[str, bytes] | None, selected_outfit_index: int | None = None, selected_message_id: str | None = None, guest_gender: str | None = None) -> Dict[str, Any]:
+def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str, Any]], user_id_key: int | None, image_data:tuple[str, bytes] | None, past_images:dict[str, bytes] | None, selected_outfit_index: int | None = None, selected_message_id: str | None = None, guest_gender: str | None = None, picked_items: List[Dict[str, Any]] | None = None, only_wardrobe: bool = False) -> Dict[str, Any]:
+    # picked_items: wardrobe pieces the user picked (rows + 'image_bytes'), always part of the outfit.
+    # only_wardrobe: the rest of the outfit comes from the user's wardrobe instead of the catalogue, no budget.
     
     #CRITICAL: IMAGE_DATA NEEDS TO BE ALREADY ENCODED IN base64 BY THE FRONTEND
     #BEFORE GETTING PASSED TO THIS METHOD, ALSO THE mimeType NEEDS TO BE PASSED
@@ -137,7 +139,9 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
         user_preferences,
         gender,
         focus_outfit_index=selected_outfit_index, # Pass the index to filter context
-        focus_message_id=selected_message_id # NEW: Pass the message ID to strictly target context
+        focus_message_id=selected_message_id, # NEW: Pass the message ID to strictly target context
+        picked_items=picked_items,
+        only_wardrobe=only_wardrobe
     )
     status = response.get('status')
 
@@ -263,7 +267,9 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
                      logging.info(f"DEBUG: Using preserved budget {current_outfit_budget} from previous outfit for refinement.")
             else:
                  current_outfit_budget = budget
-            
+        if only_wardrobe:
+            current_outfit_budget = None  # nothing is bought
+
         logging.info(f"Processing outfit {i+1}/{len(outfits_list)} with budget: {current_outfit_budget}...")
         
         parsed_item_list = None
@@ -381,6 +387,11 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
                         indices_to_search.append(idx)
                         all_candidates.append(None)
     
+            # Picked wardrobe pieces are in every outfit, like locked items (unless a refined outfit already has them)
+            for piece in picked_items or []:
+                if not (refinement_type == 'REFINE_CURRENT' and f"w{piece['id']}" in active_previous_items):
+                    all_candidates.append([wardrobe_candidate(piece)])
+
             # Batch search for unlocked items
             if items_to_search:
                 logging.info(f"Generating embeddings for {len(items_to_search)} items...")
@@ -389,8 +400,13 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
                     query_vector = query_vector.flatten().tolist() 
                     item['embedding'] = query_vector
     
-                logging.info("Searching product candidates in vector DB...")
-                search_results = search_product_candidates_with_vector_db(SUPABASE_CLIENT, items_to_search, current_outfit_budget, gender)
+                if only_wardrobe:
+                    logging.info("Searching the user's wardrobe...")
+                    picked_ids = {piece['id'] for piece in picked_items or []}
+                    search_results = search_wardrobe_candidates(SUPABASE_CLIENT, items_to_search, user_id_key, picked_ids)
+                else:
+                    logging.info("Searching product candidates in vector DB...")
+                    search_results = search_product_candidates_with_vector_db(SUPABASE_CLIENT, items_to_search, current_outfit_budget, gender)
                 
                 if search_results:
                     # If search_results is shorter than items_to_search (error?), handle it.
@@ -419,6 +435,13 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
                             all_candidates[original_idx] = filtered_candidates
                             # --- DIVERSITY LOGIC END ---
                 
+            # Only my clothes: a piece the user owns nothing like is left out of the outfit
+            if only_wardrobe:
+                all_candidates = [c for c in all_candidates if c != []]
+                if not all_candidates:
+                    logging.info(f"No wardrobe pieces fit outfit {i+1}.")
+                    continue
+
             # Check for missing candidates (vector search failure)
             if any(c is None for c in all_candidates):
                 logging.error(f"Vector search failed for some items. Aborting outfit {i+1}.")
@@ -469,7 +492,7 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
         'status_code': 200,
         'chat_history': response.get('history', chat_history),
         'conversation_title': response.get('conversation_title'),
-        'outfits': final_outfits_results 
+        'outfits': final_outfits_results,
     }
     
     logging.info(f"Successfully assembled {len(final_outfits_results)} outfits.")

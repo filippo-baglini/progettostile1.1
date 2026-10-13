@@ -23,6 +23,16 @@ describe('ProductCard Component', () => {
         expect(screen.getByAltText('Test Product')).toHaveAttribute('src', 'https://example.com/jacket.jpg');
     });
 
+    it('shows an owned piece as part of the wardrobe, with no price or shop button', () => {
+        render(<ProductCard item={{ ...mockProduct, price: 0, link: undefined, owned: true }} />);
+
+        expect(screen.getByText('YOUR WARDROBE')).toBeInTheDocument();
+        expect(screen.getByText('From your wardrobe')).toBeInTheDocument();
+        expect(screen.queryByText('$0.00')).not.toBeInTheDocument();
+        expect(screen.queryByText('IN STOCK')).not.toBeInTheDocument();
+        expect(screen.queryByText('N/A')).not.toBeInTheDocument();
+    });
+
     it('opens link when shop button is clicked', () => {
         const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
         render(<ProductCard item={mockProduct} />);

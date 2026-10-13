@@ -15,7 +15,8 @@ from db_manager import DBManager
 import os
 import title_generator
 
-from ai.src.app import outfit_recommendation_handler, generate_explanation_only
+from ai.src.app import outfit_recommendation_handler, generate_explanation_only, MODEL, PROC, DEVICE
+from ai.src.query_embedder import get_image_embedding_vector
 from ai.src.wardrobe import WARDROBE_SECTIONS
 from ai.src import progress
 from storage_manager import upload_image, compress_image, download_image, get_image_url, delete_images
@@ -441,20 +442,22 @@ def add_wardrobe_item():
         if section not in WARDROBE_SECTIONS:
             return {"error": "Unknown wardrobe section"}, 400
 
-        image_id, _, error = store_uploaded_image("wardrobe", (1024, 1024))
+        image_id, image, error = store_uploaded_image("wardrobe", (1024, 1024))
         if error:
             return error
 
-        item = save_wardrobe_piece(int(current_user.get_id()), image_id, section, wardrobe_details(request.form))
+        item = save_wardrobe_piece(int(current_user.get_id()), image_id, image, section, wardrobe_details(request.form))
         return {"success": True, "item": wardrobe_payload(item)}, 201
     except Exception as e:
         return server_error(e)
 
 
-def save_wardrobe_piece(user_id, image_id, section, details):
-    """Saves a photo already in the wardrobe bucket as a piece. Removes the photo if saving fails."""
+def save_wardrobe_piece(user_id, image_id, image, section, details):
+    """Saves a photo already in the wardrobe bucket as a piece, with its FashionCLIP embedding (same space as
+    the catalogue, so the outfit AI can search the wardrobe). Removes the photo if saving fails."""
     try:
-        return DBManager.add_wardrobe_item(user_id, section, image_id, *details)
+        embedding = get_image_embedding_vector(MODEL, PROC, DEVICE, image).tolist()
+        return DBManager.add_wardrobe_item(user_id, section, WARDROBE_SECTIONS[section], image_id, embedding, *details)
     except Exception:
         delete_images([image_id], "wardrobe")  # don't leave an orphan photo in storage
         raise
@@ -470,7 +473,7 @@ def update_wardrobe_item(item_id):
         if section not in WARDROBE_SECTIONS:
             return {"error": "Unknown wardrobe section"}, 400
 
-        item = DBManager.update_wardrobe_item(int(current_user.get_id()), item_id, section, *wardrobe_details(data))
+        item = DBManager.update_wardrobe_item(int(current_user.get_id()), item_id, section, WARDROBE_SECTIONS[section], *wardrobe_details(data))
         if not item:
             return {"error": "Item not found"}, 404
         return {"success": True, "item": wardrobe_payload(item)}, 200
@@ -572,12 +575,16 @@ def send_message():
             selected_outfit_index = data.get('selected_outfit_index')
             selected_message_id = data.get('selected_message_id') # Extract from JSON
             guest_gender = data.get('gender')  # Get gender from request body
+            wardrobe_item_ids = data.get('wardrobe_item_ids') or []
+            only_wardrobe = data.get('only_wardrobe') is True
         else:
             msg_text = request.form.get('message')
             conv_id = request.form.get('conv_id')
             selected_outfit_index = request.form.get('selected_outfit_index')
             selected_message_id = request.form.get('selected_message_id') # Extract from FormData
             guest_gender = request.form.get('gender')  # Get gender from form data
+            wardrobe_item_ids = request.form.getlist('wardrobe_item_ids')
+            only_wardrobe = request.form.get('only_wardrobe') == 'true'
             image_uploaded = request.files.get('image')
             if image_uploaded:
                 image = compress_image(image_uploaded.read())
@@ -602,6 +609,16 @@ def send_message():
         image_data = None
         if image_id:
             image_data = (image_id, image)
+
+        # Wardrobe pieces the user picked (only their own) and the "only my clothes" toggle: logged-in users only
+        picked_items = []
+        if is_authenticated and wardrobe_item_ids:
+            try:
+                picked_items = load_picked_items(user_id, [int(i) for i in wardrobe_item_ids][:10])
+            except (TypeError, ValueError):
+                return {"error": "Invalid wardrobe item ids"}, 400
+        only_wardrobe = is_authenticated and only_wardrobe
+        picked_ids = [piece['id'] for piece in picked_items]  # saved with this message
 
         # === UTENTE NON AUTENTICATO ===
         if not is_authenticated:
@@ -649,13 +666,13 @@ def send_message():
                 chat_history = []
                 past_images = {}
                 
-                output = outfit_recommendation_handler(msg_text, chat_history, user_id, image_data=image_data, past_images=past_images, selected_outfit_index=selected_outfit_index)
+                output = outfit_recommendation_handler(msg_text, chat_history, user_id, image_data=image_data, past_images=past_images, selected_outfit_index=selected_outfit_index, picked_items=picked_items, only_wardrobe=only_wardrobe)
                 
                 conv_title = output.get('conversation_title')
                 if not conv_title:
                     conv_title = title_generator.generate_title(msg_text)
 
-                conv_id = DBManager.create_conversation_with_message(user_id, conv_title, msg_text, image_id=image_id)
+                conv_id = DBManager.create_conversation_with_message(user_id, conv_title, msg_text, image_id=image_id, wardrobe_item_ids=picked_ids)
                 if conv_id is None:
                     return {"error": "Error while creating a new conversation"}, 500
 
@@ -666,10 +683,19 @@ def send_message():
 
                 chat_history, past_images = load_messages(conv_id, user_id)
 
-                output = outfit_recommendation_handler(msg_text, chat_history, user_id, image_data=image_data, past_images=past_images, selected_outfit_index=selected_outfit_index, selected_message_id=selected_message_id)
+                # Pieces picked before the AI's follow-up questions still count until it builds an outfit
+                if not picked_items:
+                    for msg in reversed(chat_history):
+                        if msg.get('outfits'):
+                            break
+                        if msg.get('wardrobe_item_ids'):
+                            picked_items = load_picked_items(user_id, msg['wardrobe_item_ids'])
+                            break
+
+                output = outfit_recommendation_handler(msg_text, chat_history, user_id, image_data=image_data, past_images=past_images, selected_outfit_index=selected_outfit_index, selected_message_id=selected_message_id, picked_items=picked_items, only_wardrobe=only_wardrobe)
 
                 # Saved only after the AI call: a failure no longer leaves a prompt without a reply
-                if not DBManager.add_message_to_conversation(conv_id, msg_text, image_id=image_id):
+                if not DBManager.add_message_to_conversation(conv_id, msg_text, image_id=image_id, wardrobe_item_ids=picked_ids):
                     return {"error": "Unable to save the message"}, 500
 
         status = output.get('status')
@@ -741,6 +767,14 @@ def explain_outfit():
         return server_error(e)
 
 
+def load_picked_items(user_id, item_ids):
+    """The user's own wardrobe pieces among item_ids, with their photo for the outfit planner."""
+    pieces = DBManager.get_wardrobe_items(user_id, item_ids)
+    for piece in pieces:
+        piece['image_bytes'] = download_image(piece['image_id'], "wardrobe")
+    return pieces
+
+
 def load_messages(conv_id, user_id):
     messages = DBManager.get_chat_messages(user_id, conv_id)
 
@@ -759,6 +793,9 @@ def load_messages(conv_id, user_id):
         
         if message.get("outfits"):
             simple_message["outfits"] = message["outfits"]
+
+        if message.get("wardrobe_items"):
+            simple_message["wardrobe_item_ids"] = [piece['id'] for piece in message["wardrobe_items"]]
 
         raw_url = message.get("image_id")
 
