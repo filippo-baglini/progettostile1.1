@@ -779,7 +779,7 @@ def generate_outfit_plan(
         print(f"Error during outfit plan generation: {e}")
         import traceback
         traceback.print_exc()
-        return {'error': 'Failed to process dialogue state.'}
+        return {'status': 'Error', 'message': "Sorry, something went wrong while preparing your outfit. Please try again."}
 
     if data.get('status') == 'AWAITING_INPUT':
         return {
