@@ -111,10 +111,7 @@ const SignUpPage = () => {
           </div>
         </div>
 
-        <GoogleLoginButton
-          onSuccess={() => navigate('/profile')}
-          mode="signup"
-        />
+        <GoogleLoginButton mode="signup" />
 
         <p className="mt-6 text-center text-sm md:text-base font-inter text-text-medium dark:text-stone-400">
           Already have an account?{' '}

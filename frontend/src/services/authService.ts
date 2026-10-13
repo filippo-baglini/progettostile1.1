@@ -1,15 +1,13 @@
 import api from './api';
+import { supabase } from '../lib/supabase';
 import type { LoginCredentials, SignUpData, User } from '../types';
 
 /**
  * Authentication Service
- * 
- * Backend uses Flask-Login with cookie-based sessions (not JWT).
- * Endpoints:
- *   POST /user/login - Login
- *   POST /user/ - Signup
- *   GET /user/session - Check session
- *   GET /user/logout - Logout
+ *
+ * Logins (email/password, Google, password reset) go through Supabase Auth.
+ * The backend knows the user from the Supabase token on each request (see api.ts):
+ *   GET /user/session - The logged-in user (profile + preferences)
  */
 
 interface BackendUser {
@@ -21,16 +19,7 @@ interface BackendUser {
   preferences: Record<string, unknown>;
 }
 
-interface LoginResponse {
-  success: boolean;
-  user: BackendUser;
-}
-
-interface SignupResponse {
-  success: boolean;
-}
-
-interface SessionResponse {
+interface UserResponse {
   success: boolean;
   user: BackendUser;
 }
@@ -46,58 +35,39 @@ const transformUser = (backendUser: BackendUser): User => ({
 });
 
 export const authService = {
-  // Login user
-  // Backend endpoint: POST /user/login
-  login: async (credentials: LoginCredentials) => {
-    const response = await api.post<LoginResponse>('/user/login', credentials);
-    return {
-      user: transformUser(response.data.user),
-    };
+  // Supabase checks the password; the backend then returns our user for that account
+  login: async (credentials: LoginCredentials): Promise<User> => {
+    const { error } = await supabase.auth.signInWithPassword(credentials);
+    if (error) throw error;
+    return authService.getCurrentUser();
   },
 
-  // Sign up new user
-  // Backend endpoint: POST /user/
-  signUp: async (data: SignUpData) => {
-    // Send name, email and password to backend
-    await api.post<SignupResponse>('/user/', {
-      name: data.name,
+  // With "Confirm email" on there is no session yet: null means the user must click the emailed link
+  signUp: async (data: SignUpData): Promise<User | null> => {
+    const { data: result, error } = await supabase.auth.signUp({
       email: data.email,
       password: data.password,
+      options: { data: { name: data.name }, emailRedirectTo: `${window.location.origin}/chat` },
     });
-
-    // After signup, automatically login to get session
-    const loginResponse = await api.post<LoginResponse>('/user/login', {
-      email: data.email,
-      password: data.password,
-    });
-
-    return {
-      user: transformUser(loginResponse.data.user),
-    };
+    if (error) throw error;
+    return result.session ? authService.getCurrentUser() : null;
   },
 
-  // Logout user
-  // Backend endpoint: GET /user/logout
-  logout: async () => {
-    try {
-      await api.get('/user/logout');
-    } catch (error) {
-      // Ignore errors on logout (user might already be logged out)
-      console.warn('Logout request failed:', error);
-    }
+  logout: async (): Promise<void> => {
+    await supabase.auth.signOut();
   },
 
   // Get current user / Check session
   // Backend endpoint: GET /user/session
   getCurrentUser: async (): Promise<User> => {
-    const response = await api.get<SessionResponse>('/user/session');
+    const response = await api.get<UserResponse>('/user/session');
     return transformUser(response.data.user);
   },
 
   // Update user profile
   // Backend endpoint: PUT /user/profile
   updateProfile: async (data: { name: string; username: string }): Promise<User> => {
-    const response = await api.put<LoginResponse>('/user/profile', data);
+    const response = await api.put<UserResponse>('/user/profile', data);
     return transformUser(response.data.user);
   },
 
@@ -106,35 +76,48 @@ export const authService = {
   uploadAvatar: async (image: File): Promise<User> => {
     const formData = new FormData();
     formData.append('image', image);
-    const response = await api.post<LoginResponse>('/user/avatar', formData, {
+    const response = await api.post<UserResponse>('/user/avatar', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return transformUser(response.data.user);
   },
 
-  // Change password
-  // Backend endpoint: POST /user/change-password
-  changePassword: async (data: { current: string; new: string }): Promise<boolean> => {
-    const response = await api.post<{ success: boolean }>('/user/change-password', {
-      current_password: data.current,
-      new_password: data.new,
-    });
-    return response.data.success;
+  // Signing in with the current password first gives a clear "wrong password" error and a fresh session
+  // ("Secure password change" wants a login from the last 24 hours). Supabase checks it again on update
+  // ("Require current password when updating"), so a stolen token alone can't change the password.
+  changePassword: async (data: { current: string; new: string }): Promise<void> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error: wrongPassword } = await supabase.auth.signInWithPassword({ email: session?.user.email ?? '', password: data.current });
+    if (wrongPassword) throw new Error('Current password is not correct');
+    const { error } = await supabase.auth.updateUser({ password: data.new, current_password: data.current });
+    if (error) throw error;
+  },
+
+  requestPasswordReset: async (email: string): Promise<void> => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/reset-password` });
+    if (error) throw error;
+  },
+
+  // On /reset-password the emailed link has already signed the user in
+  setNewPassword: async (password: string): Promise<void> => {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
   },
 
   // Delete account
-  // Backend endpoint: DELETE /user/delete
+  // Backend endpoint: DELETE /user/delete (also deletes the Supabase account)
   deleteAccount: async (): Promise<boolean> => {
     const response = await api.delete<{ success: boolean }>('/user/delete');
+    await supabase.auth.signOut({ scope: 'local' }); // the account is gone, so only the local session is left
     return response.data.success;
   },
 
-  // Login with Google OAuth
-  // Backend endpoint: POST /user/google-login
-  loginWithGoogle: async (credential: string) => {
-    const response = await api.post<LoginResponse>('/user/google-login', { credential });
-    return {
-      user: transformUser(response.data.user),
-    };
+  // Leaves the page for Google; Supabase brings the user back to /chat signed in
+  loginWithGoogle: async (): Promise<void> => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/chat` },
+    });
+    if (error) throw error;
   },
 };

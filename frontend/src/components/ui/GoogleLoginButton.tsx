@@ -1,10 +1,8 @@
-import { useGoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../../context/AuthContext';
 import { showToast } from '../../utils/toast';
 import { useState } from 'react';
 
 interface GoogleLoginButtonProps {
-    onSuccess?: () => void;
     mode?: 'signin' | 'signup';
 }
 
@@ -29,41 +27,26 @@ const GoogleIcon = () => (
     </svg>
 );
 
-const GoogleLoginButton = ({ onSuccess, mode = 'signin' }: GoogleLoginButtonProps) => {
+const GoogleLoginButton = ({ mode = 'signin' }: GoogleLoginButtonProps) => {
     const { loginWithGoogle } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
 
-    const googleLogin = useGoogleLogin({
-        flow: 'implicit',
-        onSuccess: async (tokenResponse) => {
-            setIsLoading(true);
-            try {
-                // Send the access token to backend for verification
-                await loginWithGoogle(tokenResponse.access_token);
-
-                const message = mode === 'signup'
-                    ? 'Account created successfully!'
-                    : 'Logged in successfully!';
-                showToast.success(message);
-                onSuccess?.();
-            } catch (error) {
-                console.error('Google login error:', error);
-                showToast.error('Failed to login with Google');
-            } finally {
-                setIsLoading(false);
-            }
-        },
-        onError: () => {
-            showToast.error('Google login failed');
+    // Leaves the page for Google; Supabase brings the user back to /chat signed in
+    const handleClick = async () => {
+        setIsLoading(true);
+        try {
+            await loginWithGoogle();
+        } catch {
+            showToast.error('Failed to login with Google');
             setIsLoading(false);
-        },
-    });
+        }
+    };
 
     const buttonText = mode === 'signup' ? 'Sign up with Google' : 'Sign in with Google';
 
     return (
         <button
-            onClick={() => googleLogin()}
+            onClick={handleClick}
             disabled={isLoading}
             type="button"
             className="w-full flex items-center justify-center gap-3 px-4 py-3.5
