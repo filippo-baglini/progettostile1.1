@@ -87,7 +87,7 @@ describe('chatService', () => {
     it('getChatConversation maps owned pieces and picked pieces', async () => {
         vi.spyOn(api, 'post').mockResolvedValue({ data: [
             { message_id: 1, role: 'user', text: 'complete this', wardrobe_items: [{ id: 3, image_url: 'https://x/3.jpg' }] },
-            { message_id: 2, role: 'model', text: 'Here', outfits: [{ cost: 20, outfit: [
+            { message_id: 2, role: 'model', text: 'Here', wardrobe_suggestion: { section: 'shirts', name: 'Shirt', color: null, brand: null, image_url: 'https://x/p.jpg' }, outfits: [{ cost: 20, outfit: [
                 { id: 'w3', title: 'Your shirt', price: 0, image_link: 'https://x/3.jpg', url: null, source: 'wardrobe' },
                 { id: '9', title: 'Shoes', price: 20, image_link: 'https://x/9.jpg', url: 'https://shop/9' },
             ] }] },
@@ -96,6 +96,7 @@ describe('chatService', () => {
         const messages = await chatService.getChatConversation('1');
 
         expect(messages[0].wardrobeItems).toEqual([{ id: 3, imageUrl: 'https://x/3.jpg' }]);
+        expect(messages[1].wardrobeSuggestion).toEqual({ section: 'shirts', name: 'Shirt', color: undefined, brand: undefined, imageUrl: 'https://x/p.jpg' });
         expect(messages[1].outfits![0].items.map((i) => i.owned)).toEqual([true, false]);
         expect(messages[1].outfits![0].totalPrice).toBe(20);
     });

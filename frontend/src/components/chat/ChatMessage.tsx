@@ -11,6 +11,8 @@ import OutfitExplanation from './OutfitExplanation';
 import ImageAttachment from './ImageAttachment';
 import BudgetPoll from './BudgetPoll';
 import OutfitOptionPoll from './OutfitOptionPoll';
+import WardrobeSuggestionCard from './WardrobeSuggestionCard';
+import type { WardrobeDetails } from '../../types';
 import { fadeInUp } from '../../utils/animations';
 import { formatTime } from '../../utils/dateUtils';
 import type { SelectedOption } from '../../utils/optionReply';
@@ -27,9 +29,11 @@ interface ChatMessageProps {
   onOutfitOptionSelect?: (option: import('../../types').OutfitGenerationOption) => void;
   isLast?: boolean;
   selectedOption?: SelectedOption; // set when this user message was sent by clicking an option box
+  onAddToWardrobe?: (section: string, details: WardrobeDetails) => Promise<void>; // "Add to your wardrobe?" card
+  onDismissSuggestion?: () => void;
 }
 
-const ChatMessage = ({ message, onExplainOutfit, isLoadingExplanation, onRetry, onContentChange, onSelectOutfit, selectedOutfitIndex, onOptionSelect, onOutfitOptionSelect, isLast = false, selectedOption }: ChatMessageProps) => {
+const ChatMessage = ({ message, onExplainOutfit, isLoadingExplanation, onRetry, onContentChange, onSelectOutfit, selectedOutfitIndex, onOptionSelect, onOutfitOptionSelect, isLast = false, selectedOption, onAddToWardrobe, onDismissSuggestion }: ChatMessageProps) => {
   const [selectedProductIndex, setSelectedProductIndex] = useState<number | null>(null);
   const [activeOutfitIndex, setActiveOutfitIndex] = useState(0);
   const [isRetrying, setIsRetrying] = useState(false);
@@ -159,6 +163,10 @@ const ChatMessage = ({ message, onExplainOutfit, isLoadingExplanation, onRetry, 
   }
 
 
+
+  const suggestionCard = message.wardrobeSuggestion && onAddToWardrobe && onDismissSuggestion && (
+    <WardrobeSuggestionCard suggestion={message.wardrobeSuggestion} onAdd={onAddToWardrobe} onDismiss={onDismissSuggestion} />
+  );
 
   if (message.role === 'user') {
     return (
@@ -291,6 +299,8 @@ const ChatMessage = ({ message, onExplainOutfit, isLoadingExplanation, onRetry, 
                 onSelect={onOutfitOptionSelect}
               />
             )}
+
+            {suggestionCard}
           </div>
         ) : (
           <div className="space-y-3">
@@ -300,6 +310,8 @@ const ChatMessage = ({ message, onExplainOutfit, isLoadingExplanation, onRetry, 
                 <ReactMarkdown>{message.content}</ReactMarkdown>
               </div>
             </div>
+
+            {suggestionCard}
 
             {/* Budget Poll - show if available and is last message */}
             {message.budgetOptions && message.budgetOptions.length > 0 && onOptionSelect && isLast && (

@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
-import type { ChatMessage, OutfitFilters, PickedPiece } from '../types';
+import type { ChatMessage, OutfitFilters, OutfitItem, PickedPiece } from '../types';
 import { chatService } from '../services/chatService';
+import { toWardrobeSuggestion } from '../services/wardrobeService';
 import { showToast } from '../utils/toast';
 import axios from 'axios';
 
@@ -289,6 +290,7 @@ export const useChatMessages = () => {
         } : undefined,
         budgetOptions: outfitData.budgetOptions,
         outfitGenerationOptions: outfitData.outfitGenerationOptions,
+        wardrobeSuggestion: toWardrobeSuggestion(response.content.wardrobe_suggestion),
       };
 
       // Add assistant message to state and cache
@@ -495,6 +497,18 @@ export const useChatMessages = () => {
     setCurrentChatTitle(undefined);
   }, []);
 
+  // The "Add to your wardrobe?" card was used: hide it and, when the piece was added to outfits
+  // the reply already shows, put it in those options
+  const resolveWardrobeSuggestion = (messageId: string, added?: { outfitPiece: OutfitItem; outfitIndexes: number[] }) => {
+    updateMessages(currentChatId, (prev) => prev.map((msg) => {
+      if (msg.id !== messageId) return msg;
+      const outfits = added
+        ? msg.outfits?.map((o, i) => (added.outfitIndexes.includes(i) ? { ...o, items: [...o.items, added.outfitPiece] } : o))
+        : msg.outfits;
+      return { ...msg, wardrobeSuggestion: undefined, outfits, outfit: outfits?.[0] ?? msg.outfit };
+    }));
+  };
+
   // Call after a chat is deleted so its messages aren't served from the cache again
   const forgetChat = useCallback((chatId: string) => {
     delete messageCacheRef.current[chatId];
@@ -520,6 +534,7 @@ export const useChatMessages = () => {
     selectedOutfitIndex,
     selectedMessageId,
     setGuestGender,
-    setOnlyWardrobe
+    setOnlyWardrobe,
+    resolveWardrobeSuggestion
   };
 };

@@ -108,6 +108,19 @@ describe('ChatMessage', () => {
         expect(screen.getAllByAltText('Wardrobe piece').map((img) => img.getAttribute('src'))).toEqual(['https://x/3.jpg', 'https://x/4.jpg']);
     });
 
+    it('shows the "Add to your wardrobe?" card on a reply that has one', () => {
+        const message: ChatMessageType = {
+            id: '5', role: 'assistant', content: 'Where are you going?', timestamp: new Date(),
+            wardrobeSuggestion: { section: 'sweaters', name: 'Grey sweater', imageUrl: 'https://x/s.jpg' },
+        };
+        const onDismiss = vi.fn();
+        render(<ChatMessage message={message} onExplainOutfit={mockOnExplainOutfit} onAddToWardrobe={vi.fn()} onDismissSuggestion={onDismiss} />);
+
+        expect(screen.getByText('Add to your wardrobe?')).toBeInTheDocument();
+        fireEvent.click(screen.getByLabelText('No thanks'));
+        expect(onDismiss).toHaveBeenCalled();
+    });
+
     it('renders user message with image', () => {
         const message: ChatMessageType = {
             id: '1',

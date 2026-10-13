@@ -34,6 +34,24 @@ def describe_piece(piece: dict) -> str:
     return text
 
 
+def clean_owned_piece(piece, has_photo: bool, user_message: str) -> dict | None:
+    """The AI's guess at a piece of the user's own in this turn's photo, or None if it can't be used:
+    no photo this turn, a section that doesn't exist, or 'owner_words' (the user's words saying it's theirs)
+    that the user didn't actually write. The brand is kept only if the user wrote it too: the model
+    otherwise reads brands into printed slogans. Text fields are trimmed and capped like a wardrobe item's."""
+    said = lambda text: isinstance(text, str) and text.strip() and " ".join(text.lower().split()) in " ".join((user_message or "").lower().split())
+    if (not has_photo or not isinstance(piece, dict) or piece.get('section') not in WARDROBE_SECTIONS
+            or not said(piece.get('owner_words'))):
+        return None
+    cleaned = {'section': piece['section']}
+    for field, limit in (('name', 255), ('color', 100), ('brand', 255)):
+        value = piece.get(field)
+        cleaned[field] = value.strip()[:limit] or None if isinstance(value, str) else None
+    if not said(cleaned['brand']):
+        cleaned['brand'] = None
+    return cleaned
+
+
 def wardrobe_candidate(piece: dict, similarity: float = 1.0) -> dict:
     """A wardrobe piece shaped like a catalogue search result. Price 0: the user already owns it.
     The 'w' id prefix keeps it apart from product ids (diversity tracking, refinement locking)."""

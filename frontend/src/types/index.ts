@@ -59,6 +59,13 @@ export interface ChatMessage {
   budgetOptions?: BudgetOption[]; // Interactive budget poll options
   outfitGenerationOptions?: OutfitGenerationOption[]; // Interactive outfit generation options poll
   wardrobeItems?: PickedPiece[]; // Wardrobe pieces the user picked for this message
+  wardrobeSuggestion?: WardrobeSuggestion; // "Add to your wardrobe?" for a piece the user owns in their photo
+}
+
+// The AI's guess at a piece the user owns, in the photo the reply answered
+export interface WardrobeSuggestion extends WardrobeDetails {
+  section: string;
+  imageUrl: string;
 }
 
 // A wardrobe piece attached to a chat message

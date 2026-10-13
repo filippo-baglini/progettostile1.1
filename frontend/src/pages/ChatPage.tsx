@@ -23,9 +23,11 @@ import ParticleBackground from '../components/ui/ParticleBackground';
 import ScrollToBottomButton from '../components/ui/ScrollToBottomButton';
 import KeyboardShortcutsHelper from '../components/ui/KeyboardShortcutsHelper';
 import { chatService } from '../services/chatService';
+import { wardrobeService } from '../services/wardrobeService';
+import { apiErrorMessage } from '../services/api';
 import { beautifyUsername } from '../utils/stringUtils';
 import { showToast } from '../utils/toast';
-import type { ChatHistory, BudgetOption } from '../types';
+import type { ChatHistory, BudgetOption, WardrobeDetails } from '../types';
 import { budgetReply, findSelectedOption } from '../utils/optionReply';
 
 type GuestGender = 'male' | 'female' | 'non-binary';
@@ -77,7 +79,8 @@ const ChatPage = () => {
     selectedOutfitIndex,
     selectedMessageId,
     setGuestGender: setChatGuestGender,
-    setOnlyWardrobe: setChatOnlyWardrobe
+    setOnlyWardrobe: setChatOnlyWardrobe,
+    resolveWardrobeSuggestion
   } = useChat();
 
   const wardrobe = useWardrobePicks(isAuthenticated);
@@ -299,6 +302,23 @@ const ChatPage = () => {
     sendMessage(messageToSend, imageToSend, undefined, undefined, undefined, undefined, piecesToSend);
   };
 
+  // "Add to your wardrobe?" on a reply to a photo of the user's own piece
+  const handleAddToWardrobe = async (messageId: string, section: string, details: WardrobeDetails) => {
+    try {
+      const { item, outfitPiece, outfitIndexes } = await wardrobeService.addFromChat(messageId, section, details);
+      wardrobe.addItem(item);
+      resolveWardrobeSuggestion(messageId, { outfitPiece, outfitIndexes });
+      showToast.success(outfitIndexes.length > 0 ? 'Added to your wardrobe and to the outfit' : 'Added to your wardrobe');
+    } catch (error) {
+      showToast.error(apiErrorMessage(error, 'Failed to add to your wardrobe'));
+    }
+  };
+
+  const handleDismissSuggestion = (messageId: string) => {
+    resolveWardrobeSuggestion(messageId);
+    wardrobeService.dismissSuggestion(messageId).catch(() => { /* hidden here already; it may show again after a reload */ });
+  };
+
   const handleOptionSelect = (option: BudgetOption) => {
     sendMessage(budgetReply(option));
   };
@@ -417,6 +437,8 @@ const ChatPage = () => {
                     onOutfitOptionSelect={handleOutfitOptionSelect}
                     isLast={index === messages.length - 1}
                     selectedOption={message.role === 'user' ? findSelectedOption(messages[index - 1], message.content) : undefined}
+                    onAddToWardrobe={(section, details) => handleAddToWardrobe(message.id, section, details)}
+                    onDismissSuggestion={() => handleDismissSuggestion(message.id)}
                   />
                 ))
               )}

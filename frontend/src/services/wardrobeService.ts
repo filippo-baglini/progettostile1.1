@@ -1,5 +1,5 @@
 import api from './api';
-import type { WardrobeDetails, WardrobeItem } from '../types';
+import type { OutfitItem, WardrobeDetails, WardrobeItem, WardrobeSuggestion } from '../types';
 
 /**
  * Wardrobe Service: photos of the user's own clothes.
@@ -14,6 +14,18 @@ interface BackendWardrobeItem {
   color: string | null;
   brand: string | null;
 }
+
+export interface BackendWardrobeSuggestion {
+  section: string;
+  name: string | null;
+  color: string | null;
+  brand: string | null;
+  image_url: string;
+}
+
+// Shared by live replies and reloaded chats
+export const toWardrobeSuggestion = (s?: BackendWardrobeSuggestion | null): WardrobeSuggestion | undefined =>
+  s ? { section: s.section, name: s.name ?? undefined, color: s.color ?? undefined, brand: s.brand ?? undefined, imageUrl: s.image_url } : undefined;
 
 const transformItem = (item: BackendWardrobeItem): WardrobeItem => ({
   id: item.id,
@@ -50,5 +62,31 @@ export const wardrobeService = {
 
   remove: async (id: number): Promise<void> => {
     await api.delete(`/wardrobe/${id}`);
+  },
+
+  // "Add to your wardrobe?" on a chat reply: the piece goes to the wardrobe and into that chat's outfit.
+  // outfitIndexes: the reply's outfit options it joined (when the outfit was already shown).
+  addFromChat: async (aiResponseId: string, section: string, details: WardrobeDetails) => {
+    const response = await api.post<{
+      item: BackendWardrobeItem;
+      outfit_piece: { id: string; title: string; image_link: string; brand: string | null; description: string };
+      outfit_indexes: number[];
+    }>(`/wardrobe/from-chat/${aiResponseId}`, { section, ...details });
+    const piece = response.data.outfit_piece;
+    const outfitPiece: OutfitItem = {
+      id: piece.id,
+      name: piece.title,
+      price: 0,
+      imageUrl: piece.image_link,
+      category: 'accessories', // display only; the badge comes from `owned`
+      brand: piece.brand ?? undefined,
+      description: piece.description,
+      owned: true,
+    };
+    return { item: transformItem(response.data.item), outfitPiece, outfitIndexes: response.data.outfit_indexes };
+  },
+
+  dismissSuggestion: async (aiResponseId: string): Promise<void> => {
+    await api.delete(`/wardrobe/from-chat/${aiResponseId}`);
   },
 };

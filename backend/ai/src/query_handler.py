@@ -3,7 +3,7 @@ from google.genai import types
 
 from ai.src.model_fallback import generate_content_with_fallback
 from ai.src.progress import mark_generating
-from ai.src.wardrobe import describe_piece
+from ai.src.wardrobe import describe_piece, clean_owned_piece, WARDROBE_SECTIONS
 
 # --- Schema Definitions ---
 
@@ -195,6 +195,23 @@ outfit_schema = types.Schema(
 
 # One call either asks a question or returns the plan: status first, then the question fields, then the plan fields
 _combined_properties = {**input_gathering_schema.properties, **outfit_schema.properties}
+# A piece the user owns in the photo they just sent: the reply offers to add it to their wardrobe
+_combined_properties['owned_piece'] = types.Schema(
+    type=types.Type.OBJECT,
+    description="ONLY when the photo in the user's LATEST message shows a single clothing item or accessory that "
+                "the user says they own (e.g. 'what goes with this sweater I have?'). Leave it out for shop or "
+                "inspiration photos, items they want to find or buy, or photos of a whole outfit.",
+    properties={
+        "owner_words": types.Schema(type=types.Type.STRING,
+                                    description="The user's exact words, copied from their message, saying the item is theirs."),
+        "section": types.Schema(type=types.Type.STRING, enum=list(WARDROBE_SECTIONS),
+                                description="Wardrobe section of the item."),
+        "name": types.Schema(type=types.Type.STRING, description="Short name of the item, e.g. 'Black graphic t-shirt'."),
+        "color": types.Schema(type=types.Type.STRING, description="Main colour, in English."),
+        "brand": types.Schema(type=types.Type.STRING, description="Brand ONLY if the user named it; printed text is not a brand."),
+    },
+    required=["owner_words", "section", "name"],
+)
 _combined_properties['status'] = types.Schema(
     type=types.Type.STRING, enum=["AWAITING_INPUT", "READY_TO_GENERATE", "Guardrail"],
     description="'AWAITING_INPUT' to ask the user for missing information (fill only the question fields), "
@@ -229,6 +246,14 @@ PICKED_PIECES_NOTE = (
     "matching their colours and style, and do NOT plan these pieces again. "
     "The picked pieces do not answer any of your usual questions: follow the same steps as for any request "
     "(occasion or vibe, style options, budget for the new pieces) and ask whatever is still missing before generating."
+)
+OWNED_PIECE_NOTE = (
+    "\n\n'owned_piece' (whatever the status): decide ONLY from the user's words in this message. "
+    "Fill it when they say the item in the photo is theirs (they have it, own it, it's 'my' item): it is offered for their wardrobe. "
+    "'owner_words' must copy the exact words where they say so. "
+    "If they ask to find, buy or match something LIKE it, the item is not theirs: leave 'owned_piece' out. "
+    "Also leave it out for a photo of a whole outfit, or when unsure. "
+    "Set its 'brand' only to a brand the user named; slogans or text printed on the item are not brands."
 )
 ONLY_WARDROBE_NOTE = (
     "\n\nThe user wants an outfit made only of clothes they already own, so nothing will be bought: "
@@ -725,6 +750,8 @@ def generate_outfit_plan(
                                   for p in picked_items if p.get('image_bytes'))
     if only_wardrobe:
         current_turn_parts.append(types.Part(text=ONLY_WARDROBE_NOTE))
+    if image_data:
+        current_turn_parts.append(types.Part(text=OWNED_PIECE_NOTE))
 
     # Aggiungiamo il turno corrente alla storia PER L'API
     gemini_history.append({"role": "user", "parts": current_turn_parts})
@@ -761,6 +788,7 @@ def generate_outfit_plan(
             'history': chat_history,
             'conversation_title': data.get('conversation_title'),
             'budget_options': data.get('budget_options'),
+            'owned_piece': clean_owned_piece(data.get('owned_piece'), image_data is not None, new_user_query),
             'outfit_generation_options': data.get('outfit_generation_options')
         }
 
@@ -779,6 +807,7 @@ def generate_outfit_plan(
             'no_results_message': data.get('no_results_message'),
             'history': chat_history,
             'conversation_title': data.get('conversation_title'),
+            'owned_piece': clean_owned_piece(data.get('owned_piece'), image_data is not None, new_user_query)
         }
 
     return data

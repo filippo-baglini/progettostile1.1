@@ -127,6 +127,32 @@ describe('useChatMessages', () => {
         expect(args[8]).toEqual({ itemIds: [7], onlyWardrobe: true });
     });
 
+    it('a reply offers to add the photo\'s piece; using the card adds it to the outfits it joined', async () => {
+        (chatService.sendMessage as any).mockResolvedValue({
+            status: 'COMPLETED', conv_id: 'c1', message_id: '77',
+            content: { message: 'Here', outfits: [], wardrobe_suggestion: { section: 'shorts', name: 'Denim shorts', color: null, brand: null, image_url: 'https://x/p.jpg' } },
+        });
+        const outfits = [
+            { id: 'o1', items: [{ id: '1', name: 'Pants', price: 10, category: 'pants' as const }], totalPrice: 10 },
+            { id: 'o2', items: [{ id: '2', name: 'Tee', price: 5, category: 'shirt' as const }], totalPrice: 5 },
+        ];
+        (chatService.transformOutfitResponse as any).mockReturnValue({ status: 'COMPLETED', hasOutfit: true, message: 'Here', outfits, items: outfits[0].items, totalPrice: 10 });
+
+        const { result } = renderHook(() => useChatMessages());
+        await act(async () => {
+            await result.current.sendMessage('two looks with my shorts');
+        });
+        expect(result.current.messages.find((m) => m.id === '77')!.wardrobeSuggestion).toMatchObject({ section: 'shorts', imageUrl: 'https://x/p.jpg' });
+
+        const piece = { id: 'w5', name: 'Denim shorts', price: 0, category: 'accessories' as const, owned: true };
+        act(() => result.current.resolveWardrobeSuggestion('77', { outfitPiece: piece, outfitIndexes: [1] }));
+
+        const reply = result.current.messages.find((m) => m.id === '77')!;
+        expect(reply.wardrobeSuggestion).toBeUndefined();
+        expect(reply.outfits![0].items.map((i) => i.id)).toEqual(['1']);
+        expect(reply.outfits![1].items.map((i) => i.id)).toEqual(['2', 'w5']);
+    });
+
     it('sendMessage handles error and reverts optimistic update', async () => {
         (chatService.sendMessage as any).mockRejectedValue(new Error('Network error'));
 

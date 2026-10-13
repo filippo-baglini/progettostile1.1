@@ -17,7 +17,8 @@ import title_generator
 
 from ai.src.app import outfit_recommendation_handler, generate_explanation_only, MODEL, PROC, DEVICE
 from ai.src.query_embedder import get_image_embedding_vector
-from ai.src.wardrobe import WARDROBE_SECTIONS
+from ai.src.wardrobe import WARDROBE_SECTIONS, wardrobe_candidate
+from ai.src.query_handler import SINGLE_ITEM_CATEGORIES
 from ai.src import progress
 from storage_manager import upload_image, compress_image, download_image, get_image_url, delete_images
 import psycopg2.errors
@@ -463,6 +464,57 @@ def save_wardrobe_piece(user_id, image_id, image, section, details):
         raise
 
 
+@app.route('/api/wardrobe/from-chat/<int:ai_response_id>', methods=['POST'])
+@login_required
+def add_wardrobe_item_from_chat(ai_response_id):
+    """The "Add to your wardrobe?" card: copies the photo the reply answered into a new piece and puts the
+    piece in the conversation's outfit. JSON: `section`, `name`, `color`, `brand` (the AI's guess, maybe edited)."""
+    try:
+        data = request.get_json() or {}
+        section = data.get('section')
+        if section not in WARDROBE_SECTIONS:
+            return {"error": "Unknown wardrobe section"}, 400
+
+        user_id = int(current_user.get_id())
+        chat = DBManager.get_chat_photo_for_response(user_id, ai_response_id)
+        if not chat or not chat['image_id']:
+            return {"error": "Photo not found"}, 404
+        if not chat['wardrobe_suggestion']:
+            return {"error": "Already added to your wardrobe"}, 409  # a double tap doesn't add it twice
+
+        photo = download_image(chat['image_id'])
+        if not photo:
+            return {"error": "Photo not found"}, 404
+        # A copy in the wardrobe bucket: deleting the chat never deletes the piece
+        image = compress_image(photo, max_size=(1024, 1024))
+        image_id = str(uuid.uuid4())
+        if not upload_image(image_id, image, "wardrobe"):
+            return {"error": "Upload failed"}, 502
+        item = save_wardrobe_piece(user_id, image_id, image, section, wardrobe_details(data))
+
+        outfit_indexes = DBManager.add_piece_to_response(
+            ai_response_id, chat['prompt_id'], item['id'], item['main_category'] in SINGLE_ITEM_CATEGORIES)
+        return {
+            "success": True,
+            "item": wardrobe_payload(item),
+            "outfit_piece": wardrobe_candidate(item),  # what the outfits it joined now show
+            "outfit_indexes": outfit_indexes,
+        }, 201
+    except Exception as e:
+        return server_error(e)
+
+
+@app.route('/api/wardrobe/from-chat/<int:ai_response_id>', methods=['DELETE'])
+@login_required
+def dismiss_wardrobe_suggestion(ai_response_id):
+    try:
+        if not DBManager.clear_wardrobe_suggestion(int(current_user.get_id()), ai_response_id):
+            return {"error": "Reply not found"}, 404
+        return {"success": True}, 200
+    except Exception as e:
+        return server_error(e)
+
+
 @app.route('/api/wardrobe/<int:item_id>', methods=['PUT'])
 @login_required
 def update_wardrobe_item(item_id):
@@ -702,16 +754,21 @@ def send_message():
         if not status:
             raise Exception("Error while generating recommendations")
 
+        # A piece the user owns in this message's photo: the reply offers to add it to their wardrobe
+        wardrobe_suggestion = output.get('owned_piece') if is_authenticated and image_id else None
+
         new_ai_response_id = None
         if status == "COMPLETED" or status == "READY_TO_GENERATE":
             text = output.get("message")
             if is_authenticated:
-                new_ai_response_id = DBManager.add_ai_response(conv_id, output)
+                new_ai_response_id = DBManager.add_ai_response(conv_id, output, wardrobe_suggestion)
         else:
             # AWAITING_INPUT, Guardrail and Error: every saved prompt gets a saved reply
             text = output.get("prompt_to_user", output.get("message"))
             if is_authenticated:
-                DBManager.add_simple_ai_response(conv_id, text, status, output.get("budget_options"), output.get("outfit_generation_options"))
+                new_ai_response_id = DBManager.add_simple_ai_response(
+                    conv_id, text, status, output.get("budget_options"), output.get("outfit_generation_options"),
+                    wardrobe_suggestion)
 
         # Update chat history
         chat_history.append({'role': 'user', 'text': msg_text, 'image_id': image_id})
@@ -733,6 +790,7 @@ def send_message():
                 "explanation": output.get("explanation"),
                 "budget_options": output.get("budget_options"),
                 "outfit_generation_options": output.get("outfit_generation_options"),
+                "wardrobe_suggestion": {**wardrobe_suggestion, "image_url": image_url} if wardrobe_suggestion and new_ai_response_id else None,
             },
             "message_id": new_ai_response_id
         }

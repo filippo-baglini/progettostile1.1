@@ -45,6 +45,7 @@ export const useWardrobePicks = (isAuthenticated: boolean) => {
     picked,
     togglePiece,
     clearPicks: () => setPicked([]),
+    addItem: (item: WardrobeItem) => setItems((prev) => [item, ...prev]), // added from a chat photo
     onlyWardrobe: hasWardrobe && onlyWardrobe,
     setOnlyWardrobe,
   };

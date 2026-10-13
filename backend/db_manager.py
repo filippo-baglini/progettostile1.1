@@ -407,6 +407,7 @@ class DBManager:
                             NULL as status,
                             NULL::jsonb AS budget_options,
                             NULL::jsonb AS outfit_generation_options,
+                            NULL::jsonb AS wardrobe_suggestion,
                             -- Wardrobe pieces the user picked for this message (deleted ones drop out)
                             (SELECT json_agg(json_build_object('id', wi.id, 'image_id', wi.image_id) ORDER BY wi.id)
                              FROM wardrobe_items wi
@@ -478,6 +479,7 @@ class DBManager:
                             ar.status as status,
                             ar.budget_options,
                             ar.outfit_generation_options,
+                            ar.wardrobe_suggestion,
                             NULL::json AS wardrobe_items
                         FROM ai_responses ar
                                  JOIN conversations c ON ar.conversation_id = c.id
@@ -495,18 +497,23 @@ class DBManager:
             results = cursor.fetchall()
             cursor.close()
 
+            last_user_photo = None  # the "Add to your wardrobe?" card shows the photo it answers
             for message in results:
                 if message.get("role") == "user":
                     del message['explanation'], message['outfits'], message['budget_options'], message['outfit_generation_options']
+                    del message['wardrobe_suggestion']
                     if message['image_id']:
                         file_path = f"public/{message['image_id']}.jpg"
                         message['image_id'] = get_image_url(file_path)
+                    last_user_photo = message['image_id']
                     message['wardrobe_items'] = [
                         {"id": piece['id'], "image_url": get_image_url(f"public/{piece['image_id']}.jpg", "wardrobe")}
                         for piece in message['wardrobe_items'] or []
                     ]
                 else:
                     del message['wardrobe_items']
+                    if message['wardrobe_suggestion']:
+                        message['wardrobe_suggestion'] = {**message['wardrobe_suggestion'], 'image_url': last_user_photo}
                     for outfit in message['outfits']:
                         outfit['outfit'] = [wardrobe_candidate(item) if item.get('source') == 'wardrobe' else item
                                             for item in outfit['outfit']]
@@ -554,7 +561,7 @@ class DBManager:
             return None
 
     @staticmethod
-    def add_ai_response(conversation_id, response_data):
+    def add_ai_response(conversation_id, response_data, wardrobe_suggestion=None):
         """
         Salva la risposta dell'AI e i suggerimenti di outfit nel database.
 
@@ -587,11 +594,12 @@ class DBManager:
 
             # 2. Inserisci la risposta nella tabella ai_responses
             insert_response_query = """
-                                    INSERT INTO ai_responses (conversation_id, short_message, explanation, status)
-                                    VALUES (%s, %s, %s, 'COMPLETED')
+                                    INSERT INTO ai_responses (conversation_id, short_message, explanation, status, wardrobe_suggestion)
+                                    VALUES (%s, %s, %s, 'COMPLETED', %s)
                                     RETURNING id; \
                                     """
-            cursor.execute(insert_response_query, (conversation_id, short_message, explanation))
+            cursor.execute(insert_response_query, (conversation_id, short_message, explanation,
+                                                   extras.Json(wardrobe_suggestion) if wardrobe_suggestion else None))
             new_ai_response_id = cursor.fetchone()[0]
 
             # 3. Gestisci i prodotti e i suggerimenti
@@ -633,7 +641,7 @@ class DBManager:
             raise e
 
     @staticmethod
-    def add_simple_ai_response(conversation_id, message, status, budget_options=None, outfit_generation_options=None):
+    def add_simple_ai_response(conversation_id, message, status, budget_options=None, outfit_generation_options=None, wardrobe_suggestion=None):
         conn = None
         try:
             conn = DBManager.get_db_connection()
@@ -642,14 +650,15 @@ class DBManager:
             # 2. Inserisci la risposta nella tabella ai_responses
             # Usiamo RETURNING id per ottenere l'ID generato auto-increment
             insert_response_query = """
-                                    INSERT INTO ai_responses (conversation_id, short_message, status, budget_options, outfit_generation_options)
-                                    VALUES (%s, %s, %s, %s, %s)
+                                    INSERT INTO ai_responses (conversation_id, short_message, status, budget_options, outfit_generation_options, wardrobe_suggestion)
+                                    VALUES (%s, %s, %s, %s, %s, %s)
                                     RETURNING id; \
                                     """
             cursor.execute(insert_response_query, (
                 conversation_id, message, status,
                 extras.Json(budget_options) if budget_options else None,
                 extras.Json(outfit_generation_options) if outfit_generation_options else None,
+                extras.Json(wardrobe_suggestion) if wardrobe_suggestion else None,
             ))
             new_ai_response_id = cursor.fetchone()[0]
 
@@ -914,6 +923,79 @@ class DBManager:
                 row = cursor.fetchone()
             conn.commit()
             return row[0] if row else None
+        except Exception:
+            conn.rollback()
+            raise
+
+    # --- "Add to your wardrobe?" on a reply to a photo of the user's own piece ---
+
+    @staticmethod
+    def get_chat_photo_for_response(user_id: int, ai_response_id: int) -> dict | None:
+        """The user prompt an AI reply answered (its photo) and the reply's pending suggestion,
+        or None if the reply doesn't exist or isn't in one of the user's conversations."""
+        conn = DBManager.get_db_connection()
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(
+                """SELECT p.id AS prompt_id, p.image_id, ar.wardrobe_suggestion
+                   FROM ai_responses ar
+                   JOIN conversations c ON c.id = ar.conversation_id
+                   -- prompts are saved just before their reply
+                   JOIN LATERAL (SELECT id, image_id FROM prompts
+                                 WHERE conversation_id = ar.conversation_id AND created_at <= ar.created_at
+                                 ORDER BY created_at DESC, id DESC LIMIT 1) p ON true
+                   WHERE ar.id = %s AND c.user_id = %s""",
+                (ai_response_id, user_id)
+            )
+            return cursor.fetchone()
+
+    @staticmethod
+    def add_piece_to_response(ai_response_id: int, prompt_id: int, wardrobe_item_id: int, one_per_outfit: bool) -> list[int]:
+        """Puts a piece just added from a chat photo into the conversation, and clears the suggestion:
+        - on the prompt, like a picked piece, so the next outfit is built around it;
+        - in each outfit option the reply already shows, except options that already have a piece of a
+          one-per-outfit category (`one_per_outfit`) like it.
+        Returns the outfit indexes it was added to."""
+        conn = DBManager.get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE prompts SET wardrobe_item_ids = array_append(COALESCE(wardrobe_item_ids, '{}'), %s) WHERE id = %s",
+                    (wardrobe_item_id, prompt_id)
+                )
+                cursor.execute(
+                    """INSERT INTO outfit_suggestion (ai_response_id, wardrobe_item_id, outfit_index, budget)
+                       SELECT %(response)s, %(piece)s, os.outfit_index, MAX(os.budget)
+                       FROM outfit_suggestion os
+                       LEFT JOIN product_data pd ON pd.id = os.product_id
+                       LEFT JOIN wardrobe_items wi ON wi.id = os.wardrobe_item_id
+                       WHERE os.ai_response_id = %(response)s
+                       GROUP BY os.outfit_index
+                       HAVING NOT (%(one_per_outfit)s AND bool_or(COALESCE(pd.main_category, wi.main_category) =
+                                   (SELECT main_category FROM wardrobe_items WHERE id = %(piece)s)))
+                       RETURNING outfit_index""",
+                    {"response": ai_response_id, "piece": wardrobe_item_id, "one_per_outfit": one_per_outfit}
+                )
+                outfit_indexes = sorted(row[0] for row in cursor.fetchall())
+                cursor.execute("UPDATE ai_responses SET wardrobe_suggestion = NULL WHERE id = %s", (ai_response_id,))
+            conn.commit()
+            return outfit_indexes
+        except Exception:
+            conn.rollback()
+            raise
+
+    @staticmethod
+    def clear_wardrobe_suggestion(user_id: int, ai_response_id: int) -> bool:
+        conn = DBManager.get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """UPDATE ai_responses ar SET wardrobe_suggestion = NULL
+                       FROM conversations c WHERE c.id = ar.conversation_id AND ar.id = %s AND c.user_id = %s""",
+                    (ai_response_id, user_id)
+                )
+                updated = cursor.rowcount > 0
+            conn.commit()
+            return updated
         except Exception:
             conn.rollback()
             raise

@@ -1,5 +1,6 @@
 import api from './api';
 import type { ChatHistory, OutfitFilters, OutfitItem } from '../types';
+import { toWardrobeSuggestion, type BackendWardrobeSuggestion } from './wardrobeService';
 
 /**
  * Chat Service
@@ -47,6 +48,7 @@ interface BackendOutfitResponse {
   explanation?: string;
   budget_options?: any[]; // Budget options for polling
   outfit_generation_options?: any[]; // Outfit generation options for polling
+  wardrobe_suggestion?: BackendWardrobeSuggestion | null;
 }
 
 export interface TransformedOutfit {
@@ -92,6 +94,7 @@ interface BackendMessage {
   budget_options?: any[];
   outfit_generation_options?: any[];
   wardrobe_items?: { id: number; image_url: string }[];
+  wardrobe_suggestion?: BackendWardrobeSuggestion | null;
 }
 
 interface BackendConversation {
@@ -279,6 +282,7 @@ export const chatService = {
         outfit: processedOutfits ? processedOutfits[0] : undefined,
         budgetOptions: msg.budget_options,
         outfitGenerationOptions: msg.outfit_generation_options,
+        wardrobeSuggestion: toWardrobeSuggestion(msg.wardrobe_suggestion),
         wardrobeItems: msg.wardrobe_items?.length
           ? msg.wardrobe_items.map((piece) => ({ id: piece.id, imageUrl: piece.image_url }))
           : undefined,

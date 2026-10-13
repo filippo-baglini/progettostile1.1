@@ -176,6 +176,7 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
             "conversation_title": response.get('conversation_title'),
             "budget_options": budget_options,
             "outfit_generation_options": outfit_generation_options,
+            "owned_piece": response.get('owned_piece'),
             "status_code": 202 # Accepted (partial content)
         }
     
@@ -493,6 +494,7 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
         'chat_history': response.get('history', chat_history),
         'conversation_title': response.get('conversation_title'),
         'outfits': final_outfits_results,
+        'owned_piece': response.get('owned_piece'),
     }
     
     logging.info(f"Successfully assembled {len(final_outfits_results)} outfits.")
