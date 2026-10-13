@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from flask import Flask, request
 from flask_cors import CORS
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
+from werkzeug.exceptions import HTTPException
 from werkzeug.security import generate_password_hash, check_password_hash
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
@@ -29,6 +30,11 @@ app = Flask(__name__)
 if not os.getenv('SECRET_KEY'):
     raise RuntimeError("SECRET_KEY is missing from the environment / .env file.")
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
+# Other sites can't send requests carrying the session cookie (CSRF)
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax'
+# Uploads bigger than this get a 413 before they reach PIL
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
 
 # CORS configuration for frontend
 CORS(app, 
@@ -61,6 +67,8 @@ not_auth_convs = LRUCache(maxsize=200)
 
 def server_error(e):
     """Log the full error server-side; never send internal details to the client."""
+    if isinstance(e, HTTPException):  # e.g. 413 from MAX_CONTENT_LENGTH: keep its status, not a 500
+        return {"error": e.description}, e.code
     logging.exception(e)
     return {"error": "Internal server error"}, 500
 
@@ -219,22 +227,37 @@ def google_login():
                 google_requests.Request(), 
                 GOOGLE_CLIENT_ID
             )
+            if not idinfo.get('email_verified'):
+                return {"error": "Email Google non verificata"}, 401
             google_id = idinfo['sub']
             email = idinfo['email']
             name = idinfo.get('name', email.split('@')[0])
         except ValueError:
-            # Not an ID token, try as access token
+            # Not an ID token, try as access token. It must have been issued to *our* client:
+            # otherwise a token from any other Google app would log its owner in here.
             import requests as http_requests
+            tokeninfo = http_requests.get(
+                'https://oauth2.googleapis.com/tokeninfo',
+                params={'access_token': token},
+                timeout=10
+            )
+            if tokeninfo.status_code != 200:
+                return {"error": "Token non valido"}, 401
+            tokeninfo = tokeninfo.json()
+            if tokeninfo.get('aud') != GOOGLE_CLIENT_ID or tokeninfo.get('email_verified') not in ('true', True):
+                return {"error": "Token non valido"}, 401
+
             userinfo_response = http_requests.get(
                 'https://www.googleapis.com/oauth2/v3/userinfo',
-                headers={'Authorization': f'Bearer {token}'}
+                headers={'Authorization': f'Bearer {token}'},
+                timeout=10
             )
             if userinfo_response.status_code != 200:
                 return {"error": "Token non valido"}, 401
             
             userinfo = userinfo_response.json()
-            google_id = userinfo.get('sub')
-            email = userinfo.get('email')
+            google_id = tokeninfo.get('sub')
+            email = tokeninfo.get('email')
             name = userinfo.get('name', email.split('@')[0] if email else 'User')
         
         if not google_id or not email:
@@ -262,7 +285,7 @@ def google_login():
     except Exception as e:
         return server_error(e)
 
-@app.route('/api/user/logout', methods=['GET'])
+@app.route('/api/user/logout', methods=['POST'])
 @login_required
 def logout():
     """Endpoint per logout utente.

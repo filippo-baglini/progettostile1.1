@@ -84,7 +84,7 @@ def _call_mistral(model: str, contents: Any, config: types.GenerateContentConfig
         schema = config.response_schema.json_schema.model_dump(mode="json", exclude_none=True)
         body["response_format"] = {"type": "json_schema", "json_schema": {"name": "response", "schema": schema}}
 
-    r = requests.post(MISTRAL_URL, json=body, timeout=120,
+    r = requests.post(MISTRAL_URL, json=body, timeout=60,
                       headers={"Authorization": f"Bearer {os.environ['MISTRAL_API_KEY']}"})
     if not r.ok:
         raise Exception(f"Mistral error {r.status_code}: {r.text[:500]}")

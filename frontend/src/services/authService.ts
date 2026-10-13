@@ -9,7 +9,7 @@ import type { LoginCredentials, SignUpData, User } from '../types';
  *   POST /user/login - Login
  *   POST /user/ - Signup
  *   GET /user/session - Check session
- *   GET /user/logout - Logout
+ *   POST /user/logout - Logout
  */
 
 interface BackendUser {
@@ -77,10 +77,10 @@ export const authService = {
   },
 
   // Logout user
-  // Backend endpoint: GET /user/logout
+  // Backend endpoint: POST /user/logout
   logout: async () => {
     try {
-      await api.get('/user/logout');
+      await api.post('/user/logout');
     } catch (error) {
       // Ignore errors on logout (user might already be logged out)
       console.warn('Logout request failed:', error);

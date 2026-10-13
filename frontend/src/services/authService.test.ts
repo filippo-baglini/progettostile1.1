@@ -63,21 +63,21 @@ describe('authService', () => {
         expect(result).toBe(true);
     });
 
-    it('logout calls api get', async () => {
-        const getSpy = vi.spyOn(api, 'get').mockResolvedValue({ data: { success: true } });
+    it('logout calls api post', async () => {
+        const postSpy = vi.spyOn(api, 'post').mockResolvedValue({ data: { success: true } });
 
         await authService.logout();
 
-        expect(getSpy).toHaveBeenCalledWith('/user/logout');
+        expect(postSpy).toHaveBeenCalledWith('/user/logout');
     });
 
     it('logout handles error gracefully', async () => {
-        const getSpy = vi.spyOn(api, 'get').mockRejectedValue(new Error('Logout failed'));
+        const postSpy = vi.spyOn(api, 'post').mockRejectedValue(new Error('Logout failed'));
         const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
         await authService.logout();
 
-        expect(getSpy).toHaveBeenCalledWith('/user/logout');
+        expect(postSpy).toHaveBeenCalledWith('/user/logout');
         expect(consoleSpy).toHaveBeenCalledWith('Logout request failed:', expect.any(Error));
 
         consoleSpy.mockRestore();
