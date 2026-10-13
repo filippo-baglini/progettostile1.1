@@ -1,5 +1,5 @@
 # Run with: venv/bin/python -m ai.test_wardrobe_picks
-from ai.src.query_handler import drop_picked_categories
+from ai.src.query_handler import drop_picked_categories, keep_one_item_per_category
 from ai.src.wardrobe import wardrobe_candidate, describe_piece, clean_owned_piece
 
 outfit = lambda: {'top': {'items': [{'tag': 'sweater'}]}, 'bottom': {'items': [{'tag': 'chinos'}]},
@@ -19,6 +19,15 @@ assert 'top' in plan['outfits'][0]
 plan = {'outfits': [outfit(), None]}
 drop_picked_categories(plan, set())
 assert plan['outfits'] == [outfit(), None]
+
+# Alternatives the model listed in a one-per-outfit category: only the first stays; tops can layer
+plan = {'outfits': [{'top': {'items': [{'tag': 't-shirt'}, {'tag': 'sweater'}]},
+                     'bottom': {'items': [{'tag': 'slim jeans'}, {'tag': 'distressed jeans'}]},
+                     'shoes': {'items': []}, 'swimwear': {'items': [{'tag': 'bikini top'}, {'tag': 'bikini bottom'}]}}, None]}
+keep_one_item_per_category(plan)
+o = plan['outfits'][0]
+assert o['bottom']['items'] == [{'tag': 'slim jeans'}] and len(o['top']['items']) == 2
+assert o['shoes']['items'] == [] and len(o['swimwear']['items']) == 2
 
 piece = {'id': 12, 'section': 'shirts', 'image_id': 'abc', 'name': None, 'color': 'white', 'brand': 'Zara', 'main_category': 'top'}
 assert describe_piece(piece) == 'white shirt by Zara'

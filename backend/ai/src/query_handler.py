@@ -795,6 +795,7 @@ def generate_outfit_plan(
     if data.get('status') == 'READY_TO_GENERATE':
         mark_generating()  # the questions are over: lets the browser say so while the outfit is built
         drop_owned_categories(data)
+        keep_one_item_per_category(data)
         drop_picked_categories(data, {p['main_category'] for p in picked_items or []})
         return {
             'status': 'READY_TO_GENERATE',
@@ -839,6 +840,17 @@ def drop_picked_categories(plan: dict, picked_categories: set[str]) -> None:
         if isinstance(outfit, dict):
             for category in picked_categories & SINGLE_ITEM_CATEGORIES:
                 outfit.pop(category, None)
+
+
+def keep_one_item_per_category(plan: dict) -> None:
+    """Keeps only the first item of the one-per-outfit categories: the model sometimes lists alternatives
+    (two jeans, two shoes) and each becomes a piece of the outfit. Swimwear stays: bikini top + bottom."""
+    for outfit in plan.get('outfits') or []:
+        if isinstance(outfit, dict):
+            for category in SINGLE_ITEM_CATEGORIES - {'swimwear'}:
+                group = outfit.get(category)
+                if isinstance(group, dict) and isinstance(group.get('items'), list):
+                    group['items'] = group['items'][:1]
 
 
 def create_text_prompt(gender: str, new_user_query: str, user_preferences: dict | None) -> str:
