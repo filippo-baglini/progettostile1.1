@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Import custom modules
 from ai.src.preferences_management import get_user_preferences
-from ai.src.query_handler import generate_outfit_plan, parse_outfit_plan, SINGLE_ITEM_CATEGORIES
+from ai.src.query_handler import generate_outfit_plan, parse_outfit_plan, item_description, SINGLE_ITEM_CATEGORIES
 from ai.src.query_embedder import get_text_embedding_vector
 from ai.src.outfit_retrieval_logic import search_product_candidates_with_vector_db
 from ai.src.wardrobe import search_wardrobe_candidates, wardrobe_candidate
@@ -361,7 +361,7 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
                                 'items': [new_item_def], # The schema has 'items' list inside category
                                 'color_palette': mod.get('new_color_palette', ''),
                                 'pattern': mod.get('new_pattern', ''),
-                                'description': f"{mod.get('new_color_palette', '')} {mod.get('new_pattern', '')} {new_item_def.get('tag')} {new_item_def.get('fit')}".strip()
+                                'description': item_description(new_item_def.get('tag'), new_item_def.get('fit'), mod.get('new_color_palette'), mod.get('new_pattern'))
                             }
                             
                             logging.info(f"Action {action}: Adding new search for {search_item['description']}")

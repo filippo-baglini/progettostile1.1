@@ -897,6 +897,12 @@ def create_text_prompt(gender: str, new_user_query: str, user_preferences: dict 
     return full_text_prompt
 
 
+def item_description(tag, fit, color, pattern) -> str:
+    """The text FashionCLIP embeds for a planned item, listing-style with the modifiers first like the
+    product captions it was trained on: 'relaxed black solid graphic t-shirt'."""
+    return " ".join(str(part).replace('_', ' ').strip() for part in (fit, color, pattern, tag) if part and str(part).strip())
+
+
 def parse_outfit_plan(json_plan: dict, hard_constraints: dict | None) -> list[dict]:
     """
     Transforms the structured JSON plan (output of the LLM) into a simplified 
@@ -935,8 +941,7 @@ def parse_outfit_plan(json_plan: dict, hard_constraints: dict | None) -> list[di
                 item_fit = item.get('fit', '').strip()
                 
                 # Combine LLM's stylistic suggestions into a single description for the embedding search
-                parts = [item_tag, item_fit, category_color, pattern]
-                item_desc = " ".join(filter(None, parts)).strip()
+                item_desc = item_description(item_tag, item_fit, category_color, pattern)
                 
                 # The final list contains the LLM's stylistic prompt AND the hard constraints for database filtering
                 response_list.append({
