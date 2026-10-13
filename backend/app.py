@@ -68,6 +68,15 @@ def server_error(e):
 USERNAME_RE = re.compile(r'[a-z0-9._]{3,30}')
 
 
+def chat_title(output, msg_text):
+    """Title for a new chat; a blocked message never gets a title written from its own words."""
+    if output.get('status') == 'Guardrail':
+        # ponytail: tells the two guardrails apart by their fixed messages in query_handler.py
+        message = (output.get('message') or '').lower()
+        return "Offensive content" if 'offensive' in message or 'hate' in message else "Off-topic request"
+    return output.get('conversation_title') or title_generator.generate_title(msg_text)
+
+
 def user_payload(user):
     """The user as the frontend sees it: profile fields plus preferences (gender lives on users)."""
     preferences = DBManager.get_user_preferences(user['id'])
@@ -682,9 +691,7 @@ def send_message():
                 
                 output = outfit_recommendation_handler(msg_text, chat_history, user_id, image_data=image_data, past_images=past_images, selected_outfit_index=selected_outfit_index, guest_gender=guest_gender)
                 
-                conv_title = output.get('conversation_title')
-                if not conv_title:
-                    conv_title = title_generator.generate_title(msg_text)
+                conv_title = chat_title(output, msg_text)
                 
                 # Salva in memoria (non nel DB)
                 not_auth_convs[conv_id] = {
@@ -720,9 +727,7 @@ def send_message():
                 
                 output = outfit_recommendation_handler(msg_text, chat_history, user_id, image_data=image_data, past_images=past_images, selected_outfit_index=selected_outfit_index, picked_items=picked_items, only_wardrobe=only_wardrobe)
                 
-                conv_title = output.get('conversation_title')
-                if not conv_title:
-                    conv_title = title_generator.generate_title(msg_text)
+                conv_title = chat_title(output, msg_text)
 
                 conv_id = DBManager.create_conversation_with_message(user_id, conv_title, msg_text, image_id=image_id, wardrobe_item_ids=picked_ids)
                 if conv_id is None:
