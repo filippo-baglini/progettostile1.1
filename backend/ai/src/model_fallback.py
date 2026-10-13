@@ -147,6 +147,11 @@ def generate_content_with_fallback(
             except Exception as e:
                 last_exception = e
 
+                # Mistral's JSON mode now and then degenerates (e.g. runs of blank lines): one more try usually works
+                if isinstance(e, json.JSONDecodeError) and retry < MAX_RETRIES_PER_MODEL - 1:
+                    logging.warning(f"⚠️ Bad JSON from {model_name}, retrying: {e}")
+                    continue
+
                 if is_rate_limit_error(e):
                     logging.warning(f"⚠️ Rate limit hit on {model_name}: {e}")
 
