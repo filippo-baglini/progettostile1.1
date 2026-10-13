@@ -3,8 +3,10 @@
 import logging
 from collections import defaultdict
 
+from google.genai import types
 from supabase import Client
 
+from ai.src.model_fallback import generate_content_with_fallback
 from storage_manager import get_image_url
 
 # Wardrobe sections and the outfit-AI category each one belongs to (FASHION_CATEGORIES in query_handler.py).
@@ -50,6 +52,52 @@ def clean_owned_piece(piece, has_photo: bool, user_message: str) -> dict | None:
     if not said(cleaned['brand']):
         cleaned['brand'] = None
     return cleaned
+
+
+# Same words as the chat guardrail in query_handler.py
+OFFENSIVE_MESSAGE = ("I cannot fulfill this request. Content that promotes hate speech, discrimination, "
+                     "or is offensive toward any group or individual violates my safety policy and is strictly forbidden.")
+NOT_CLOTHING_MESSAGE = "This photo doesn't show a clothing item, shoes or an accessory, so it can't go in your wardrobe."
+
+PIECE_CHECK_PROMPT = """You check what users add to their digital wardrobe. Reply with one verdict:
+- OFFENSIVE: the photo or the text shows hate symbols, hateful, discriminatory or harassing words, or sexually explicit content.
+- NOT_CLOTHING: the photo doesn't show a clothing item, shoes or a fashion accessory (worn by someone or not).
+- OK: anything else."""
+
+TEXT_CHECK_PROMPT = """You check the name, color and brand users give a piece in their digital wardrobe. Reply with one verdict:
+- OFFENSIVE: the text contains hate symbols, hateful, discriminatory or harassing words, or sexually explicit content.
+- OK: anything else."""
+
+
+def check_wardrobe_piece(image: bytes | None, details: list) -> str | None:
+    """The message to refuse a new or edited piece with, or None if it can go in the wardrobe.
+    With a photo: offensive content or not clothing at all; without (an edit): offensive name/color/brand.
+    Pieces never reach the chat guardrail ('only my clothes' finds them by embedding), so they are checked here.
+    An unreachable model raises: the piece is refused rather than let in unchecked."""
+    text = "; ".join(f"{field}: {value}" for field, value in zip(("name", "color", "brand"), details) if value)
+    if image is None and not text:
+        return None
+    parts = [types.Part(text=f"Details the user wrote: {text or 'none'}")]
+    if image is not None:
+        parts.append(types.Part.from_bytes(data=image, mime_type="image/jpeg"))
+    verdicts = ["OK", "OFFENSIVE", "NOT_CLOTHING"] if image is not None else ["OK", "OFFENSIVE"]
+    response = generate_content_with_fallback(
+        contents=[{"role": "user", "parts": parts}],
+        config=types.GenerateContentConfig(
+            system_instruction=PIECE_CHECK_PROMPT if image is not None else TEXT_CHECK_PROMPT,
+            response_mime_type="application/json",
+            response_schema=types.Schema(type=types.Type.OBJECT, required=["verdict"], properties={
+                "verdict": types.Schema(type=types.Type.STRING, enum=verdicts)}),
+            temperature=0,
+        ),
+    )
+    verdict = (response.parsed or {}).get("verdict")
+    logging.info(f"Wardrobe piece check: {verdict}")
+    if verdict == "OFFENSIVE":
+        return OFFENSIVE_MESSAGE
+    if verdict == "NOT_CLOTHING" and image is not None:
+        return NOT_CLOTHING_MESSAGE
+    return None
 
 
 def wardrobe_candidate(piece: dict, similarity: float = 1.0) -> dict:

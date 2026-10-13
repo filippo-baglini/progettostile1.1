@@ -1,6 +1,8 @@
 # Run with: venv/bin/python -m ai.test_wardrobe_picks
 from ai.src.query_handler import drop_picked_categories, keep_one_item_per_category
-from ai.src.wardrobe import wardrobe_candidate, describe_piece, clean_owned_piece
+from types import SimpleNamespace
+from ai.src import wardrobe
+from ai.src.wardrobe import wardrobe_candidate, describe_piece, clean_owned_piece, check_wardrobe_piece
 
 outfit = lambda: {'top': {'items': [{'tag': 'sweater'}]}, 'bottom': {'items': [{'tag': 'chinos'}]},
                   'shoes': {'items': [{'tag': 'loafers'}]}, 'budget': 150}
@@ -48,5 +50,20 @@ assert clean_owned_piece({**guess, 'owner_words': 'I own it'}, True, msg) is Non
 assert clean_owned_piece({**guess, 'owner_words': ''}, True, msg) is None
 assert clean_owned_piece({**guess, 'brand': 'Bape'}, True, msg)['brand'] is None  # brand they never named
 assert len(clean_owned_piece({**guess, 'color': 'x' * 500}, True, msg)['color']) == 100
+
+# Wardrobe piece check (model stubbed): verdict -> refusal message; an edit with no text skips the model
+calls = []
+def stub(verdict):
+    wardrobe.generate_content_with_fallback = lambda **kw: calls.append(kw) or SimpleNamespace(parsed={'verdict': verdict})
+stub('OFFENSIVE')
+assert check_wardrobe_piece(b'jpg', [None, None, None]) == wardrobe.OFFENSIVE_MESSAGE
+assert check_wardrobe_piece(None, ['bad words', None, None]) == wardrobe.OFFENSIVE_MESSAGE
+stub('NOT_CLOTHING')
+assert check_wardrobe_piece(b'jpg', ['Linen shirt', 'white', None]) == wardrobe.NOT_CLOTHING_MESSAGE
+assert check_wardrobe_piece(None, ['Linen shirt', None, None]) is None  # no photo: can't judge clothing
+stub('OK')
+assert check_wardrobe_piece(b'jpg', [None, None, None]) is None
+calls.clear()
+assert check_wardrobe_piece(None, [None, None, None]) is None and calls == []
 
 print("wardrobe picks ok")

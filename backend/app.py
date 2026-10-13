@@ -17,7 +17,7 @@ import title_generator
 
 from ai.src.app import outfit_recommendation_handler, generate_explanation_only, MODEL, PROC, DEVICE
 from ai.src.query_embedder import get_image_embedding_vector
-from ai.src.wardrobe import WARDROBE_SECTIONS, wardrobe_candidate
+from ai.src.wardrobe import WARDROBE_SECTIONS, wardrobe_candidate, check_wardrobe_piece
 from ai.src.query_handler import SINGLE_ITEM_CATEGORIES
 from ai.src import progress
 from storage_manager import upload_image, compress_image, download_image, get_image_url, delete_images
@@ -456,7 +456,9 @@ def add_wardrobe_item():
         if error:
             return error
 
-        item = save_wardrobe_piece(int(current_user.get_id()), image_id, image, section, wardrobe_details(request.form))
+        item, error = save_wardrobe_piece(int(current_user.get_id()), image_id, image, section, wardrobe_details(request.form))
+        if error:
+            return error
         return {"success": True, "item": wardrobe_payload(item)}, 201
     except Exception as e:
         return server_error(e)
@@ -464,10 +466,15 @@ def add_wardrobe_item():
 
 def save_wardrobe_piece(user_id, image_id, image, section, details):
     """Saves a photo already in the wardrobe bucket as a piece, with its FashionCLIP embedding (same space as
-    the catalogue, so the outfit AI can search the wardrobe). Removes the photo if saving fails."""
+    the catalogue, so the outfit AI can search the wardrobe). Returns (item, None) or (None, error response)
+    when the piece is refused. Removes the photo if it is refused or saving fails."""
     try:
+        rejection = check_wardrobe_piece(image, details)
+        if rejection:
+            delete_images([image_id], "wardrobe")
+            return None, ({"error": rejection}, 400)
         embedding = get_image_embedding_vector(MODEL, PROC, DEVICE, image).tolist()
-        return DBManager.add_wardrobe_item(user_id, section, WARDROBE_SECTIONS[section], image_id, embedding, *details)
+        return DBManager.add_wardrobe_item(user_id, section, WARDROBE_SECTIONS[section], image_id, embedding, *details), None
     except Exception:
         delete_images([image_id], "wardrobe")  # don't leave an orphan photo in storage
         raise
@@ -499,7 +506,9 @@ def add_wardrobe_item_from_chat(ai_response_id):
         image_id = str(uuid.uuid4())
         if not upload_image(image_id, image, "wardrobe"):
             return {"error": "Upload failed"}, 502
-        item = save_wardrobe_piece(user_id, image_id, image, section, wardrobe_details(data))
+        item, error = save_wardrobe_piece(user_id, image_id, image, section, wardrobe_details(data))
+        if error:
+            return error
 
         outfit_indexes = DBManager.add_piece_to_response(
             ai_response_id, chat['prompt_id'], item['id'], item['main_category'] in SINGLE_ITEM_CATEGORIES)
@@ -534,7 +543,11 @@ def update_wardrobe_item(item_id):
         if section not in WARDROBE_SECTIONS:
             return {"error": "Unknown wardrobe section"}, 400
 
-        item = DBManager.update_wardrobe_item(int(current_user.get_id()), item_id, section, WARDROBE_SECTIONS[section], *wardrobe_details(data))
+        details = wardrobe_details(data)
+        rejection = check_wardrobe_piece(None, details)
+        if rejection:
+            return {"error": rejection}, 400
+        item = DBManager.update_wardrobe_item(int(current_user.get_id()), item_id, section, WARDROBE_SECTIONS[section], *details)
         if not item:
             return {"error": "Item not found"}, 404
         return {"success": True, "item": wardrobe_payload(item)}, 200
