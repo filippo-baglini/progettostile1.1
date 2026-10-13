@@ -1,14 +1,21 @@
 import axios from 'axios';
+import { supabase } from '../lib/supabase';
 
 // Create axios instance with base configuration
-// Backend uses Flask-Login with cookie-based sessions
+// Logged-in requests are authenticated with a Supabase Auth token (see the request interceptor)
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api',
   timeout: 60000, // 1 minute - AI outfit generation can take time
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true, // Important: send cookies with requests for Flask-Login sessions
+});
+
+// Logged-in requests carry the Supabase access token (supabase-js refreshes it before it expires)
+api.interceptors.request.use(async (config) => {
+  const { data } = await supabase.auth.getSession();
+  if (data.session) config.headers.Authorization = `Bearer ${data.session.access_token}`;
+  return config;
 });
 
 // Response interceptor for error handling
