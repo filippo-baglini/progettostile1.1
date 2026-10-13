@@ -28,4 +28,8 @@ api.interceptors.response.use(
   }
 );
 
+// The backend's message (e.g. "Username already taken"), or the fallback
+export const apiErrorMessage = (error: unknown, fallback: string): string =>
+  (axios.isAxiosError(error) && error.response?.data?.error) || fallback;
+
 export default api;

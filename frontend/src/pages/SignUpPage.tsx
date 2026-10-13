@@ -26,7 +26,7 @@ const SignUpPage = () => {
     try {
       await signUp(name, email, password);
       showToast.success('Account created successfully!');
-      navigate('/preferences');
+      navigate('/profile');
     } catch (err) {
       const errorMessage = 'Failed to create account. Please try again.';
       setError(errorMessage);
@@ -112,7 +112,7 @@ const SignUpPage = () => {
         </div>
 
         <GoogleLoginButton
-          onSuccess={() => navigate('/preferences')}
+          onSuccess={() => navigate('/profile')}
           mode="signup"
         />
 

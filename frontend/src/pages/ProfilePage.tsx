@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Lock, Save, ArrowLeft } from 'lucide-react';
+import { User, Lock, Save, ArrowLeft, Loader2, LogOut, SlidersHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/authService';
 import { chatService } from '../services/chatService';
+import { apiErrorMessage } from '../services/api';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 import ParticleBackground from '../components/ui/ParticleBackground';
@@ -13,10 +14,12 @@ import { fadeInUp } from '../utils/animations';
 import ProfileSkeleton from '../components/ui/ProfileSkeleton';
 import DeleteAccountModal from '../components/ui/DeleteAccountModal';
 import DeleteAllChatsModal from '../components/ui/DeleteAllChatsModal';
+import PreferencesSection from '../components/profile/PreferencesSection';
+import PhotoPicker from '../components/profile/PhotoPicker';
 
 const ProfilePage = () => {
     const navigate = useNavigate();
-    const { user, isLoading: isAuthLoading, updateUser } = useAuth();
+    const { user, isLoading: isAuthLoading, updateUser, logout } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
     const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -24,13 +27,37 @@ const ProfilePage = () => {
     const [isDeleteChatsModalOpen, setIsDeleteChatsModalOpen] = useState(false);
     const [isDeletingChats, setIsDeletingChats] = useState(false);
     const [name, setName] = useState(user?.name || '');
+    const [username, setUsername] = useState(user?.username || '');
+    const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
     // Update local state when user data loads
     useEffect(() => {
-        if (user?.name) {
+        if (user) {
             setName(user.name);
+            setUsername(user.username);
         }
     }, [user]);
+
+    const handleAvatarChange = async (file: File) => {
+        setIsUploadingAvatar(true);
+        try {
+            updateUser(await authService.uploadAvatar(file));
+            showToast.success('Profile picture updated');
+        } catch (error) {
+            showToast.error(apiErrorMessage(error, 'Failed to upload picture'));
+        } finally {
+            setIsUploadingAvatar(false);
+        }
+    };
+
+    const handleLogout = async () => {
+        try {
+            await logout();
+        } catch (error) {
+            console.error('Logout request failed:', error);
+        }
+        navigate('/');
+    };
 
     const handleProfileUpdate = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -43,11 +70,11 @@ const ProfilePage = () => {
         setIsUpdatingProfile(true);
 
         try {
-            const updatedUser = await authService.updateProfile({ name });
+            const updatedUser = await authService.updateProfile({ name, username });
             updateUser(updatedUser);
             showToast.success('Profile updated successfully');
-        } catch {
-            showToast.error('Failed to update profile');
+        } catch (error) {
+            showToast.error(apiErrorMessage(error, 'Failed to update profile'));
         } finally {
             setIsUpdatingProfile(false);
         }
@@ -162,6 +189,10 @@ const ProfilePage = () => {
                     <h1 className="text-3xl font-roboto font-bold text-text-dark dark:text-white">
                         Profile Settings
                     </h1>
+                    <Button onClick={handleLogout} variant="ghost" className="ml-auto text-red-500">
+                        <LogOut className="w-4 h-4 mr-2" />
+                        Log out
+                    </Button>
                 </motion.div>
 
                 <div className="space-y-6">
@@ -179,8 +210,33 @@ const ProfilePage = () => {
                             <h2 className="text-xl font-bold text-text-dark dark:text-white">Personal Information</h2>
                         </div>
 
+                        {/* Profile picture: the camera input opens the camera on phones, a file picker elsewhere */}
+                        <div className="flex flex-col sm:flex-row items-center gap-5 mb-6">
+                            <div className="relative w-24 h-24 shrink-0 rounded-full bg-primary overflow-hidden flex items-center justify-center text-white text-4xl font-semibold">
+                                {user.avatarUrl ? (
+                                    <img src={user.avatarUrl} alt="Profile picture" className="w-full h-full object-cover" />
+                                ) : (
+                                    user.name.charAt(0).toUpperCase()
+                                )}
+                                {isUploadingAvatar && (
+                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                        <Loader2 className="w-8 h-8 animate-spin" />
+                                    </div>
+                                )}
+                            </div>
+                            <PhotoPicker onPick={handleAvatarChange} disabled={isUploadingAvatar} />
+                        </div>
+
                         <form onSubmit={handleProfileUpdate} className="space-y-6">
                             <div className="grid gap-6 md:grid-cols-2">
+                                <Input
+                                    label="Username"
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value.toLowerCase())}
+                                    placeholder="letters, numbers, . and _"
+                                    className="dark:bg-surface-muted dark:border-surface-border dark:text-white"
+                                    required
+                                />
                                 <Input
                                     label="Full Name"
                                     value={name}
@@ -189,18 +245,20 @@ const ProfilePage = () => {
                                     className="dark:bg-surface-muted dark:border-surface-border dark:text-white"
                                     required
                                 />
-                                <Input
-                                    label="Email Address"
-                                    value={user?.email || ''}
-                                    disabled
-                                    className="bg-gray-50 dark:bg-surface-muted/50 text-gray-500 dark:text-stone-400 cursor-not-allowed border-gray-200 dark:border-surface-muted"
-                                />
+                                <div className="md:col-span-2">
+                                    <Input
+                                        label="Email Address"
+                                        value={user?.email || ''}
+                                        disabled
+                                        className="bg-gray-50 dark:bg-surface-muted/50 text-gray-500 dark:text-stone-400 cursor-not-allowed border-gray-200 dark:border-surface-muted"
+                                    />
+                                </div>
                             </div>
 
                             <div className="flex justify-end">
                                 <Button
                                     type="submit"
-                                    disabled={isUpdatingProfile || name === user?.name}
+                                    disabled={isUpdatingProfile || (name === user.name && username === user.username)}
                                     variant="outline"
                                     className="w-full md:w-auto min-w-[140px]"
                                 >
@@ -215,6 +273,22 @@ const ProfilePage = () => {
                                 </Button>
                             </div>
                         </form>
+                    </motion.div>
+
+                    {/* Preferences Card */}
+                    <motion.div
+                        className="bg-cream-100/95 dark:bg-surface-darker/90 backdrop-blur-xl rounded-2xl p-6 border border-cream-300 dark:border-surface-muted shadow-xl"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.15 }}
+                    >
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="p-2 bg-primary/10 rounded-lg">
+                                <SlidersHorizontal className="w-5 h-5 text-primary" />
+                            </div>
+                            <h2 className="text-xl font-bold text-text-dark dark:text-white">Style Preferences</h2>
+                        </div>
+                        <PreferencesSection />
                     </motion.div>
 
                     {/* Password Change Card */}

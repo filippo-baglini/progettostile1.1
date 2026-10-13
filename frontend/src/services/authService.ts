@@ -12,14 +12,18 @@ import type { LoginCredentials, SignUpData, User } from '../types';
  *   GET /user/logout - Logout
  */
 
+interface BackendUser {
+  id: number;
+  name: string;
+  email: string;
+  username: string;
+  avatar_url: string | null;
+  preferences: Record<string, unknown>;
+}
+
 interface LoginResponse {
   success: boolean;
-  user: {
-    id: number;
-    name: string;
-    email: string;
-    preferences: Record<string, unknown>;
-  };
+  user: BackendUser;
 }
 
 interface SignupResponse {
@@ -28,19 +32,16 @@ interface SignupResponse {
 
 interface SessionResponse {
   success: boolean;
-  user: {
-    id: number;
-    name: string;
-    email: string;
-    preferences: Record<string, unknown>;
-  };
+  user: BackendUser;
 }
 
 // Helper to transform backend user to frontend User type
-const transformUser = (backendUser: LoginResponse['user']): User => ({
+const transformUser = (backendUser: BackendUser): User => ({
   id: String(backendUser.id),
   name: backendUser.name || backendUser.email.split('@')[0], // Use name from backend, fallback to email prefix
   email: backendUser.email,
+  username: backendUser.username,
+  avatarUrl: backendUser.avatar_url ?? undefined,
   preferences: backendUser.preferences as unknown as User['preferences'],
 });
 
@@ -95,8 +96,19 @@ export const authService = {
 
   // Update user profile
   // Backend endpoint: PUT /user/profile
-  updateProfile: async (data: { name: string }): Promise<User> => {
-    const response = await api.put<{ success: boolean; user: LoginResponse['user'] }>('/user/profile', data);
+  updateProfile: async (data: { name: string; username: string }): Promise<User> => {
+    const response = await api.put<LoginResponse>('/user/profile', data);
+    return transformUser(response.data.user);
+  },
+
+  // Upload profile picture
+  // Backend endpoint: POST /user/avatar
+  uploadAvatar: async (image: File): Promise<User> => {
+    const formData = new FormData();
+    formData.append('image', image);
+    const response = await api.post<LoginResponse>('/user/avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return transformUser(response.data.user);
   },
 

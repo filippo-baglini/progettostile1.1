@@ -48,9 +48,9 @@ describe('authService', () => {
         const mockUser = { id: 1, name: 'Updated Name', email: 'test@example.com', preferences: {} };
         const putSpy = vi.spyOn(api, 'put').mockResolvedValue({ data: { success: true, user: mockUser } });
 
-        const result = await authService.updateProfile({ name: 'Updated Name' });
+        const result = await authService.updateProfile({ name: 'Updated Name', username: 'updated' });
 
-        expect(putSpy).toHaveBeenCalledWith('/user/profile', { name: 'Updated Name' });
+        expect(putSpy).toHaveBeenCalledWith('/user/profile', { name: 'Updated Name', username: 'updated' });
         expect(result.name).toBe('Updated Name');
     });
 

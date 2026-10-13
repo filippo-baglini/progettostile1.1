@@ -17,6 +17,7 @@ vi.mock('framer-motion', () => ({
 vi.mock('../services/authService', () => ({
     authService: {
         updateProfile: vi.fn(),
+        uploadAvatar: vi.fn(),
         changePassword: vi.fn(),
         deleteAccount: vi.fn(),
         getCurrentUser: vi.fn(),
@@ -79,6 +80,10 @@ vi.mock('../components/ui/ParticleBackground', () => ({
     default: () => <div data-testid="particle-background" />,
 }));
 
+vi.mock('../components/profile/PreferencesSection', () => ({
+    default: () => <div data-testid="preferences-section" />,
+}));
+
 // Mock DeleteAccountModal
 vi.mock('../components/ui/DeleteAccountModal', () => ({
     default: ({ isOpen, onConfirm, onClose }: any) => (
@@ -108,6 +113,7 @@ const mockUser = {
     id: '1',
     name: 'Test User',
     email: 'test@example.com',
+    username: 'test-1',
 };
 
 // Helper to render with AuthContext
@@ -133,6 +139,7 @@ import { useAuth } from '../context/AuthContext';
 
 describe('ProfilePage', () => {
     const mockUpdateUser = vi.fn();
+    const mockLogout = vi.fn();
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -140,6 +147,7 @@ describe('ProfilePage', () => {
             user: mockUser,
             isLoading: false,
             updateUser: mockUpdateUser,
+            logout: mockLogout,
         });
     });
 
@@ -171,6 +179,59 @@ describe('ProfilePage', () => {
         expect(screen.getByText('Profile Settings')).toBeInTheDocument();
         expect(screen.getByDisplayValue('Test User')).toBeInTheDocument();
         expect(screen.getByDisplayValue('test@example.com')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('test-1')).toBeInTheDocument();
+        expect(screen.getByTestId('preferences-section')).toBeInTheDocument();
+    });
+
+    it('updates username', async () => {
+        renderWithAuth(<ProfilePage />);
+
+        fireEvent.change(screen.getByDisplayValue('test-1'), { target: { value: 'Mario.Rossi' } });
+        fireEvent.click(screen.getByText('Update Profile').closest('button')!);
+
+        await waitFor(() => {
+            expect(authService.updateProfile).toHaveBeenCalledWith({ name: 'Test User', username: 'mario.rossi' });
+        });
+    });
+
+    it('shows the backend error when the username is taken', async () => {
+        (authService.updateProfile as any).mockRejectedValueOnce(
+            Object.assign(new Error('409'), { isAxiosError: true, response: { data: { error: 'Username already taken' } } })
+        );
+        renderWithAuth(<ProfilePage />);
+
+        fireEvent.change(screen.getByDisplayValue('test-1'), { target: { value: 'taken' } });
+        fireEvent.click(screen.getByText('Update Profile').closest('button')!);
+
+        await waitFor(() => {
+            expect(showToast.error).toHaveBeenCalledWith('Username already taken');
+        });
+    });
+
+    it('uploads a profile picture from the gallery or the camera', async () => {
+        const updated = { ...mockUser, avatarUrl: 'https://x/a.jpg' };
+        (authService.uploadAvatar as any).mockResolvedValue(updated);
+        renderWithAuth(<ProfilePage />);
+
+        const camera = screen.getByText('Take photo').querySelector('input')!;
+        expect(camera).toHaveAttribute('capture', 'user');
+        expect(screen.getByText('Choose photo').querySelector('input')).not.toHaveAttribute('capture');
+
+        const file = new File(['x'], 'me.jpg', { type: 'image/jpeg' });
+        fireEvent.change(camera, { target: { files: [file] } });
+
+        await waitFor(() => {
+            expect(authService.uploadAvatar).toHaveBeenCalledWith(file);
+            expect(mockUpdateUser).toHaveBeenCalledWith(updated);
+        });
+    });
+
+    it('logs out', async () => {
+        renderWithAuth(<ProfilePage />);
+
+        fireEvent.click(screen.getByText('Log out'));
+
+        await waitFor(() => expect(mockLogout).toHaveBeenCalled());
     });
 
     it('updates profile name', async () => {
@@ -183,7 +244,7 @@ describe('ProfilePage', () => {
         fireEvent.click(saveButton!);
 
         await waitFor(() => {
-            expect(authService.updateProfile).toHaveBeenCalledWith({ name: 'New Name' });
+            expect(authService.updateProfile).toHaveBeenCalledWith({ name: 'New Name', username: 'test-1' });
             expect(showToast.success).toHaveBeenCalledWith('Profile updated successfully');
         });
     });

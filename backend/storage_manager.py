@@ -1,5 +1,5 @@
 from dotenv import load_dotenv
-from PIL import Image
+from PIL import Image, ImageOps
 import io
 import os
 
@@ -19,42 +19,42 @@ except Exception as e:
     print(f"Error initializing Supabase client: {e}")
     raise
 
-def upload_image(filename, image: bytes):
+def upload_image(filename, image: bytes, bucket: str = "images"):
     file_path = f"public/{filename}.jpg"
 
     try:
-        SUPABASE_CLIENT.storage.from_("images").upload(
+        SUPABASE_CLIENT.storage.from_(bucket).upload(
             path=file_path,
             file=image,
             file_options={"content-type": "image/jpeg"}
         )
 
-        return get_image_url(file_path)
+        return get_image_url(file_path, bucket)
 
     except Exception as e:
         print(f"Errore upload Supabase: {e}")
         return None
 
-def download_image(image_id: str)->bytes | None:
+def download_image(image_id: str, bucket: str = "images") -> bytes | None:
     file_path = f"public/{image_id}.jpg"
 
     try:
-        return SUPABASE_CLIENT.storage.from_("images").download(file_path)
+        return SUPABASE_CLIENT.storage.from_(bucket).download(file_path)
 
     except Exception as e:
         print(f"Errore upload Supabase: {e}")
         return None
 
 
-def get_image_url(image_id: str) -> str:
-    return SUPABASE_CLIENT.storage.from_("images").get_public_url(image_id)
+def get_image_url(image_id: str, bucket: str = "images") -> str:
+    return SUPABASE_CLIENT.storage.from_(bucket).get_public_url(image_id)
 
 
-def delete_images(images_id: list[str]):
+def delete_images(images_id: list[str], bucket: str = "images"):
     files = [f"public/{image_id}.jpg" for image_id in images_id]
 
     try:
-        SUPABASE_CLIENT.storage.from_("images").remove(files)
+        SUPABASE_CLIENT.storage.from_(bucket).remove(files)
 
         return True
 
@@ -62,7 +62,7 @@ def delete_images(images_id: list[str]):
         print(f"Errore while deleting Supabase: {e}")
         return False
 
-def compress_image(image_bytes: bytes, quality: int = 80) -> bytes:
+def compress_image(image_bytes: bytes, quality: int = 80, max_size: tuple | None = None) -> bytes:
     """
     Comprime un'immagine, la ridimensiona (opzionale) e la converte in JPEG.
 
@@ -78,9 +78,13 @@ def compress_image(image_bytes: bytes, quality: int = 80) -> bytes:
     try:
         img_stream = io.BytesIO(image_bytes)
         img = Image.open(img_stream)
+        img = ImageOps.exif_transpose(img)  # phone photos are stored sideways + an EXIF rotation tag
 
-        if img.mode in ("RGBA", "P"):
+        if img.mode != "RGB":
             img = img.convert("RGB")
+
+        if max_size:
+            img.thumbnail(max_size)
 
         output_stream = io.BytesIO()
         img.save(

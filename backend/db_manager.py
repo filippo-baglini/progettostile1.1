@@ -11,6 +11,9 @@ from storage_manager import delete_images, get_image_url
 # Carica le variabili d'ambiente dal file .env
 load_dotenv()
 
+USER_FIELDS = ("id", "name", "email", "password", "gender", "google_id", "username", "avatar_id")
+USER_COLUMNS = ", ".join(USER_FIELDS)
+
 class DBManager:
     # Configurazione database PostgreSQL
     DB_USER = os.getenv('DB_USER', 'postgres')
@@ -105,13 +108,13 @@ class DBManager:
             conn = DBManager.get_db_connection()
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, name, email, password, gender, google_id FROM users WHERE google_id = %s LIMIT 1",
+                f"SELECT {USER_COLUMNS} FROM users WHERE google_id = %s LIMIT 1",
                 (google_id,)
             )
             row = cursor.fetchone()
             cursor.close()
             if row:
-                return {"id": row[0], "name": row[1], "email": row[2], "password": row[3], "gender": row[4], "google_id": row[5]}
+                return dict(zip(USER_FIELDS, row))
             return None
         except Exception:
             raise
@@ -160,13 +163,13 @@ class DBManager:
             conn = DBManager.get_db_connection()
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, name, email, password, gender, google_id FROM users WHERE email = %s LIMIT 1",
+                f"SELECT {USER_COLUMNS} FROM users WHERE email = %s LIMIT 1",
                 (email,)
             )
             row = cursor.fetchone()
             cursor.close()
             if row:
-                return {"id": row[0], "name": row[1], "email": row[2], "password": row[3], "gender": row[4], "google_id": row[5]}
+                return dict(zip(USER_FIELDS, row))
             return None
         except Exception:
             raise
@@ -240,12 +243,12 @@ class DBManager:
             raise
 
     @staticmethod
-    def update_user_name(user_id: int, new_name: str) -> bool:
-        """Aggiorna il nome dell'utente."""
+    def update_user_profile(user_id: int, new_name: str, new_username: str) -> bool:
+        """Aggiorna nome e username. Un username già preso solleva psycopg2.errors.UniqueViolation."""
         try:
             conn = DBManager.get_db_connection()
             cursor = conn.cursor()
-            cursor.execute("UPDATE users SET name = %s WHERE id = %s", (new_name, user_id))
+            cursor.execute("UPDATE users SET name = %s, username = %s WHERE id = %s", (new_name, new_username, user_id))
             updated = cursor.rowcount > 0
             conn.commit()
             cursor.close()
@@ -255,6 +258,23 @@ class DBManager:
                 conn.rollback()
             except Exception:
                 pass
+            raise
+
+    @staticmethod
+    def set_user_avatar(user_id: int, avatar_id: str):
+        """Salva il nuovo avatar e ritorna l'id del precedente (da eliminare dallo storage) o None."""
+        conn = DBManager.get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE users u SET avatar_id = %s FROM users old WHERE u.id = old.id AND u.id = %s RETURNING old.avatar_id",
+                    (avatar_id, user_id)
+                )
+                row = cursor.fetchone()
+            conn.commit()
+            return row[0] if row else None
+        except Exception:
+            conn.rollback()
             raise
 
     @staticmethod
@@ -323,13 +343,13 @@ class DBManager:
             conn = DBManager.get_db_connection()
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, name, email, password, gender, google_id FROM users WHERE id = %s LIMIT 1",
+                f"SELECT {USER_COLUMNS} FROM users WHERE id = %s LIMIT 1",
                 (user_id,)
             )
             row = cursor.fetchone()
             cursor.close()
             if row:
-                return {"id": row[0], "name": row[1], "email": row[2], "password": row[3], "gender": row[4], "google_id": row[5]}
+                return dict(zip(USER_FIELDS, row))
             return None
         except Exception:
             raise
@@ -773,14 +793,17 @@ class DBManager:
             images_to_delete = [str(row[0]) for row in cursor.fetchall()]
 
             # 2. Elimina utente: ON DELETE CASCADE rimuove preferenze, conversazioni, prompt e risposte
-            cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
-            
+            cursor.execute("DELETE FROM users WHERE id = %s RETURNING avatar_id", (user_id,))
+            avatar = cursor.fetchone()
+
             deleted = cursor.rowcount > 0
             conn.commit()
             cursor.close()
 
             if images_to_delete:
                 delete_images(images_to_delete)
+            if avatar and avatar[0]:
+                delete_images([avatar[0]], "avatars")
 
             return deleted
 

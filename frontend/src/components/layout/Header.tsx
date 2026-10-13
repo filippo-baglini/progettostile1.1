@@ -1,6 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { LogOut, Settings, User as UserIcon } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Button from '../ui/Button';
 import ThemeToggle from '../ui/ThemeToggle';
@@ -15,39 +13,8 @@ interface HeaderProps {
 }
 
 const Header = ({ chatTitle }: HeaderProps) => {
-  const { isAuthenticated, user, logout } = useAuth();
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const navigate = useNavigate();
-  const menuRef = useRef<HTMLDivElement>(null);
-  let userName = user?.name || ""
-  userName = beautifyUsername(userName)
-
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setShowUserMenu(false);
-      }
-    };
-
-    if (showUserMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showUserMenu]);
-
-  const handleLogout = async () => {
-    setShowUserMenu(false);
-    try {
-      await logout();
-    } catch (error) {
-      console.error('Logout request failed:', error);
-    }
-    navigate('/');
-  };
+  const { isAuthenticated, user } = useAuth();
+  const userName = beautifyUsername(user?.name || '');
 
   return (
     <header className="relative bg-cream-100 dark:bg-surface-dark dark:border-surface-muted border-b border-cream-300 pl-14 lg:pl-4 pr-4 md:px-6 lg:px-8 py-3 md:py-4 flex justify-between items-center">
@@ -72,54 +39,17 @@ const Header = ({ chatTitle }: HeaderProps) => {
         <ThemeToggle size="sm" />
 
         {isAuthenticated ? (
-          <div className="relative" ref={menuRef}>
-            <button
-              onClick={() => setShowUserMenu(!showUserMenu)}
-              className="flex items-center hover:opacity-80 transition-opacity"
-            >
-              <div className="w-9 h-9 md:w-10 md:h-10 bg-primary rounded-full flex items-center justify-center text-white font-semibold font-inter cursor-pointer hover:bg-primary-hover transition-colors">
-                {userName?.charAt(0).toUpperCase()}
-              </div>
-            </button>
-
-            {/* User Dropdown Menu */}
-            {showUserMenu && (
-              <div className="absolute right-0 top-full mt-2 w-52 md:w-56 bg-cream-100 dark:bg-surface-darker rounded-xl shadow-lg border border-cream-300 dark:border-surface-muted py-2 z-50">
-                <div className="px-4 py-2 md:py-3 border-b border-cream-300 dark:border-surface-muted">
-                  <p className="text-sm font-roboto font-bold text-text-dark dark:text-white">{userName}</p>
-                  <p className="text-xs font-inter text-text-light dark:text-stone-400 truncate">{user?.email}</p>
-                </div>
-
-                <Link
-                  to="/preferences"
-                  onClick={() => setShowUserMenu(false)}
-                  className="flex items-center gap-3 px-4 py-2 hover:bg-cream-200 dark:hover:bg-surface-muted transition-colors"
-                >
-                  <Settings className="w-4 h-4 text-text-medium dark:text-stone-400" />
-                  <span className="text-sm font-inter text-text-dark dark:text-stone-200">Preferences</span>
-                </Link>
-
-                <Link
-                  to="/profile"
-                  onClick={() => setShowUserMenu(false)}
-                  className="flex items-center gap-3 px-4 py-2 hover:bg-cream-200 dark:hover:bg-surface-muted transition-colors"
-                >
-                  <UserIcon className="w-4 h-4 text-text-medium dark:text-stone-400" />
-                  <span className="text-sm font-inter text-text-dark dark:text-stone-200">Profile</span>
-                </Link>
-
-                <div className="border-t border-border dark:border-surface-muted my-2"></div>
-
-                <button
-                  onClick={handleLogout}
-                  className="flex items-center gap-3 px-4 py-2 hover:bg-cream-200 dark:hover:bg-surface-muted transition-colors w-full text-left"
-                >
-                  <LogOut className="w-4 h-4 text-red-500" />
-                  <span className="text-sm font-inter text-red-500">Logout</span>
-                </button>
-              </div>
+          <Link
+            to="/profile"
+            aria-label="Your profile"
+            className="w-9 h-9 md:w-10 md:h-10 bg-primary rounded-full flex items-center justify-center overflow-hidden text-white font-semibold font-inter hover:bg-primary-hover hover:opacity-80 transition"
+          >
+            {user?.avatarUrl ? (
+              <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
+            ) : (
+              userName.charAt(0).toUpperCase()
             )}
-          </div>
+          </Link>
         ) : (
           <div className="flex items-center gap-2 md:gap-3">
             <Link to="/login">

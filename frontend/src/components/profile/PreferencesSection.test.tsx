@@ -2,13 +2,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import PreferencesPage from './PreferencesPage';
-import { preferencesService } from '../services/preferencesService';
-import { showToast } from '../utils/toast';
-import { triggerSuccessConfetti } from '../utils/confetti';
+import PreferencesSection from './PreferencesSection';
+import { preferencesService } from '../../services/preferencesService';
+import { showToast } from '../../utils/toast';
+import { triggerSuccessConfetti } from '../../utils/confetti';
 
 // Mock services
-vi.mock('../services/preferencesService', () => ({
+vi.mock('../../services/preferencesService', () => ({
     preferencesService: {
         getPreferences: vi.fn(),
         getAllPreferences: vi.fn(),
@@ -18,19 +18,19 @@ vi.mock('../services/preferencesService', () => ({
     },
 }));
 
-vi.mock('../utils/toast', () => ({
+vi.mock('../../utils/toast', () => ({
     showToast: {
         success: vi.fn(),
         error: vi.fn(),
     },
 }));
 
-vi.mock('../utils/confetti', () => ({
+vi.mock('../../utils/confetti', () => ({
     triggerSuccessConfetti: vi.fn(),
 }));
 
 // Mock components
-vi.mock('../components/ui/Button', () => ({
+vi.mock('../ui/Button', () => ({
     default: ({ children, onClick, isLoading }: any) => (
         <button onClick={onClick} disabled={isLoading}>
             {isLoading ? 'Loading...' : children}
@@ -38,15 +38,11 @@ vi.mock('../components/ui/Button', () => ({
     ),
 }));
 
-vi.mock('../components/ui/Skeleton', () => ({
+vi.mock('../ui/Skeleton', () => ({
     default: () => <div data-testid="skeleton" />,
 }));
 
-vi.mock('../components/ui/PreferencesSkeleton', () => ({
-    default: () => <div data-testid="preferences-skeleton" />,
-}));
-
-vi.mock('../components/ui/SearchableMultiSelect', () => ({
+vi.mock('../ui/SearchableMultiSelect', () => ({
     default: ({ values, selectedValues, onToggle, placeholder }: any) => (
         <div data-testid={`select-${placeholder}`}>
             {values.map((value: string) => (
@@ -62,16 +58,6 @@ vi.mock('../components/ui/SearchableMultiSelect', () => ({
     ),
 }));
 
-// Mock navigate
-const mockNavigate = vi.fn();
-vi.mock('react-router-dom', async () => {
-    const actual = await vi.importActual('react-router-dom');
-    return {
-        ...actual,
-        useNavigate: () => mockNavigate,
-    };
-});
-
 // Mock framer-motion
 vi.mock('framer-motion', () => ({
     motion: {
@@ -79,12 +65,7 @@ vi.mock('framer-motion', () => ({
     },
 }));
 
-// Mock ParticleBackground to avoid ThemeProvider dependency
-vi.mock('../components/ui/ParticleBackground', () => ({
-    default: () => <div data-testid="particle-background" />,
-}));
-
-describe('PreferencesPage', () => {
+describe('PreferencesSection', () => {
     const mockAllPreferences = {
         '1': { id: 1, name: 'Gender', values: ['Man', 'Woman'] },
         '2': { id: 2, name: 'Style', values: ['Casual', 'Formal'] },
@@ -112,22 +93,21 @@ describe('PreferencesPage', () => {
 
         render(
             <BrowserRouter>
-                <PreferencesPage />
+                <PreferencesSection />
             </BrowserRouter>
         );
 
-        expect(screen.getByTestId('preferences-skeleton')).toBeInTheDocument();
+        expect(screen.queryByText('Save Preferences')).not.toBeInTheDocument();
     });
 
     it('renders preferences when loaded', async () => {
         render(
             <BrowserRouter>
-                <PreferencesPage />
+                <PreferencesSection />
             </BrowserRouter>
         );
 
         await waitFor(() => {
-            expect(screen.getByText('Your Preferences')).toBeInTheDocument();
             expect(screen.getByText('Gender')).toBeInTheDocument();
             expect(screen.getByText('Style')).toBeInTheDocument();
             expect(screen.getByText('Color')).toBeInTheDocument();
@@ -141,7 +121,7 @@ describe('PreferencesPage', () => {
 
         render(
             <BrowserRouter>
-                <PreferencesPage />
+                <PreferencesSection />
             </BrowserRouter>
         );
 
@@ -153,7 +133,7 @@ describe('PreferencesPage', () => {
     it('toggles preferences', async () => {
         render(
             <BrowserRouter>
-                <PreferencesPage />
+                <PreferencesSection />
             </BrowserRouter>
         );
 
@@ -196,7 +176,7 @@ describe('PreferencesPage', () => {
 
         render(
             <BrowserRouter>
-                <PreferencesPage />
+                <PreferencesSection />
             </BrowserRouter>
         );
 
@@ -217,7 +197,7 @@ describe('PreferencesPage', () => {
 
         render(
             <BrowserRouter>
-                <PreferencesPage />
+                <PreferencesSection />
             </BrowserRouter>
         );
 
@@ -228,19 +208,5 @@ describe('PreferencesPage', () => {
         await waitFor(() => {
             expect(showToast.error).toHaveBeenCalledWith('Failed to save preferences');
         });
-    });
-
-    it('handles close', async () => {
-        render(
-            <BrowserRouter>
-                <PreferencesPage />
-            </BrowserRouter>
-        );
-
-        await waitFor(() => screen.getByText('Close'));
-
-        fireEvent.click(screen.getByText('Close'));
-
-        expect(mockNavigate).toHaveBeenCalledWith('/chat');
     });
 });

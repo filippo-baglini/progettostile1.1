@@ -130,7 +130,7 @@ describe('SignUpPage', () => {
         await waitFor(() => {
             expect(mockSignUp).toHaveBeenCalledWith('John Doe', 'test@example.com', 'password123');
             expect(showToast.success).toHaveBeenCalledWith('Account created successfully!');
-            expect(mockNavigate).toHaveBeenCalledWith('/preferences');
+            expect(mockNavigate).toHaveBeenCalledWith('/profile');
         });
     });
 

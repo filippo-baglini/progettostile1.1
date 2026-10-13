@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import Header from './Header';
 import { useAuth } from '../../context/AuthContext';
 import { BrowserRouter } from 'react-router-dom';
@@ -16,16 +16,6 @@ vi.mock('../../context/AuthContext', () => ({
 vi.mock('../../context/ThemeContext', () => ({
     useTheme: vi.fn(),
 }));
-
-// Mock useNavigate
-const mockNavigate = vi.fn();
-vi.mock('react-router-dom', async () => {
-    const actual = await vi.importActual('react-router-dom');
-    return {
-        ...actual,
-        useNavigate: () => mockNavigate,
-    };
-});
 
 describe('Header', () => {
     beforeEach(() => {
@@ -43,7 +33,7 @@ describe('Header', () => {
         expect(screen.getByText('StyleFinder AI')).toBeInTheDocument();
     });
 
-    it('navigates to profile on click', () => {
+    it('avatar links straight to the profile', () => {
         (useAuth as any).mockReturnValue({ isAuthenticated: true, user: { name: 'Test User' } });
         render(
             <BrowserRouter>
@@ -51,18 +41,19 @@ describe('Header', () => {
             </BrowserRouter>
         );
 
-        // Open user menu
-        const avatar = screen.getByText('T'); // First letter of Test User
-        fireEvent.click(avatar);
+        const avatar = screen.getByLabelText('Your profile');
+        expect(avatar).toHaveAttribute('href', '/profile');
+        expect(avatar).toHaveTextContent('T'); // initial when there is no picture
+    });
 
-        // Click Profile link
-        const profileLink = screen.getByText('Profile');
-        fireEvent.click(profileLink);
+    it('shows the profile picture when there is one', () => {
+        (useAuth as any).mockReturnValue({ isAuthenticated: true, user: { name: 'Test User', avatarUrl: 'https://x/a.jpg' } });
+        const { container } = render(
+            <BrowserRouter>
+                <Header />
+            </BrowserRouter>
+        );
 
-        // Since it's a Link, we can check if it rendered with correct href, 
-        // or rely on integration. But Link doesn't call navigate directly unless we mock it to.
-        // However, we can check if the menu closes?
-        // Or just check presence of links.
-        expect(profileLink.closest('a')).toHaveAttribute('href', '/profile');
+        expect(container.querySelector('img')).toHaveAttribute('src', 'https://x/a.jpg');
     });
 });

@@ -1,5 +1,6 @@
 import base64
 import logging
+import re
 import uuid
 from urllib.parse import urlparse
 
@@ -16,7 +17,8 @@ import title_generator
 
 from ai.src.app import outfit_recommendation_handler, generate_explanation_only
 from ai.src import progress
-from storage_manager import upload_image, compress_image, download_image
+from storage_manager import upload_image, compress_image, download_image, get_image_url, delete_images
+import psycopg2.errors
 from cachetools import LRUCache
 
 app = Flask(__name__)
@@ -58,6 +60,24 @@ def server_error(e):
     """Log the full error server-side; never send internal details to the client."""
     logging.exception(e)
     return {"error": "Internal server error"}, 500
+
+
+USERNAME_RE = re.compile(r'[a-z0-9._]{3,30}')
+
+
+def user_payload(user):
+    """The user as the frontend sees it: profile fields plus preferences (gender lives on users)."""
+    preferences = DBManager.get_user_preferences(user['id'])
+    if user.get('gender'):
+        preferences['gender'] = user['gender']
+    return {
+        "id": user['id'],
+        "name": user['name'],
+        "email": user['email'],
+        "username": user['username'],
+        "avatar_url": get_image_url(f"public/{user['avatar_id']}.jpg", "avatars") if user['avatar_id'] else None,
+        "preferences": preferences,
+    }
 
 class AppUser(UserMixin):
     def __init__(self, user_dict):
@@ -149,19 +169,10 @@ def login():
         if not user or not user['password'] or not check_password_hash(user['password'], password):
             return {"error": "Email or password not valid"}, 401
 
-        preferences = DBManager.get_user_preferences(user['id'])
-        # Aggiungi gender dalle info utente (solo se presente)
-        if user.get('gender'):
-            preferences['gender'] = user['gender']
-        user_payload = {"id": user['id'], "name": user['name'], "email": user['email'], "preferences": preferences}
-
         # Autentica tramite Flask-Login (sessione cookie based)
         login_user(AppUser(user))
 
-        return {
-            "success": True,
-            "user": user_payload
-        }, 200
+        return {"success": True, "user": user_payload(user)}, 200
 
     except Exception as e:
         return server_error(e)
@@ -232,21 +243,9 @@ def google_login():
             user = DBManager.get_user_by_google_id(google_id)
         
         # Login via Flask-Login
-        preferences = DBManager.get_user_preferences(user['id'])
-        if user.get('gender'):
-            preferences['gender'] = user['gender']
-        
         login_user(AppUser(user))
-        
-        return {
-            "success": True,
-            "user": {
-                "id": user['id'],
-                "name": user['name'],
-                "email": user['email'],
-                "preferences": preferences
-            }
-        }, 200
+
+        return {"success": True, "user": user_payload(user)}, 200
         
     except Exception as e:
         return server_error(e)
@@ -281,12 +280,7 @@ def check_session():
     try:
         # Recupero completo utente dal DB se servono preferenze
         user_db = DBManager.get_user_by_id(int(current_user.get_id()))
-        preferences = DBManager.get_user_preferences(user_db['id']) if user_db else {}
-        # Aggiungi gender dalle info utente (è salvato nella tabella users, non in user_preference)
-        if user_db and user_db.get('gender'):
-            preferences['gender'] = user_db['gender']
-        user_payload = {"id": user_db['id'], "name": user_db['name'], "email": user_db['email'], "preferences": preferences} if user_db else {}
-        return {"success": True, "user": user_payload}, 200
+        return {"success": True, "user": user_payload(user_db) if user_db else {}}, 200
     except Exception as e:
         return server_error(e)
 
@@ -344,44 +338,70 @@ def change_password():
 @login_required
 def update_profile():
     """
-    Endpoint per aggiornare il profilo (nome).
-    Richiede JSON: { "name": "..." }
-    Ritorna: { "success": true, "user": { id, name, email, preferences } }
+    Endpoint per aggiornare il profilo (nome e username).
+    Richiede JSON: { "name": "...", "username": "..." } (username opzionale: se manca resta quello attuale)
+    Ritorna: { "success": true, "user": {...} }, 409 se lo username è già preso
     """
     try:
         data = request.get_json() or {}
-        new_name = data.get('name')
+        new_name = (data.get('name') or '').strip()
 
         if not new_name:
             return {"error": "Nome mancante"}, 400
 
         user_id = int(current_user.get_id())
-        updated = DBManager.update_user_name(user_id, new_name)
-
-        if not updated:
-            return {"error": "Utente non trovato"}, 404
-
-        # Recupera l'utente aggiornato per restituirlo
         user_db = DBManager.get_user_by_id(user_id)
         if not user_db:
             return {"error": "Utente non trovato"}, 404
 
-        preferences = DBManager.get_user_preferences(user_id)
-        # Aggiungi gender dalle info utente
-        if user_db.get('gender'):
-            preferences['gender'] = user_db['gender']
+        new_username = (data.get('username') or user_db['username']).strip().lower()
+        # The generated default (with '-') is kept as is; a new one must follow the rules
+        if new_username != user_db['username'] and not USERNAME_RE.fullmatch(new_username):
+            return {"error": "Username must be 3-30 characters: letters, numbers, '.' or '_'"}, 400
 
-        return {
-            "success": True,
-            "user": {
-                "id": user_db['id'],
-                "name": user_db['name'],
-                "email": user_db['email'],
-                "preferences": preferences
-            }
-        }, 200
+        try:
+            DBManager.update_user_profile(user_id, new_name, new_username)
+        except psycopg2.errors.UniqueViolation:
+            return {"error": "Username already taken"}, 409
+
+        return {"success": True, "user": user_payload(DBManager.get_user_by_id(user_id))}, 200
     except Exception as e:
         return server_error(e)
+
+
+@app.route('/api/user/avatar', methods=['POST'])
+@login_required
+def upload_avatar():
+    """Carica la foto profilo (multipart, campo `image`) e ritorna l'utente aggiornato."""
+    try:
+        avatar_id, _, error = store_uploaded_image("avatars", (512, 512))
+        if error:
+            return error
+
+        user_id = int(current_user.get_id())
+        old_avatar_id = DBManager.set_user_avatar(user_id, avatar_id)
+        if old_avatar_id:
+            delete_images([old_avatar_id], "avatars")
+
+        return {"success": True, "user": user_payload(DBManager.get_user_by_id(user_id))}, 200
+    except Exception as e:
+        return server_error(e)
+
+
+def store_uploaded_image(bucket, max_size):
+    """Compress the request's `image` file and upload it. Returns (image_id, jpeg bytes, None) or (None, None, error response)."""
+    image_uploaded = request.files.get('image')
+    if not image_uploaded:
+        return None, None, ({"error": "Immagine mancante"}, 400)
+    try:
+        image = compress_image(image_uploaded.read(), max_size=max_size)
+    except Exception:
+        return None, None, ({"error": "Not a valid image"}, 400)
+
+    image_id = str(uuid.uuid4())
+    if not upload_image(image_id, image, bucket):
+        return None, None, ({"error": "Upload failed"}, 502)
+    return image_id, image, None
 
 
 @app.route('/api/preferences', methods=['PUT', 'POST'])

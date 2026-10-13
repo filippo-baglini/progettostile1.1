@@ -14,7 +14,6 @@ import ErrorBoundary from './components/ErrorBoundary';
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const SignUpPage = lazy(() => import('./pages/SignUpPage'));
-const PreferencesPage = lazy(() => import('./pages/PreferencesPage'));
 const ChatPage = lazy(() => import('./pages/ChatPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const HowToUsePage = lazy(() => import('./pages/HowToUsePage'));
@@ -72,11 +71,8 @@ const AnimatedRoutes = () => {
         } />
         <Route path="/login" element={<PageTransition><LoginPage /></PageTransition>} />
         <Route path="/signup" element={<PageTransition><SignUpPage /></PageTransition>} />
-        <Route path="/preferences" element={
-          <ProtectedRoute>
-            <PageTransition><PreferencesPage /></PageTransition>
-          </ProtectedRoute>
-        } />
+        {/* Preferences now live on the profile page */}
+        <Route path="/preferences" element={<Navigate to="/profile" replace />} />
         <Route path="/chat" element={<PageTransition><ChatPage /></PageTransition>} />
         <Route path="/chat/:chatId" element={<PageTransition><ChatPage /></PageTransition>} />
         <Route path="/profile" element={
