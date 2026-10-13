@@ -6,11 +6,9 @@ from urllib.parse import urlparse
 
 from flask import Flask, request
 from flask_cors import CORS
-from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
-from werkzeug.security import generate_password_hash, check_password_hash
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
+from flask_login import LoginManager, UserMixin, current_user, login_required
 
+from auth import verify_token, display_name, delete_auth_user
 from db_manager import DBManager
 import os
 import title_generator
@@ -25,7 +23,8 @@ import psycopg2.errors
 from cachetools import LRUCache
 
 app = Flask(__name__)
-# Signs the login cookies: a guessable fallback would let anyone forge a session
+# Signs Flask's session cookie. Logins no longer use it (Supabase tokens, see auth.py), but a guessable
+# fallback would still be a trap if anything starts storing data in the session
 if not os.getenv('SECRET_KEY'):
     raise RuntimeError("SECRET_KEY is missing from the environment / .env file.")
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
@@ -95,18 +94,21 @@ class AppUser(UserMixin):
     def __init__(self, user_dict):
         self.id = user_dict['id']
         self.email = user_dict['email']
-        self._password_hash = user_dict.get('password')
         self.gender = user_dict.get('gender')
+        self.auth_id = str(user_dict['auth_id'])
 
     def get_id(self):  # type: ignore[override]
         return str(self.id)
 
-@login_manager.user_loader
-def load_user(user_id):
-    user = DBManager.get_user_by_id(int(user_id))
-    if user:
-        return AppUser(user)
-    return None
+@login_manager.request_loader
+def load_user_from_request(req):
+    """Logged-in requests carry a Supabase access token; anything else is a guest."""
+    header = req.headers.get('Authorization', '')
+    claims = verify_token(header.removeprefix('Bearer ')) if header.startswith('Bearer ') else None
+    if not claims or not claims.get('email'):
+        return None
+    user = DBManager.get_or_create_auth_user(claims['sub'], claims['email'], display_name(claims))
+    return AppUser(user) if user else None
 
 with app.app_context():
     DBManager.initialize_db_connection()
@@ -129,164 +131,13 @@ def index():
         }, 500
 
 
-@app.route('/api/user/', methods=['POST'])
-def signup():
-    """Endpoint per registrare un nuovo utente.
-
-    Riceve JSON {"email", "password"}.
-    Ritorna 400 se mancano dati, 409 se email esiste, 201 se creato.
-    """
-    try:
-        data = request.get_json() or {}
-        email = data.get('email')
-        name = data.get('name')
-        password = data.get('password')
-
-        if not email or not password:
-            return {"error": "Dati mancanti"}, 400
-
-        # Controlla se l'email è già registrata
-        if DBManager.email_exists(email):
-            return {"error": "Email già esistente"}, 409
-
-        # Hash della password e creazione utente
-        hashed = generate_password_hash(password)
-        DBManager.create_user(name, email, hashed)
-
-        return {"success": True}, 201
-
-    except Exception as e:
-        return server_error(e)
-    
-@app.route('/api/user/login', methods=['POST'])
-def login():
-    """Endpoint per login utente.
-
-    Riceve JSON con `email` e `password`.
-    Risposte:
-      - 404 se utente non trovato
-      - 401 se password errata
-      - 200 se successo con {success: true, user: {id,email, preferences:[...]}}
-    """
-    try:
-        data = request.get_json() or {}
-        email = data.get('email')
-        password = data.get('password')
-
-        if not email or not password:
-            return {"error": "Credenziali mancanti"}, 400
-
-        user = DBManager.get_user_by_email(email)
-
-        if not user or not user['password'] or not check_password_hash(user['password'], password):
-            return {"error": "Email or password not valid"}, 401
-
-        # Autentica tramite Flask-Login (sessione cookie based)
-        login_user(AppUser(user))
-
-        return {"success": True, "user": user_payload(user)}, 200
-
-    except Exception as e:
-        return server_error(e)
-
-@app.route('/api/user/google-login', methods=['POST'])
-def google_login():
-    """Authenticate user via Google OAuth.
-    
-    Receives JSON: {"credential": "token"}
-    Token can be either an ID token (from GoogleLogin component) or 
-    an access token (from useGoogleLogin hook).
-    """
-    try:
-        data = request.get_json() or {}
-        token = data.get('credential')
-        
-        if not token:
-            return {"error": "Token mancante"}, 400
-        
-        GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
-        if not GOOGLE_CLIENT_ID:
-            return {"error": "Google OAuth not configured"}, 500
-        
-        google_id = None
-        email = None
-        name = None
-        
-        # Try to verify as ID token first
-        try:
-            idinfo = id_token.verify_oauth2_token(
-                token, 
-                google_requests.Request(), 
-                GOOGLE_CLIENT_ID
-            )
-            google_id = idinfo['sub']
-            email = idinfo['email']
-            name = idinfo.get('name', email.split('@')[0])
-        except ValueError:
-            # Not an ID token, try as access token
-            import requests as http_requests
-            userinfo_response = http_requests.get(
-                'https://www.googleapis.com/oauth2/v3/userinfo',
-                headers={'Authorization': f'Bearer {token}'}
-            )
-            if userinfo_response.status_code != 200:
-                return {"error": "Token non valido"}, 401
-            
-            userinfo = userinfo_response.json()
-            google_id = userinfo.get('sub')
-            email = userinfo.get('email')
-            name = userinfo.get('name', email.split('@')[0] if email else 'User')
-        
-        if not google_id or not email:
-            return {"error": "Impossibile ottenere informazioni utente"}, 401
-        
-        # Try to find user by google_id or email
-        user = DBManager.get_user_by_google_id(google_id)
-        if not user:
-            user = DBManager.get_user_by_email(email)
-        
-        if user:
-            # Link Google account if not already linked
-            if not user.get('google_id'):
-                DBManager.link_google_account(user['id'], google_id)
-        else:
-            # Create new user (no password for OAuth users)
-            DBManager.create_google_user(name, email, google_id)
-            user = DBManager.get_user_by_google_id(google_id)
-        
-        # Login via Flask-Login
-        login_user(AppUser(user))
-
-        return {"success": True, "user": user_payload(user)}, 200
-        
-    except Exception as e:
-        return server_error(e)
-
-@app.route('/api/user/logout', methods=['GET'])
-@login_required
-def logout():
-    """Endpoint per logout utente.
-
-    Non richiede parametri (usa sessione Flask-Login).
-    Risposte:
-      - 401 se non autenticato
-      - 200 se successo {success: true}
-    """
-    try:
-        logout_user()
-        
-        return {"success": True}, 200
-    except Exception as e:
-        return server_error(e)
-
 @app.route('/api/user/session', methods=['GET'])
 @login_required
 def check_session():
-    """Verifica validità della sessione Flask-Login.
+    """The logged-in user (from the Supabase token in the Authorization header).
 
-    Non richiede parametri (usa cookie di sessione).
     Risposte:
-      - 401 se sessione non valida
+      - 401 se il token manca o non è valido
       - 200 se valido {success: true, user: {...}}
     """
     try:
@@ -308,40 +159,10 @@ def delete_account():
     """
     try:
         user_id = int(current_user.get_id())
-        deleted = DBManager.delete_user(user_id)
-
-        if not deleted:
+        if not DBManager.delete_user(user_id):
             return {"error": "Utente non trovato"}, 404
-
-        logout_user()
-        return {"success": True}, 200
-    except Exception as e:
-        return server_error(e)
-
-@app.route('/api/user/change-password', methods=['POST'])
-@login_required
-def change_password():
-    """
-    Endpoint per cambiare la password.
-    Richiede JSON: { "current_password": "...", "new_password": "..." }
-    """
-    try:
-        data = request.get_json() or {}
-        current_password = data.get('current_password')
-        new_password = data.get('new_password')
-
-        if not current_password or not new_password:
-            return {"error": "Password mancante"}, 400
-
-        # Verifica la vecchia password
-        user_db = DBManager.get_user_by_id(int(current_user.get_id()))
-        if not user_db or not user_db['password'] or not check_password_hash(user_db['password'], current_password):
-            return {"error": "Password attuale non corretta"}, 401
-
-        # Aggiorna con la nuova password
-        new_hash = generate_password_hash(new_password)
-        DBManager.update_user_credentials(int(current_user.get_id()), new_password_hash=new_hash)
-
+        # After our data and photos are gone: the login itself goes last
+        delete_auth_user(current_user.auth_id)
         return {"success": True}, 200
     except Exception as e:
         return server_error(e)

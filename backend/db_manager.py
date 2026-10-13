@@ -12,7 +12,7 @@ from ai.src.wardrobe import wardrobe_candidate
 # Carica le variabili d'ambiente dal file .env
 load_dotenv()
 
-USER_FIELDS = ("id", "name", "email", "password", "gender", "google_id", "username", "avatar_id")
+USER_FIELDS = ("id", "name", "email", "gender", "username", "avatar_id", "auth_id")
 USER_COLUMNS = ", ".join(USER_FIELDS)
 WARDROBE_COLUMNS = "id, section, image_id, name, color, brand, main_category"
 
@@ -70,113 +70,6 @@ class DBManager:
             db.close()
 
     @staticmethod
-    def email_exists(email: str) -> bool:
-        """Controlla se un'email esiste nella tabella `users`."""
-        try:
-            conn = DBManager.get_db_connection()
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT 1 FROM users WHERE email = %s LIMIT 1", (email,))
-                exists = cursor.fetchone() is not None
-
-            return exists
-        except Exception:
-            # In caso di errore, rilancia per far gestire l'errore a chi chiama
-            raise
-
-    @staticmethod
-    def create_user(name: str, email: str, password_hash: str):
-        """Crea un nuovo utente nella tabella `users`.
-
-        Nota: la tabella `users` deve avere almeno le colonne `email` e `password`.
-        """
-        try:
-            conn = DBManager.get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO users (name, email, password) VALUES (%s, %s, %s)",
-                (name, email, password_hash)
-            )
-            conn.commit()
-            cursor.close()
-        except Exception:
-            # Rollback in caso di errore e rilancia
-            conn.rollback()
-            raise
-
-    @staticmethod
-    def get_user_by_google_id(google_id: str):
-        """Recupera utente per google_id. Ritorna dict o None."""
-        try:
-            conn = DBManager.get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                f"SELECT {USER_COLUMNS} FROM users WHERE google_id = %s LIMIT 1",
-                (google_id,)
-            )
-            row = cursor.fetchone()
-            cursor.close()
-            if row:
-                return dict(zip(USER_FIELDS, row))
-            return None
-        except Exception:
-            raise
-
-    @staticmethod
-    def create_google_user(name: str, email: str, google_id: str):
-        """Crea un nuovo utente OAuth (senza password)."""
-        try:
-            conn = DBManager.get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO users (name, email, google_id) VALUES (%s, %s, %s)",
-                (name, email, google_id)
-            )
-            conn.commit()
-            cursor.close()
-        except Exception:
-            conn.rollback()
-            raise
-
-    @staticmethod
-    def link_google_account(user_id: int, google_id: str) -> bool:
-        """Collega un account Google a un utente esistente."""
-        try:
-            conn = DBManager.get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE users SET google_id = %s WHERE id = %s",
-                (google_id, user_id)
-            )
-            updated = cursor.rowcount > 0
-            conn.commit()
-            cursor.close()
-            return updated
-        except Exception:
-            conn.rollback()
-            raise
-
-    @staticmethod
-    def get_user_by_email(email: str):
-        """Recupera utente dalla tabella `users` per email.
-
-        Ritorna dict {id, email, password, google_id} oppure None.
-        """
-        try:
-            conn = DBManager.get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                f"SELECT {USER_COLUMNS} FROM users WHERE email = %s LIMIT 1",
-                (email,)
-            )
-            row = cursor.fetchone()
-            cursor.close()
-            if row:
-                return dict(zip(USER_FIELDS, row))
-            return None
-        except Exception:
-            raise
-
-    @staticmethod
     def get_user_preferences(user_id: int) -> dict:
         """Recupera le preferenze dell'utente.
 
@@ -209,40 +102,6 @@ class DBManager:
 
         return preferences
 
-
-    @staticmethod
-    def update_user_credentials(user_id: int, new_email: str = None, new_password_hash: str = None) -> bool:
-        """Aggiorna email e/o password dell'utente.
-
-        Si aspetta che la validazione dei campi da aggiornare sia fatta a livello di route.
-        Ritorna True se almeno una riga è stata aggiornata, False se nessuna (utente non trovato).
-        """
-        try:
-            conn = DBManager.get_db_connection()
-            cursor = conn.cursor()
-            fields = []
-            params = []
-            if new_email is not None:
-                fields.append("email = %s")
-                params.append(new_email)
-            if new_password_hash is not None:
-                fields.append("password = %s")
-                params.append(new_password_hash)
-
-            # Assumiamo che almeno un campo sia presente (validato dalla route)
-            params.append(user_id)
-            query = f"UPDATE users SET {', '.join(fields)} WHERE id = %s"
-            cursor.execute(query, tuple(params))
-            updated = cursor.rowcount > 0
-            conn.commit()
-            cursor.close()
-            return updated
-        except Exception:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-            raise
 
     @staticmethod
     def update_user_profile(user_id: int, new_name: str, new_username: str) -> bool:
@@ -337,10 +196,7 @@ class DBManager:
 
     @staticmethod
     def get_user_by_id(user_id: int):
-        """Recupera utente per id. Ritorna dict {id,email,password,google_id} oppure None.
-
-        Necessario per Flask-Login user_loader.
-        """
+        """Recupera utente per id. Ritorna dict con USER_FIELDS oppure None."""
         try:
             conn = DBManager.get_db_connection()
             cursor = conn.cursor()
@@ -354,6 +210,36 @@ class DBManager:
                 return dict(zip(USER_FIELDS, row))
             return None
         except Exception:
+            raise
+
+
+    @staticmethod
+    def get_or_create_auth_user(auth_id: str, email: str, name: str):
+        """The users row of a Supabase Auth account, created on its first request. A row from before Supabase
+        Auth with the same email is taken over: Supabase only issues tokens for confirmed emails.
+        None if the email already belongs to another account."""
+        conn = DBManager.get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(f"SELECT {USER_COLUMNS} FROM users WHERE auth_id = %s", (auth_id,))
+                row = cursor.fetchone()
+                if not row:
+                    cursor.execute(
+                        f"UPDATE users SET auth_id = %s WHERE lower(email) = lower(%s) AND auth_id IS NULL RETURNING {USER_COLUMNS}",
+                        (auth_id, email))
+                    row = cursor.fetchone()
+                if not row:
+                    cursor.execute(
+                        f"INSERT INTO users (name, email, auth_id) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING RETURNING {USER_COLUMNS}",
+                        (name, email, auth_id))
+                    row = cursor.fetchone()
+                if not row:  # a parallel first request just created it (or the email is taken)
+                    cursor.execute(f"SELECT {USER_COLUMNS} FROM users WHERE auth_id = %s", (auth_id,))
+                    row = cursor.fetchone()
+            conn.commit()
+            return dict(zip(USER_FIELDS, row)) if row else None
+        except Exception:
+            conn.rollback()
             raise
 
 
