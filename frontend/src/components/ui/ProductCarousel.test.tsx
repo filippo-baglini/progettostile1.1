@@ -76,7 +76,7 @@ describe('ProductCarousel', () => {
 
         expect(screen.getByTestId('modal')).toBeInTheDocument();
         expect(screen.getByText('Test Item 1')).toBeInTheDocument();
-        expect(screen.getByText('$100.00')).toBeInTheDocument();
+        expect(screen.getByText('€100.00')).toBeInTheDocument();
         expect(screen.getByText('1 / 2')).toBeInTheDocument();
     });
 

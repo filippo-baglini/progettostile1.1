@@ -137,14 +137,17 @@ def get_outfit(all_candidates: List[List[Dict]], budget: float|None) -> Tuple[Li
         )
 
     max_budget_cents = int(round(budget * 100))
-    
+
     # --- SCENARIO 1: BEST FEASIBLE (PARTIAL OR FULL) OUTFIT ---
-    # Use optimized DP that allows skipping categories
-    feasible_outfit, feasible_cost_cents = _run_optimized_knapsack_with_skip(
-        processed_candidates, 
-        max_budget_cents
-    )
-    
+    # Items the user kept while refining are always in: they're paid for first, and the DP (which may skip
+    # slots) only spends what's left on the rest. Kept items over the budget give an over-budget outfit (B9).
+    kept = [slot[0] for slot in processed_candidates if len(slot) == 1 and slot[0]['data'].get('locked')]
+    kept_cost_cents = sum(item['price_in_cents'] for item in kept)
+    free_slots = [slot for slot in processed_candidates if not (len(slot) == 1 and slot[0]['data'].get('locked'))]
+    new_items, new_cost_cents = _run_optimized_knapsack_with_skip(free_slots, max(0, max_budget_cents - kept_cost_cents))
+    feasible_outfit = [item['data'] for item in kept] + new_items
+    feasible_cost_cents = kept_cost_cents + new_cost_cents
+
     feasible_remaining_budget = budget - (feasible_cost_cents / 100)
     
     # --- SCENARIO 2: BEST FULL OUTFIT (Must select one item per category) ---

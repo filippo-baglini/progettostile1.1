@@ -12,10 +12,10 @@ const DemoPreview = () => {
     ];
 
     const mockProducts = [
-        { name: 'Regular Fit Linen Blend Shirt', brand: 'ZARA', price: '$34.99', inStock: true },
-        { name: 'Moccasin Suede Loafers', brand: 'Mango', price: '$44.99', inStock: true },
-        { name: 'Slim Fit 5-Pocket Pants', brand: 'H&M', price: '$29.99', inStock: true },
-        { name: 'Metal Link Bracelet', brand: 'COS', price: '$35.90', inStock: true },
+        { name: 'Regular Fit Linen Blend Shirt', brand: 'ZARA', price: '€34.99', inStock: true },
+        { name: 'Moccasin Suede Loafers', brand: 'Mango', price: '€44.99', inStock: true },
+        { name: 'Slim Fit 5-Pocket Pants', brand: 'H&M', price: '€29.99', inStock: true },
+        { name: 'Metal Link Bracelet', brand: 'COS', price: '€35.90', inStock: true },
     ];
 
     return (
@@ -134,7 +134,7 @@ const DemoPreview = () => {
                                         className="flex justify-end"
                                     >
                                         <div className="bg-primary text-white px-4 py-2.5 rounded-2xl rounded-br-md max-w-[85%] text-xs shadow-md">
-                                            I need an elegant outfit for a summer wedding, budget around $300
+                                            I need an elegant outfit for a summer wedding, budget around €300
                                         </div>
                                     </motion.div>
 
@@ -203,7 +203,7 @@ const DemoPreview = () => {
                                                     <div className="flex items-center justify-between mb-3">
                                                         <div>
                                                             <p className="text-[8px] text-text-muted dark:text-stone-500 uppercase">Estimated Total</p>
-                                                            <p className="text-sm font-bold text-text-dark dark:text-white">$149.87</p>
+                                                            <p className="text-sm font-bold text-text-dark dark:text-white">€149.87</p>
                                                         </div>
                                                         <span className="text-[8px] px-2.5 py-1.5 bg-primary text-white rounded-lg flex items-center gap-1 font-medium">
                                                             <ShoppingBag className="w-2.5 h-2.5" />

@@ -230,6 +230,7 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
     logging.info(f"LLM is READY_TO_GENERATE. Global Budget: {budget}. Generating {len(outfits_list)} outfits.")
 
     final_outfits_results = []
+    budget_notes = []  # why an outfit is over budget, when the user's kept items caused it
 
     # --- SAFEGUARD: Enforce single outfit for refinement unless explicitly requested ---
     if refinement_type == 'REFINE_CURRENT' and len(outfits_list) > 1:
@@ -343,6 +344,7 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
                     logging.info(f"Locking item ID {locked_item.get('id')}: {locked_item.get('title')}")
                     locked_candidate = {'price': locked_item.get('price', 0), 'similarity': 1.0}
                     locked_candidate.update(locked_item)
+                    locked_candidate['locked'] = True  # get_outfit never drops it to fit the budget
                     
                     # We add them to the candidate list. But wait, we need to maintain an order?
                     # Knapsack doesn't strictly care about order, but our result list structure might.
@@ -471,6 +473,10 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
                  continue
             
             logging.info(f"Outfit {i+1} result: Cost={final_result_single.get('cost')}, Budget={current_outfit_budget}, Remaining={final_result_single.get('remaining_budget')}")
+            kept_cost = sum(slot[0].get('price') or 0 for slot in all_candidates if len(slot) == 1 and slot[0].get('locked'))
+            if current_outfit_budget and kept_cost > current_outfit_budget:
+                budget_notes.append(f"The items you kept cost €{kept_cost:.2f}, so this outfit is €{-final_result_single['remaining_budget']:.2f} "
+                                    f"over your €{current_outfit_budget:.2f} budget.")
             final_outfits_results.append(final_result_single)
 
             # Update Global Diversity Tracker
@@ -501,7 +507,7 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
 
     final_response = {
         'status': 'COMPLETED',
-        'message': response.get('results_message') or "Here are your outfit options.",
+        'message': ' '.join([response.get('results_message') or "Here are your outfit options.", *budget_notes]),
         'status_code': 200,
         'chat_history': response.get('history', chat_history),
         'conversation_title': response.get('conversation_title'),

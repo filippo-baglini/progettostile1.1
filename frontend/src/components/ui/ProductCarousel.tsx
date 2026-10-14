@@ -237,7 +237,7 @@ const ProductCarousel = ({ isOpen, onClose, items, initialIndex }: ProductCarous
                         transition={{ delay: 0.1 }}
                         className="text-3xl font-bold text-primary dark:text-primary-light mb-8"
                     >
-                        ${currentItem.price.toFixed(2)}
+                        €{currentItem.price.toFixed(2)}
                     </motion.div>
 
                     <motion.div

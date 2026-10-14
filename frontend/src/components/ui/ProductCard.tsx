@@ -126,7 +126,7 @@ const ProductCard = ({ item, onImageClick }: ProductCardProps) => {
         ) : (
         <div className="flex items-center justify-between pt-1">
           <span className="text-primary dark:text-primary-light font-bold text-[13.5px]">
-            ${item.price.toFixed(2)}
+            €{item.price.toFixed(2)}
           </span>
 
           {hasLink ? (

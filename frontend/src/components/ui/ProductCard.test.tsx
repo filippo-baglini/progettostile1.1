@@ -18,7 +18,7 @@ describe('ProductCard Component', () => {
         render(<ProductCard item={mockProduct} />);
 
         expect(screen.getByText('Test Product')).toBeInTheDocument();
-        expect(screen.getByText('$99.99')).toBeInTheDocument();
+        expect(screen.getByText('€99.99')).toBeInTheDocument();
         expect(screen.getByText('FashionBrand')).toBeInTheDocument();
         expect(screen.getByAltText('Test Product')).toHaveAttribute('src', 'https://example.com/jacket.jpg');
     });
@@ -28,7 +28,7 @@ describe('ProductCard Component', () => {
 
         expect(screen.getByText('YOUR WARDROBE')).toBeInTheDocument();
         expect(screen.getByText('From your wardrobe')).toBeInTheDocument();
-        expect(screen.queryByText('$0.00')).not.toBeInTheDocument();
+        expect(screen.queryByText('€0.00')).not.toBeInTheDocument();
         expect(screen.queryByText('IN STOCK')).not.toBeInTheDocument();
         expect(screen.queryByText('N/A')).not.toBeInTheDocument();
     });
