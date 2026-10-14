@@ -15,3 +15,6 @@ frontend/coverage/
 
 # OS / editor
 .DS_Store
+
+# Working plans from Claude Code sessions
+docs/superpowers/
