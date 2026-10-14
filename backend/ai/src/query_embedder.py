@@ -1,40 +1,17 @@
-# src/ai/query_embedder.py (Updated)
-
 import io
 
 import torch
 import numpy as np
-from PIL import Image 
+from PIL import Image
+
 
 def get_text_embedding_vector(MODEL, PROC, DEVICE, text: str) -> np.ndarray:
-    """
-    Generates a single, normalized NumPy vector embedding for a text string,
-    using a dummy image to satisfy the CLIP model's requirement.
-    """
-    # 1. Create a dummy image to prevent the "ValueError: You have to specify pixel_values"
-    dummy_image = Image.new('RGB', (224, 224), color='white')
-    
-    # 2. Tokenize and process both the dummy image and the text
-    # The processor handles images=[dummy_image] and text=[text]
-    inputs = PROC(
-        images=[dummy_image], 
-        text=[text], 
-        return_tensors="pt", 
-        padding=True, 
-        max_length=77, 
-        truncation=True
-    )
-    
+    """Normalized FashionCLIP text embedding (the same space as the image ones), from the text half of the model only."""
+    inputs = PROC(text=[text], return_tensors="pt", padding=True, max_length=77, truncation=True)
     with torch.no_grad():
-        # Move inputs to device and get model output
-        out = MODEL(**{k: v.to(DEVICE) for k, v in inputs.items()})
-    
-    # Normalize the text embedding
-    txt_embed = out.text_embeds
-    txt_embed = torch.nn.functional.normalize(txt_embed, dim=-1)
-    
-    # Convert to a NumPy array (1, 512) and return the 1D vector
-    return txt_embed[0].cpu().numpy()
+        feats = MODEL.get_text_features(**{k: v.to(DEVICE) for k, v in inputs.items()})
+    return torch.nn.functional.normalize(feats, dim=-1)[0].cpu().numpy()
+
 
 def get_image_embedding_vector(MODEL, PROC, DEVICE, image_bytes: bytes) -> np.ndarray:
     """Normalized FashionCLIP image embedding: the same space as product_data.img_embedding (see import_ebay.py)."""
@@ -42,5 +19,3 @@ def get_image_embedding_vector(MODEL, PROC, DEVICE, image_bytes: bytes) -> np.nd
     with torch.no_grad():
         feats = MODEL.get_image_features(**{k: v.to(DEVICE) for k, v in PROC(images=[image], return_tensors="pt").items()})
     return torch.nn.functional.normalize(feats, dim=-1)[0].cpu().numpy()
-
-#ONLY USED FOR LOCAL AND TARGETED TESTING

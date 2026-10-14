@@ -47,7 +47,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 - [x] **B7. Database errors are swallowed.** `get_chat_messages` returns `[]` on error (`db_manager.py:523`), so the AI answers without history. `update_user_preferences` returns False on any error, which the API reports as 404 "Utente non trovato". *(fixed 2026-10-14: these, `get_user_preferences` and `preferences` raise, so the endpoints return 500; the write helpers already did)*
 - [x] **B8. Every message re-downloads and re-sends all past chat photos** (`app.py:854-895`): slow and expensive, and *likely* hits Mistral's per-request image limit. *(fixed 2026-10-14: only the chat's last 3 photos are downloaded and sent; they are still re-downloaded on every message, cache them if that shows up as slow)*
 - [x] **B9. Lowering the budget while refining can drop kept items:** the budget optimizer may skip any slot, including locked ones. *(fixed 2026-10-14: kept items are paid for first and never dropped; while refining every requested piece is filled, cheapest if nothing fits; an over-budget outfit card says "Over Budget")*
-- [ ] **B10. Small ones:**
+- [x] **B10. Small ones:**
   - [x] A request with no `message` crashes with a 500 (`query_handler.py:731`, `ai/src/app.py:220`). *(400 when there is no text, photo or wardrobe piece)*
   - [x] Deleting a conversation without `conv_id` raises on `int(None)` and returns 500 (`app.py:941`). *(400)*
   - [x] A non-image file sent to `/api/messages/send` crashes `compress_image` with a 500 instead of a 400. *(fixed 2026-10-14)*
@@ -56,15 +56,15 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
   - [x] The DB status on `/` is checked once, at startup, not on each request.
   - [x] A negative `selected_outfit_index` is accepted (`ai/src/app.py:115-132`).
   - [x] A double tap on "Add to wardrobe" can create two pieces (`app.py:498-509` checks, then inserts, without locking). *(the suggestion is claimed with one UPDATE first, and put back if adding fails)*
-  - [ ] A catalogue item with a NULL price crashes outfit assembly (`assemble_outfit.py`, `item['price'] * 100`). *(constraint in `migrations/2026-10-14_product_constraints.sql`, not applied yet)*
-  - [ ] A product with an empty colour matches every colour filter (`schema.sql`, `ILIKE '%' || schema_color || '%'`). *(same migration, not applied yet)*
+  - [x] A catalogue item with a NULL price crashes outfit assembly (`assemble_outfit.py`, `item['price'] * 100`). *(`price` is NOT NULL: `migrations/2026-10-14_product_constraints.sql`)*
+  - [x] A product with an empty colour matches every colour filter (`schema.sql`, `ILIKE '%' || schema_color || '%'`). *(a CHECK forbids empty colours, same migration)*
   - [x] Chat titles aren't length-capped (LLM title or rename): anything over 255 characters gives a 500. *(cut to 255 where they are saved)*
 - [x] **B11. Most Mistral errors aren't retried.** `model_fallback.py` only retries on rate limits (found by searching the error text for "429") and on bad JSON. Check `r.status_code` and also retry on 5xx and `requests.Timeout`. *(fixed 2026-10-14: retried by status: 429, 5xx, timeouts, dropped connections and bad JSON; other errors are raised at once)*
 
 ## Performance
 
-- [ ] **P1. No vector index on `product_data.img_embedding`**, so every search reads the whole catalogue. Add `CREATE INDEX ... USING hnsw (img_embedding vector_cosine_ops)` in a migration, and move the `similarity > match_threshold` filter after `ORDER BY ... LIMIT` (otherwise the index isn't used).
-- [ ] **P2. Text embeddings run the image model on a dummy image** (`query_embedder.py`). Use `MODEL.get_text_features(**PROC(text=[...]))`.
+- [x] **P1. No vector index on `product_data.img_embedding`.** *(decided 2026-10-14: not needed. A search reads only its category and gender, ~300 of 3,649 products, in ~60 ms; an approximate HNSW index pays off from ~50k products. Revisit then, and test it with the filters: HNSW fetches its ~40 nearest before the `WHERE` filters, so a brand or category filter can leave a slot with no candidates.)*
+- [x] **P2. Text embeddings run the image model on a dummy image** (`query_embedder.py`). Use `MODEL.get_text_features(**PROC(text=[...]))`. *(fixed 2026-10-14: same vectors, 266 → 48 ms per text on CPU)*
 - [ ] **P3. A new Postgres connection per request.** Use `psycopg2.pool`.
 
 ## Inconsistencies and cleanup
