@@ -557,7 +557,7 @@ def send_message():
                 # Use saved gender from conversation if not provided in request
                 saved_gender = conv_data.get('gender') or guest_gender
                 
-                output = outfit_recommendation_handler(msg_text, chat_history, user_id, image_data=image_data, past_images=past_images, selected_outfit_index=selected_outfit_index, guest_gender=saved_gender)
+                output = outfit_recommendation_handler(msg_text, chat_history, user_id, image_data=image_data, past_images=past_images, selected_outfit_index=selected_outfit_index, selected_message_id=selected_message_id, guest_gender=saved_gender)
             
             # Aggiorna la history in memoria
             if image_id and image:
@@ -619,6 +619,9 @@ def send_message():
                 new_ai_response_id = DBManager.add_simple_ai_response(
                     conv_id, text, status, output.get("budget_options"), output.get("outfit_generation_options"),
                     wardrobe_suggestion)
+        if not is_authenticated:
+            # Guest replies live only in memory; the id lets refinements and explanations find them
+            new_ai_response_id = str(uuid.uuid4())
 
         # Update chat history
         chat_history.append({'role': 'user', 'text': msg_text, 'image_id': image_id})
@@ -656,29 +659,42 @@ def send_message():
 @rate_limit(per_minute=20)
 def explain_outfit():
     """
-    Endpoint to generate an explanation for a specific outfit on demand.
-    Expects JSON: { "user_prompt": "...", "outfit_data": [...] }
-    Works for both authenticated users and guests.
+    Explains one outfit the AI suggested in a chat, for logged-in users and guests.
+    JSON: { "conv_id": ..., "message_id": ..., "outfit_index": 0 }
+    The request and the outfit come from the stored chat, never from the client,
+    so this can't be used as a general-purpose LLM.
     """
     try:
         data = request.get_json() or {}
-        user_prompt = data.get('user_prompt')
-        outfit_data = data.get('outfit_data')
-        
-        if not isinstance(user_prompt, str) or not user_prompt or not isinstance(outfit_data, list) or not outfit_data:
-            return {"error": "Missing user_prompt or outfit_data"}, 400
+        conv_id, message_id, outfit_index = data.get('conv_id'), data.get('message_id'), data.get('outfit_index', 0)
 
-        # Only what an outfit card has, capped, so this can't be used as a general-purpose LLM.
-        # ponytail: the prompt is still the client's; the full fix looks the outfit up by message id (needs B4 for guests)
-        user_prompt = user_prompt[-8000:]  # the chat so far: the latest part matters most
-        outfit_data = [
-            {field: str(item.get(field) or '')[:200] for field in ('category', 'description', 'brand', 'price')}
-            for item in outfit_data[:10] if isinstance(item, dict)
-        ]
-        explanation = generate_explanation_only(user_prompt, outfit_data)
-        
-        return {"success": True, "explanation": explanation}, 200
-        
+        if current_user.is_authenticated:
+            user_id = int(current_user.get_id())
+            try:
+                conv_id = int(conv_id)
+            except (TypeError, ValueError):
+                return {"error": "Conversation not found"}, 404
+            if not DBManager.conversation_belongs_to(user_id, conv_id):
+                return {"error": "Conversation not found"}, 404
+            history = DBManager.get_chat_messages(user_id, conv_id)
+        else:
+            conv = not_auth_convs.get(str(conv_id))  # temp_<uuid>: only the guest who started it knows it
+            if not conv:
+                return {"error": "Conversation not found"}, 404
+            history = conv['chat_history']
+
+        reply_index = next((i for i, msg in enumerate(history)
+                            if msg.get('role') == 'model' and str(msg.get('message_id')) == str(message_id)), None)
+        outfits = history[reply_index].get('outfits') or [] if reply_index is not None else []
+        if not isinstance(outfit_index, int) or not 0 <= outfit_index < len(outfits):
+            return {"error": "Outfit not found"}, 404
+
+        chat_so_far = "\n".join(f"{'User' if msg['role'] == 'user' else 'Assistant'}: {msg['text']}"
+                                for msg in history[:reply_index] if msg.get('text'))
+        items = [{field: item.get(field) for field in ('title', 'brand', 'price', 'main_category', 'description')}
+                 for item in outfits[outfit_index].get('outfit', [])]
+        return {"success": True, "explanation": generate_explanation_only(chat_so_far, items)}, 200
+
     except Exception as e:
         return server_error(e)
 

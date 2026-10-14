@@ -18,8 +18,8 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 - [x] **S4. Sessions can't be revoked.** Flask's signed-cookie sessions stay valid after logout and after a password change; `SESSION_COOKIE_SECURE` isn't set for production. *(fixed by the Supabase Auth migration, 2026-10-14: logout and password changes revoke the session; an access token already issued stays valid until it expires, 1 hour by default)*
 - [ ] **S5. No rate or size limits on paid/heavy endpoints.**
   - [x] `/api/messages/send` and `/api/outfit/explain` have no rate limit; each call can trigger several Mistral calls plus CLIP inference, and guests can flood the 200-slot `not_auth_convs` cache. *(fixed 2026-10-14: per-IP limit, 10/min on send and 20/min on explain, `backend/rate_limit.py`. Guest access stays on by choice; the freemium quota is under "Before production")*
-  - [x] `/explain` takes any `user_prompt` and `outfit_data`, so it works as an open LLM proxy. *(mitigated 2026-10-14: rate limited, prompt capped to 8,000 characters, outfit data reduced to 10 items with 4 short fields)*
-  - [ ] Full fix for the above: the server looks the outfit and chat up by message id instead of trusting the client (needs B4 for guests).
+  - [x] `/explain` takes any `user_prompt` and `outfit_data`, so it works as an open LLM proxy. *(fixed 2026-10-14, see below)*
+  - [x] Full fix for the above: the server looks the outfit and chat up by message id instead of trusting the client (needs B4 for guests). *(fixed 2026-10-14: `/explain` takes conv_id, message_id and outfit_index; `backend/test_explain.py`)*
   - [x] No `MAX_CONTENT_LENGTH`: uploads can be any size. *(fixed in d0e78b6: 10 MB cap, 413)*
   - [x] Pillow still decodes images up to ~179 MP (~0.5 GB RAM each): a small, highly compressed file can pass the 10 MB cap. *(fixed 2026-10-14: refused above 60 MP)*
   - [x] Chat photos are kept at full resolution (`app.py:664`, no `max_size`). *(fixed 2026-10-14: resized to 1024 px)*
@@ -28,7 +28,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 
 ### Low
 - [x] **S7.** The backend has no password rules (only the frontend checks for at least 6 characters). Emails are case-sensitive, so `Foo@x.com` and `foo@x.com` become two accounts, and the Google email match misses. *(fixed by the Supabase Auth migration, 2026-10-14)*
-- [ ] **S8.** The explanation endpoint returns the raw exception text to the client (`backend/ai/src/get_explanations.py`, last line).
+- [x] **S8.** The explanation endpoint returns the raw exception text to the client (`backend/ai/src/get_explanations.py`, last line). *(fixed 2026-10-14: logged, generic message to the client)*
 - [ ] **S9.** Personal data in logs: `print(user_preferences, gender)` and full LLM responses on the backend; `console.log('DEBUG: Raw history...')` in `frontend/src/services/chatService.ts:238`.
 - [ ] **S10.** Chat photos are uploaded before the ownership check and before the AI call (`app.py:678`), so failed or rejected requests leave orphan files in storage.
 - [ ] **S11. DB credentials have defaults.** `DBManager` falls back to `DB_PASSWORD='password'` and `DB_HOST='localhost'` (`backend/db_manager.py:21`). Fail at startup like `SECRET_KEY` does.
@@ -39,7 +39,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 - [ ] **B1. Saved preferences never reach the AI.** `preferences_management.py:37` builds `favorite_Color` (DB names are `Color`, `Brand`, `Material`), but `query_handler.py:866-871` reads `favorite_color`. Fix: lowercase the name.
 - [x] **B2. A wrong current password on the Profile page redirects to /login.** The backend returns 401 (`app.py:339`) and the axios interceptor sends every 401 to `/login` (`frontend/src/services/api.ts:20`). Google-only users hit this too. Fix: return 400 or 403. *(fixed by the Supabase Auth migration, 2026-10-14)*
 - [x] **B3. The frontend times out after 60 s** (`api.ts:7`), but the backend can take much longer (120 s per Mistral call, plus retries and fallback). The user sees an error while the reply is still saved; retrying duplicates the message. *(fixed in d0e78b6: frontend waits 5 min, Mistral calls time out after 60 s)*
-- [ ] **B4. *Likely:* guests can't refine a selected outfit.** Guest replies have no `message_id`; the frontend sends `assistant-<timestamp>`, which the backend never matches (`backend/ai/src/app.py:98-103`).
+- [x] **B4. Guests can't refine a selected outfit.** Guest replies have no `message_id`; the frontend sends `assistant-<timestamp>`, which the backend never matches (`backend/ai/src/app.py:98-103`); the guest path didn't even pass `selected_message_id`. *(fixed 2026-10-14: guest replies get a uuid, and the guest path passes the selection)*
 - [ ] **B5. Prompts call item IDs UUIDs** (`query_handler.py:375,380,586,591`), but real IDs are integers or `w12`. An invented UUID makes REMOVE or REPLACE silently do nothing (`ai/src/app.py:327`).
 - [ ] **B6. No gender defaults to "male"** (`query_handler.py:654`): the planner plans men's outfits while the catalogue search applies no gender filter.
 - [ ] **B7. Database errors are swallowed.** `get_chat_messages` returns `[]` on error (`db_manager.py:523`), so the AI answers without history. `update_user_preferences` returns False on any error, which the API reports as 404 "Utente non trovato".

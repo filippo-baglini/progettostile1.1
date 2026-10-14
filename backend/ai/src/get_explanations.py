@@ -1,3 +1,5 @@
+import logging
+
 from google.genai import types
 
 from ai.src.model_fallback import generate_content_with_fallback
@@ -40,5 +42,6 @@ def explain_selected_outfit(user_prompt: str, retrieved_outfit) -> str:
             config=config
         )
         return response.text
-    except Exception as e:
-        return f"Error generating outfit explanation: {e}"
+    except Exception:
+        logging.exception("Error generating outfit explanation")
+        return "Sorry, I couldn't generate an explanation at this time."

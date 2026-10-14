@@ -210,11 +210,12 @@ export const chatService = {
     return response.data.generating;
   },
 
-  // Generate explanation for an outfit
-  explainOutfit: async (userPrompt: string, outfitData: any[]): Promise<string> => {
+  // Explain one outfit of an AI reply: the backend finds it in the stored chat
+  explainOutfit: async (convId: string, messageId: string, outfitIndex: number): Promise<string> => {
     const response = await api.post<{ success: boolean; explanation: string }>('/outfit/explain', {
-      user_prompt: userPrompt,
-      outfit_data: outfitData,
+      conv_id: convId,
+      message_id: messageId,
+      outfit_index: outfitIndex,
     });
     return response.data.explanation;
   },

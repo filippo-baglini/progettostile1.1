@@ -399,47 +399,10 @@ export const useChatMessages = () => {
     setLoadingExplanationId(messageId); // We might want to track this per outfit ID in the future
 
     try {
-      // Construct the full conversation history up to this point
-      // This ensures the backend understands context like budget, color refinements, etc.
-      let userPrompt = "";
-
-      // Iterate through messages up to the current one (exclusive of the current outfit message)
-      for (let i = 0; i < messageIndex; i++) {
-        const msg = messages[i];
-        const role = msg.role === 'user' ? 'User' : 'Assistant';
-        // Skip error messages or empty content
-        if (msg.isError || !msg.content) continue;
-
-        userPrompt += `${role}: ${msg.content}\n`;
-      }
-
-      // Add a final instruction to be clear about what we want, although the backend prompt handles it.
-      // But passing the history as the "user_prompt" is the goal.
-      // We might want to append a specific request if the history doesn't end with a user question about this outfit
-      // (which it might not if there were intermediate steps).
-      // However, the backend logic `explain_selected_outfit` takes `user_prompt` and `retrieved_outfit`.
-      // It formats it as "*** USER REQUEST *** {user_prompt} *** OUTFIT RETRIEVED *** ...".
-      // So passing the history here is perfect.
-
-      if (!userPrompt) {
-        // Fallback if no history found (shouldn't happen usually)
-        userPrompt = "Please explain this outfit.";
-      }
-
-      // Prepare outfit data for backend
-      // We need to map frontend items back to a simple structure or just pass them as is if backend accepts
-      // Backend expects: { category: string, description: string } or similar?
-      // Wait, backend `generate_explanation_only` expects `outfit_data` which is `List[Dict[str, Any]]`.
-      // `explain_selected_outfit` uses this data.
-      // Let's pass the items with their names/descriptions.
-      const outfitData = targetOutfit.items.map(item => ({
-        category: item.category || 'unknown', // Frontend might not have category perfectly mapped
-        description: item.name, // Use name as description
-        brand: item.brand,
-        price: item.price
-      }));
-
-      const explanation = await chatService.explainOutfit(userPrompt, outfitData);
+      // The backend reads the request and the outfit from the stored chat; a lone `outfit` is the first one
+      const outfitIndex = outfitId && message.outfits ? message.outfits.findIndex(o => o.id === outfitId) : 0;
+      if (!currentChatId || outfitIndex < 0) return;
+      const explanation = await chatService.explainOutfit(currentChatId, messageId, outfitIndex);
 
       // Update message with explanation
       setMessages((prev) => {
