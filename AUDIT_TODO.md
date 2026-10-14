@@ -25,7 +25,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
   - [x] Chat photos are kept at full resolution (`app.py:664`, no `max_size`). *(fixed 2026-10-14: resized to 1024 px)*
   - [x] Guest chats hold their photos in RAM (200 conversations, no per-conversation image limit). *(fixed 2026-10-14: guest chats are stored in the DB and their photos in storage like users' ones, deleted when the guest leaves the chat (new chat, login, closed tab) or after 2 h idle; migration `2026-10-14_guest_chats.sql`, `backend/test_guest_chats.py`)*
 - [x] **S6. Vulnerable dependencies.** `npm audit`: axios (high), form-data (high), react-router / react-router-dom (high, partly SSR-only), follow-redirects (moderate). Fix: `npm audit fix`. Also pin versions in `backend/requirements.txt`. *(fixed 2026-10-14: `npm audit fix` took the frontend from 35 flagged packages to 7; Python packages updated within their major versions after `pip-audit`, and `requirements.txt` pinned. Left: the two items below)*
-  - [ ] Tailwind CSS 3 → 4 (major upgrade, config changes): the last 7 `npm audit` findings (braces, chokidar, micromatch, fast-glob, postcss-nested, postcss-selector-parser, tailwindcss) all come through it. Build-time only, never shipped to browsers.
+  - [ ] Tailwind CSS 3 → 4: the last 7 `npm audit` findings (braces, chokidar, micromatch, fast-glob, postcss-nested, postcss-selector-parser, tailwindcss) all come through it. Build-time only, never shipped to browsers, so not a risk for users. See "Before production".
   - [ ] torch 2.9 → 2.13 and transformers 4 → 5 (major; check FashionCLIP still loads and embeds the same): `pip-audit` lists issues in loading untrusted models/checkpoints (Trainer, X-CLIP, LightGlue, `torch.jit`), paths this app doesn't use.
 
 ### Low
@@ -94,6 +94,13 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 
 ## Before production
 
+- [ ] Deploy the built site (`npm run build`, serve `dist/` from a web host), never `npm run dev`: the dev server and its tools aren't meant to be public.
+- [ ] Upgrade Tailwind CSS 3 → 4 (S6). About half a day:
+  - [ ] Run `npx @tailwindcss/upgrade`: moves the setup to the `@tailwindcss/vite` plugin and `@import "tailwindcss"`, drops autoprefixer, moves `tailwind.config.js` into an `@theme` block, renames classes (`shadow-sm`→`shadow-xs`, `blur-sm`→`blur-xs`, `outline-none`→`outline-hidden`, `flex-shrink`→`shrink`, ...).
+  - [ ] By hand: the 9 bare `rounded` become `rounded-sm`, which this project redefines (`--radius-sm`); `ring-opacity-50` in `index.css` becomes `ring-primary/50`.
+  - [ ] Check the changed defaults: a bare `border` turns the text colour instead of light grey (93 uses; keep the compatibility CSS the tool offers), `ring` is 1px and current colour, buttons lose the hand cursor.
+  - [ ] Look through every page in light and dark mode: landing, login, signup, reset password, chat, profile, how-to-use. The tests don't check styling.
+  - [ ] Accept the browser cut: Safari 16.4+, Chrome 111+, Firefox 128+ (iPhones on iOS < 16.4 would get broken styling).
 - [ ] Freemium quota: a few outfit generations a day for guests and free users, many more (or unlimited) for paid ones. Count per user and day in the DB; guests can only be counted per IP or browser, so keep their allowance small. Separate from the per-IP rate limit, which stays for everyone.
 - [ ] Several server workers: move the rate-limit counts to Redis (Flask-Limiter supports it); the progress store too (only the "putting your outfit together" text depends on it).
 - [ ] Behind a reverse proxy, add werkzeug's `ProxyFix`, or the rate limit sees every request as coming from the proxy.
