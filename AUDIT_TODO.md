@@ -48,17 +48,17 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 - [x] **B8. Every message re-downloads and re-sends all past chat photos** (`app.py:854-895`): slow and expensive, and *likely* hits Mistral's per-request image limit. *(fixed 2026-10-14: only the chat's last 3 photos are downloaded and sent; they are still re-downloaded on every message, cache them if that shows up as slow)*
 - [x] **B9. Lowering the budget while refining can drop kept items:** the budget optimizer may skip any slot, including locked ones. *(fixed 2026-10-14: kept items are paid for first and never dropped; while refining every requested piece is filled, cheapest if nothing fits; an over-budget outfit card says "Over Budget")*
 - [ ] **B10. Small ones:**
-  - [ ] A request with no `message` crashes with a 500 (`query_handler.py:731`, `ai/src/app.py:220`).
-  - [ ] Deleting a conversation without `conv_id` raises on `int(None)` and returns 500 (`app.py:941`).
+  - [x] A request with no `message` crashes with a 500 (`query_handler.py:731`, `ai/src/app.py:220`). *(400 when there is no text, photo or wardrobe piece)*
+  - [x] Deleting a conversation without `conv_id` raises on `int(None)` and returns 500 (`app.py:941`). *(400)*
   - [x] A non-image file sent to `/api/messages/send` crashes `compress_image` with a 500 instead of a 400. *(fixed 2026-10-14)*
-  - [ ] `/api/chat` accepts `GET` but reads a JSON body, and its docstring is copied from `get_conversations`. Make it `POST` only (the frontend already uses POST).
-  - [ ] `query_embedder.py`'s `__main__` calls `get_text_embedding_vector(test_text)` with one argument instead of four.
-  - [ ] The DB status on `/` is checked once, at startup, not on each request.
-  - [ ] A negative `selected_outfit_index` is accepted (`ai/src/app.py:115-132`).
-  - [ ] A double tap on "Add to wardrobe" can create two pieces (`app.py:498-509` checks, then inserts, without locking).
-  - [ ] A catalogue item with a NULL price crashes outfit assembly (`assemble_outfit.py`, `item['price'] * 100`).
-  - [ ] A product with an empty colour matches every colour filter (`schema.sql`, `ILIKE '%' || schema_color || '%'`).
-  - [ ] Chat titles aren't length-capped (LLM title or rename): anything over 255 characters gives a 500.
+  - [x] `/api/chat` accepts `GET` but reads a JSON body, and its docstring is copied from `get_conversations`. Make it `POST` only (the frontend already uses POST).
+  - [x] `query_embedder.py`'s `__main__` calls `get_text_embedding_vector(test_text)` with one argument instead of four. *(the demo is removed)*
+  - [x] The DB status on `/` is checked once, at startup, not on each request.
+  - [x] A negative `selected_outfit_index` is accepted (`ai/src/app.py:115-132`).
+  - [x] A double tap on "Add to wardrobe" can create two pieces (`app.py:498-509` checks, then inserts, without locking). *(the suggestion is claimed with one UPDATE first, and put back if adding fails)*
+  - [ ] A catalogue item with a NULL price crashes outfit assembly (`assemble_outfit.py`, `item['price'] * 100`). *(constraint in `migrations/2026-10-14_product_constraints.sql`, not applied yet)*
+  - [ ] A product with an empty colour matches every colour filter (`schema.sql`, `ILIKE '%' || schema_color || '%'`). *(same migration, not applied yet)*
+  - [x] Chat titles aren't length-capped (LLM title or rename): anything over 255 characters gives a 500. *(cut to 255 where they are saved)*
 - [ ] **B11. Most Mistral errors aren't retried.** `model_fallback.py` only retries on rate limits (found by searching the error text for "429") and on bad JSON. Check `r.status_code` and also retry on 5xx and `requests.Timeout`.
 
 ## Performance

@@ -90,7 +90,7 @@ backend/
   migrations/             later schema changes, one dated file each
   ai/src/                 the outfit pipeline (see above)
   auth.py                 verifies Supabase Auth tokens
-  ai/test_*.py, test_auth.py, test_rate_limit.py, test_explain.py, test_guest_chats.py, test_chat_photos.py   backend checks
+  ai/test_*.py, test_auth.py, test_rate_limit.py, test_explain.py, test_guest_chats.py, test_chat_photos.py, test_small_fixes.py   backend checks
 frontend/
   src/pages/              Landing, Login, SignUp, Chat, Profile, HowToUse
   src/components/         chat, profile (wardrobe), layout, ui
@@ -206,6 +206,7 @@ venv/bin/python test_rate_limit.py
 venv/bin/python test_explain.py   # loads the app (and CLIP)
 venv/bin/python test_guest_chats.py   # loads the app; uses the real DB and cleans up after itself
 venv/bin/python test_chat_photos.py   # loads the app
+venv/bin/python test_small_fixes.py   # loads the app
 
 # frontend (from frontend/)
 npm test

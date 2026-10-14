@@ -44,8 +44,3 @@ def get_image_embedding_vector(MODEL, PROC, DEVICE, image_bytes: bytes) -> np.nd
     return torch.nn.functional.normalize(feats, dim=-1)[0].cpu().numpy()
 
 #ONLY USED FOR LOCAL AND TARGETED TESTING
-if __name__ == '__main__':
-    # Example usage
-    test_text = "fitted black t-shirt"
-    embedding = get_text_embedding_vector(test_text)
-    print(f"Text Embedding shape: {embedding.shape}")

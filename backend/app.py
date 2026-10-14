@@ -151,14 +151,11 @@ def load_user_from_request(req):
     user = DBManager.get_or_create_auth_user(claims['sub'], claims['email'], display_name(claims))
     return AppUser(user) if user else None
 
-with app.app_context():
-    DBManager.initialize_db_connection()
-    db_status = DBManager.check_db_connection()
-
 @app.route('/')
 def index():
-    """Homepage che mostra lo stato della connessione al database."""
-    if db_status["connected"]:
+    """Homepage che mostra lo stato della connessione al database (checked on each request)."""
+    DBManager.initialize_db_connection()
+    if DBManager.check_db_connection()["connected"]:
         return {
             "message": "Welcome to StyleFinderAI API",
             "status": "running",
@@ -357,29 +354,35 @@ def add_wardrobe_item_from_chat(ai_response_id):
         chat = DBManager.get_chat_photo_for_response(user_id, ai_response_id)
         if not chat or not chat['image_id']:
             return {"error": "Photo not found"}, 404
-        if not chat['wardrobe_suggestion']:
-            return {"error": "Already added to your wardrobe"}, 409  # a double tap doesn't add it twice
+        # Claimed before the slow part: of two taps, only one gets past here; a failure puts it back
+        if not chat['wardrobe_suggestion'] or not DBManager.claim_wardrobe_suggestion(ai_response_id):
+            return {"error": "Already added to your wardrobe"}, 409
+        added = False
+        try:
+            photo = download_image(chat['image_id'])
+            if not photo:
+                return {"error": "Photo not found"}, 404
+            # A copy in the wardrobe bucket: deleting the chat never deletes the piece
+            image = compress_image(photo, max_size=(1024, 1024))
+            image_id = str(uuid.uuid4())
+            if not upload_image(image_id, image, "wardrobe"):
+                return {"error": "Upload failed"}, 502
+            item, error = save_wardrobe_piece(user_id, image_id, image, section, wardrobe_details(data))
+            if error:
+                return error
 
-        photo = download_image(chat['image_id'])
-        if not photo:
-            return {"error": "Photo not found"}, 404
-        # A copy in the wardrobe bucket: deleting the chat never deletes the piece
-        image = compress_image(photo, max_size=(1024, 1024))
-        image_id = str(uuid.uuid4())
-        if not upload_image(image_id, image, "wardrobe"):
-            return {"error": "Upload failed"}, 502
-        item, error = save_wardrobe_piece(user_id, image_id, image, section, wardrobe_details(data))
-        if error:
-            return error
-
-        outfit_indexes = DBManager.add_piece_to_response(
-            ai_response_id, chat['prompt_id'], item['id'], item['main_category'] in SINGLE_ITEM_CATEGORIES)
-        return {
-            "success": True,
-            "item": wardrobe_payload(item),
-            "outfit_piece": wardrobe_candidate(item),  # what the outfits it joined now show
-            "outfit_indexes": outfit_indexes,
-        }, 201
+            outfit_indexes = DBManager.add_piece_to_response(
+                ai_response_id, chat['prompt_id'], item['id'], item['main_category'] in SINGLE_ITEM_CATEGORIES)
+            added = True
+            return {
+                "success": True,
+                "item": wardrobe_payload(item),
+                "outfit_piece": wardrobe_candidate(item),  # what the outfits it joined now show
+                "outfit_indexes": outfit_indexes,
+            }, 201
+        finally:
+            if not added:
+                DBManager.restore_wardrobe_suggestion(ai_response_id, chat['wardrobe_suggestion'])
     except Exception as e:
         return server_error(e)
 
@@ -461,16 +464,10 @@ def get_conversations():
     except Exception as e:
         return server_error(e)
 
-@app.route('/api/chat', methods=['GET', 'POST'])
+@app.route('/api/chat', methods=['POST'])
 @login_required
 def get_messages():
-    """Recupera tutte le conversazioni dell'utente autenticato.
-
-    Non richiede parametri nel body (usa current_user).
-    Risposte:
-      - 401 se non autenticato
-      - 200 con {success: true, conversations: [...]}
-    """
+    """The messages of one of the user's conversations. JSON: `conv_id`. A list of messages ([] if not theirs)."""
     try:
         data = request.get_json() or {}
 
@@ -541,11 +538,17 @@ def send_message():
                 except Exception:
                     return {"error": "Not a valid image"}, 400
 
-        # Convert selected_outfit_index to int if present
+        msg_text = msg_text if isinstance(msg_text, str) else ''
+        if not msg_text.strip() and not image and not wardrobe_item_ids:
+            return {"error": "Empty message"}, 400
+
+        # Convert selected_outfit_index to int if present; a negative one would count from the end
         if selected_outfit_index is not None:
             try:
                 selected_outfit_index = int(selected_outfit_index)
-            except ValueError:
+            except (TypeError, ValueError):
+                selected_outfit_index = None
+            if selected_outfit_index is not None and selected_outfit_index < 0:
                 selected_outfit_index = None
 
         # The AI gets the bytes; the file is uploaded only right before its message is saved (S10)
@@ -795,7 +798,8 @@ def rename_conversation():
     """
     try:
         data = request.get_json() or {}
-        new_title = data.get('title')
+        new_title = data.get('title') if isinstance(data.get('title'), str) else None
+        new_title = new_title and new_title.strip()
         conversation_id = data.get("conv_id")
 
         if not new_title:
@@ -824,7 +828,10 @@ def delete_conversation():
     try:
         data = request.get_json() or {}
         user_id = int(current_user.get_id())
-        conversation_id = int(data.get("conv_id"))
+        try:
+            conversation_id = int(data.get("conv_id"))
+        except (TypeError, ValueError):
+            return {"error": "Missing conv_id"}, 400
         deleted = DBManager.delete_conversation(user_id, conversation_id)
 
         if not deleted:

@@ -412,7 +412,7 @@ class DBManager:
 
             cursor.execute(
                 "INSERT INTO conversations (user_id, title, guest_token, guest_gender) VALUES (%s, %s, %s, %s) RETURNING id",
-                (user_id, title, guest_token, guest_gender)
+                (user_id, title and title[:255], guest_token, guest_gender)  # VARCHAR(255)
             )
             conversation_id = cursor.fetchone()[0]
 
@@ -904,6 +904,31 @@ class DBManager:
             raise
 
     @staticmethod
+    def claim_wardrobe_suggestion(ai_response_id: int) -> bool:
+        """Clears a reply's pending suggestion if it still has one. The row lock makes this True for only one
+        of two simultaneous requests (a double tap), so a piece is added once."""
+        conn = DBManager.get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("UPDATE ai_responses SET wardrobe_suggestion = NULL WHERE id = %s AND wardrobe_suggestion IS NOT NULL",
+                               (ai_response_id,))
+                claimed = cursor.rowcount > 0
+            conn.commit()
+            return claimed
+        except Exception:
+            conn.rollback()
+            raise
+
+    @staticmethod
+    def restore_wardrobe_suggestion(ai_response_id: int, suggestion: dict) -> None:
+        """Puts back a suggestion claimed by a request that then failed, so the card can be tapped again."""
+        conn = DBManager.get_db_connection()
+        conn.rollback()  # the failure may have left the transaction aborted
+        with conn.cursor() as cursor:
+            cursor.execute("UPDATE ai_responses SET wardrobe_suggestion = %s WHERE id = %s", (extras.Json(suggestion), ai_response_id))
+        conn.commit()
+
+    @staticmethod
     def clear_wardrobe_suggestion(user_id: int, ai_response_id: int) -> bool:
         conn = DBManager.get_db_connection()
         try:
@@ -931,7 +956,7 @@ class DBManager:
             cursor = conn.cursor()
             cursor.execute(
                 "UPDATE conversations SET title = %s WHERE id = %s AND user_id = %s",
-                (new_title, conversation_id, user_id)
+                (new_title[:255], conversation_id, user_id)  # VARCHAR(255)
             )
             updated = cursor.rowcount > 0
             conn.commit()
