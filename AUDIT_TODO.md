@@ -73,7 +73,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 - [x] **C2.** Two Supabase clients; `SUPABASE_RLS_KEY` is a secret key that bypasses RLS, so the name is misleading. With psycopg2 that makes three ways into the same DB: the search RPCs could be plain SQL through `DBManager`. *(fixed 2026-10-14: the searches run through `DBManager` (same results, ~300 ms instead of ~1.3 s); one Supabase client left, for Storage and deleting accounts, with one key, `SUPABASE_SECRET_KEY`)*
 - [x] **C3.** Image size caps differ: avatars 512 px, wardrobe 1024 px, chat photos none. *(fixed 2026-10-14: chat photos 1024 px like the wardrobe)*
 - [x] **C4.** Wardrobe pieces get the offensive-content check; avatars don't. *(fixed 2026-10-14: avatars before upload, and name/username when they change, through the same check as wardrobe pieces (`ai/src/moderation.py`). Names set at signup aren't checked yet: add it with the social features)*
-- [ ] **C5.** Error messages and docstrings mix Italian and English.
+- [x] **C5.** Error messages and docstrings mix Italian and English. *(fixed 2026-10-14: all English in the backend and in the frontend's comments; the DB keeps the preference name `Genere`, which the frontend relies on)*
 - [ ] **C6.** Outdated docs:
   - [x] `frontend/.env.example` (Supabase and OpenAI options that aren't used) *(rewritten with the migration)*
   - [ ] `frontend/.github/copilot-instructions.md` (says React 18, Router v6)

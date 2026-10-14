@@ -39,7 +39,7 @@ def upload_image(filename, image: bytes, bucket: str = "images"):
         return get_image_url(file_path, bucket)
 
     except Exception as e:
-        print(f"Errore upload Supabase: {e}")
+        print(f"Supabase upload error: {e}")
         return None
 
 def download_image(image_id: str, bucket: str = "images") -> bytes | None:
@@ -49,7 +49,7 @@ def download_image(image_id: str, bucket: str = "images") -> bytes | None:
         return SUPABASE_CLIENT.storage.from_(bucket).download(file_path)
 
     except Exception as e:
-        print(f"Errore upload Supabase: {e}")
+        print(f"Supabase download error: {e}")
         return None
 
 
@@ -66,21 +66,20 @@ def delete_images(images_id: list[str], bucket: str = "images"):
         return True
 
     except Exception as e:
-        print(f"Errore while deleting Supabase: {e}")
+        print(f"Supabase delete error: {e}")
         return False
 
 def compress_image(image_bytes: bytes, quality: int = 80, max_size: tuple | None = None) -> bytes:
     """
-    Comprime un'immagine, la ridimensiona (opzionale) e la converte in JPEG.
+    Compresses an image to JPEG, optionally shrinking it.
 
     Args:
-        image_bytes (bytes): L'immagine originale in formato bytes.
-        quality (int): La qualità della compressione JPEG (1-100). Default 85.
-        max_size (tuple): Opzionale. Una tupla (larghezza, altezza) per il ridimensionamento massimo.
-                          Mantiene l'aspect ratio. Esempio: (1920, 1080).
+        image_bytes (bytes): the original image.
+        quality (int): JPEG quality (1-100). Default 80.
+        max_size (tuple): optional (width, height) to shrink it to, keeping the aspect ratio, e.g. (1024, 1024).
 
     Returns:
-        bytes: L'immagine compressa e convertita in bytes.
+        bytes: the JPEG.
     """
     try:
         img_stream = io.BytesIO(image_bytes)
@@ -106,6 +105,5 @@ def compress_image(image_bytes: bytes, quality: int = 80, max_size: tuple | None
         return compressed_data
 
     except Exception as e:
-        # Logga l'errore o gestiscilo come preferisci nel contesto Flask
-        print(f"Errore durante la compressione dell'immagine: {e}")
+        print(f"Image compression error: {e}")
         raise e

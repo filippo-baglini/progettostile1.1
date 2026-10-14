@@ -8,10 +8,10 @@ import { showToast } from '../../utils/toast';
 import { useAuth } from '../../context/AuthContext';
 import { triggerSuccessConfetti } from '../../utils/confetti';
 
-// Soglia per mostrare dropdown invece di bottoni
+// Above this many values, a searchable dropdown instead of buttons
 const DROPDOWN_THRESHOLD = 10;
 
-// Preferenze a selezione singola (es. Genere)
+// Single-choice preferences (e.g. Genere, the gender)
 const SINGLE_SELECT_PREFERENCES = ['Genere', 'gender', 'Gender'];
 
 const PreferencesSection = () => {
@@ -19,13 +19,13 @@ const PreferencesSection = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingPrefs, setIsLoadingPrefs] = useState(true);
 
-  // Preferenze dell'utente: { "Brand": "h&m,zara", "Genere": "male" }
+  // The user's preferences: { "Brand": "h&m,zara", "gender": "male" }
   const [preferences, setPreferences] = useState<Record<string, string>>({});
 
-  // Tutte le preferenze disponibili con i loro valori possibili
+  // All available preferences with their possible values
   const [allPreferences, setAllPreferences] = useState<AllPreferencesResponse>({});
 
-  // Calculate selected preferences count (conta i valori totali selezionati)
+  // Number of selected values across all preferences
   const selectedCount = Object.values(preferences)
     .flatMap(v => preferencesService.parseMultiValue(v))
     .length;
@@ -58,7 +58,7 @@ const PreferencesSection = () => {
     loadPreferencesAndOptions();
   }, []);
 
-  // Gestione toggle multiplo per una preferenza
+  // Toggle one value of a multi-choice preference
   const handleToggleValue = (prefName: string, value: string) => {
     setPreferences((prev) => {
       const currentValues = preferencesService.parseMultiValue(prev[prefName]);
@@ -77,10 +77,10 @@ const PreferencesSection = () => {
     });
   };
 
-  // Gestione selezione singola (es. Genere)
+  // Single choice (e.g. Genere)
   const handleSingleSelect = (prefName: string, value: string) => {
     setPreferences((prev) => {
-      // Se già selezionato, deseleziona
+      // Selecting it again clears it
       if (prev[prefName] === value) {
         return { ...prev, [prefName]: '' };
       }
@@ -89,7 +89,7 @@ const PreferencesSection = () => {
     });
   };
 
-  // Gestione input testo per preferenze libere
+  // Free-text preferences
   const handleTextChange = (prefName: string, value: string) => {
     setPreferences((prev) => ({ ...prev, [prefName]: value }));
   };
@@ -102,33 +102,29 @@ const PreferencesSection = () => {
     }
     setIsLoading(true);
     try {
-      // Costruisci l'oggetto completo con TUTTE le preferenze disponibili
-      // Se una preferenza non è selezionata, manda stringa vuota per cancellarla
+      // Send EVERY available preference: the backend replaces them all, so an unselected one goes as "" to clear it
       const completePreferences: Record<string, string> = {};
 
-      // Prima, aggiungi tutte le preferenze esistenti dallo stato attuale
-      // Questo preserva i valori che l'utente ha già settato
+      // First the values already set
       Object.entries(preferences).forEach(([key, value]) => {
-        // Normalizza i nomi delle chiavi (ignora Genere, verrà gestito separatamente)
+        // Genere is skipped: it is sent as "gender" below
         if (key !== 'Genere') {
           completePreferences[key] = value;
         }
       });
 
-      // Poi, assicurati che tutte le preferenze disponibili siano presenti
-      // Se non esistono nello stato, manda stringa vuota per cancellarle
+      // Then every other available preference, empty if not set
       Object.values(allPreferences).forEach((pref) => {
-        // Salta "Genere" perché verrà mappato a "gender"
+        // "Genere" becomes "gender" below
         if (pref.name === 'Genere') return;
 
-        // Se la preferenza non è già stata aggiunta, aggiungi con valore corrente o vuoto
+        // Not added yet: its current value, or empty
         if (!(pref.name in completePreferences)) {
           completePreferences[pref.name] = preferences[pref.name] || '';
         }
       });
 
-      // Il backend richiede sempre "gender" (non "Genere")
-      // Mappa il valore da qualsiasi variante e assicurati che sia presente
+      // The backend always expects "gender" (not "Genere")
       const genderValue = preferences['Genere'] || preferences['gender'] || '';
       completePreferences['gender'] = genderValue;
 
@@ -158,7 +154,7 @@ const PreferencesSection = () => {
     );
   }
 
-  // Ordina le preferenze per ID
+  // Preferences in id order
   const sortedPreferences = Object.entries(allPreferences).sort(([idA], [idB]) => Number(idA) - Number(idB));
 
   return (
@@ -202,7 +198,7 @@ const PreferencesSection = () => {
             </h3>
 
             {pref.values && pref.values.length > 0 ? (
-              // Usa dropdown con ricerca se i valori sono molti, altrimenti bottoni
+              // Many values: a searchable dropdown; otherwise buttons
               pref.values.length > DROPDOWN_THRESHOLD ? (
                 <SearchableMultiSelect
                   values={pref.values}
@@ -250,7 +246,7 @@ const PreferencesSection = () => {
                 </div>
               )
             ) : (
-              // Per preferenze senza valori predefiniti (es. colore, stile), usa un input di testo
+              // No predefined values (e.g. colour): a text input
               <input
                 type="text"
                 value={preferences[pref.name] || ''}

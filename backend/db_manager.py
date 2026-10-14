@@ -12,7 +12,7 @@ from psycopg2.extras import RealDictCursor
 from storage_manager import delete_images, get_image_url
 from ai.src.wardrobe import wardrobe_candidate
 
-# Carica le variabili d'ambiente dal file .env
+# Environment variables from the .env file
 load_dotenv()
 
 USER_FIELDS = ("id", "name", "email", "gender", "username", "avatar_id", "auth_id")
@@ -27,7 +27,7 @@ if _missing:
     raise RuntimeError(f"{', '.join(_missing)} missing from the environment / .env file.")
 
 class DBManager:
-    # Configurazione database PostgreSQL
+    # PostgreSQL settings
     DB_USER = os.getenv('DB_USER')
     DB_PASSWORD = os.getenv('DB_PASSWORD')
     DB_HOST = os.getenv('DB_HOST')
@@ -134,11 +134,7 @@ class DBManager:
 
     @staticmethod
     def get_user_preferences(user_id: int) -> dict:
-        """Recupera le preferenze dell'utente.
-
-        Esegue una query su user_preference e preference table.
-        Ritorna un dict es: {'favorite_color': 'Red', 'gender': 'M'}
-        """
+        """The user's saved preferences by their DB name, e.g. {'Color': 'red', 'Brand': 'Nike, Zara'}."""
 
         query = """
                 SELECT p.name, up.value
@@ -157,7 +153,7 @@ class DBManager:
 
     @staticmethod
     def update_user_profile(user_id: int, new_name: str, new_username: str) -> bool:
-        """Aggiorna nome e username. Un username già preso solleva psycopg2.errors.UniqueViolation."""
+        """Updates name and username. A username already taken raises psycopg2.errors.UniqueViolation."""
         try:
             conn = DBManager.get_db_connection()
             cursor = conn.cursor()
@@ -175,7 +171,7 @@ class DBManager:
 
     @staticmethod
     def set_user_avatar(user_id: int, avatar_id: str):
-        """Salva il nuovo avatar e ritorna l'id del precedente (da eliminare dallo storage) o None."""
+        """Saves the new avatar and returns the previous one's id (to delete from storage), or None."""
         conn = DBManager.get_db_connection()
         try:
             with conn.cursor() as cursor:
@@ -192,19 +188,18 @@ class DBManager:
 
     @staticmethod
     def update_user_preferences(user_id: int, new_preferences: dict) -> bool:
-        # Estrai gender se presente (è un campo separato nella tabella users)
-        # Usa un sentinel per distinguere "non passato" da "passato come vuoto"
+        # Gender lives on users, not in user_preference.
+        # A sentinel tells "not sent" apart from "sent empty" (which clears it)
         gender_not_provided = object()
         gender = new_preferences.pop("gender", gender_not_provided)
 
-        # Prepariamo i dati - FILTRA i valori vuoti per non inserire preferenze vuote
+        # Empty values are left out: no empty preferences are saved
         values_list = [(user_id, k, str(v)) for k, v in new_preferences.items() if v and str(v).strip()]
 
-        # Query 1: Cancellazione totale delle preferenze dell'utente
+        # Every preference is replaced: delete them all, then insert the new ones
         delete_query = "DELETE FROM user_preference WHERE user_id = %s"
 
-        # Query 2: Inserimento massivo (senza ON CONFLICT, dato che abbiamo pulito)
-        # Manteniamo la JOIN per risolvere il preference_id dal nome
+        # No ON CONFLICT needed after the delete; the JOIN turns the preference name into its id
         insert_query = """
                        INSERT INTO user_preference (user_id, preference_id, value)
                        SELECT data.uid, p.id, data.p_val
@@ -217,10 +212,8 @@ class DBManager:
             conn = DBManager.get_db_connection()
             cursor = conn.cursor()
 
-            # 1. Eseguiamo la DELETE
             cursor.execute(delete_query, (user_id,))
 
-            # 2. Eseguiamo la INSERT solo se ci sono nuove preferenze da inserire
             if values_list:
                 psycopg2.extras.execute_values(
                     cursor,
@@ -230,9 +223,8 @@ class DBManager:
                     page_size=100
                 )
 
-            # Aggiorna gender solo se è stato passato esplicitamente (anche se vuoto per resettarlo)
+            # Gender only if it was sent; an empty one is stored as NULL
             if gender is not gender_not_provided:
-                # Se gender è stringa vuota, impostiamo NULL nel DB
                 cursor.execute("UPDATE users SET gender = %s WHERE id = %s", (gender if gender else None, user_id))
 
             conn.commit()
@@ -246,7 +238,7 @@ class DBManager:
 
     @staticmethod
     def get_user_by_id(user_id: int):
-        """Recupera utente per id. Ritorna dict con USER_FIELDS oppure None."""
+        """The user with this id as a dict of USER_FIELDS, or None."""
         try:
             conn = DBManager.get_db_connection()
             cursor = conn.cursor()
@@ -295,10 +287,7 @@ class DBManager:
 
     @staticmethod
     def get_user_conversations(user_id: int):
-        """Recupera tutte le conversazioni di un utente.
-
-        Ritorna lista di dict con le conversazioni dell'utente.
-        """
+        """All of a user's conversations, as a list of dicts."""
         try:
             conn = DBManager.get_db_connection()
             cursor = conn.cursor()
@@ -321,10 +310,7 @@ class DBManager:
 
     @staticmethod
     def get_chat_messages(user_id, conversation_id)->list[dict]:
-        """
-        Recupera la cronologia chat. Per i messaggi dell'AI, ricostruisce l'array 'outfits'
-        con i dettagli completi.
-        """
+        """The chat's messages in order; the AI's replies come with their full 'outfits'."""
         conn = DBManager.get_db_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 
@@ -427,7 +413,7 @@ class DBManager:
                 ORDER BY created_at; \
                 """
 
-        # Eseguiamo la query passando i parametri per entrambe le parti della UNION
+        # The parameters for both halves of the UNION
         cursor.execute(query, (conversation_id, user_id, conversation_id, user_id))
 
         results = cursor.fetchall()
@@ -459,11 +445,8 @@ class DBManager:
     @staticmethod
     def create_conversation_with_message(user_id: int | None, title: str, message_text: str, image_id = None, wardrobe_item_ids=None,
                                          guest_token: str | None = None, guest_gender: str | None = None):
-        """
-        Crea una nuova conversazione (di un utente, o di un ospite con guest_token) e inserisce il primo messaggio.
-
-        Ritorna l'id della conversazione creata.
-        """
+        """Creates a conversation (a user's, or a guest's with guest_token) with its first message.
+        Returns the new conversation's id, or None if saving failed."""
         conn = None
         try:
             conn = DBManager.get_db_connection()
@@ -486,28 +469,20 @@ class DBManager:
             return conversation_id
 
         except Exception as e:
-            # Se qualcosa va storto (es. errore nel messaggio), annulla TUTTO (rollback)
             if conn:
-                conn.rollback()
-            # È buona norma loggare o stampare l'errore per capire cosa è successo
-            print(f"Errore durante la creazione della conversazione: {e}")
+                conn.rollback()  # neither the conversation nor the message is kept
+            print(f"Error creating the conversation: {e}")
             return None
 
     @staticmethod
     def add_ai_response(conversation_id, response_data, wardrobe_suggestion=None):
-        """
-        Salva la risposta dell'AI e i suggerimenti di outfit nel database.
-
-        Args:
-            conversation_id (int): L'ID della conversazione.
-            response_data (dict): Il dizionario contenente i dati della risposta (formato JSON).
-        """
+        """Saves the AI's reply and its outfits (one outfit_suggestion row per item). Returns the reply's id.
+        response_data: the outfit pipeline's result ('message', 'outfits', ...)."""
         conn = None
         try:
             conn = DBManager.get_db_connection()
             cursor = conn.cursor()
 
-            # 1. Estrai i dati dal dizionario
             short_message = response_data.get('message')
             if not short_message:
                 short_message = "Here are your outfit options."
@@ -525,7 +500,6 @@ class DBManager:
                 # Just save message if no outfits
                 pass
 
-            # 2. Inserisci la risposta nella tabella ai_responses
             insert_response_query = """
                                     INSERT INTO ai_responses (conversation_id, short_message, explanation, status, wardrobe_suggestion)
                                     VALUES (%s, %s, %s, 'COMPLETED', %s)
@@ -550,7 +524,7 @@ class DBManager:
                         else:
                             product_id, wardrobe_item_id = item_id, None
 
-                        # Inserisci il collegamento in outfit_suggestion con outfit_index e BUDGET
+                        # One row per item, with its outfit's index and budget
                         insert_suggestion_query = """
                                                   INSERT INTO outfit_suggestion (ai_response_id, product_id, wardrobe_item_id, outfit_index, budget)
                                                   VALUES (%s, %s, %s, %s, %s)
@@ -569,8 +543,8 @@ class DBManager:
 
         except psycopg2.Error as e:
             if conn:
-                conn.rollback() # Annulla tutto se c'è un errore
-            print(f"Errore Database: {e}")
+                conn.rollback()  # nothing of the reply is kept
+            print(f"Database error: {e}")
             raise e
 
     @staticmethod
@@ -580,8 +554,6 @@ class DBManager:
             conn = DBManager.get_db_connection()
             cursor = conn.cursor()
 
-            # 2. Inserisci la risposta nella tabella ai_responses
-            # Usiamo RETURNING id per ottenere l'ID generato auto-increment
             insert_response_query = """
                                     INSERT INTO ai_responses (conversation_id, short_message, status, budget_options, outfit_generation_options, wardrobe_suggestion)
                                     VALUES (%s, %s, %s, %s, %s, %s)
@@ -602,8 +574,8 @@ class DBManager:
 
         except psycopg2.Error as e:
             if conn:
-                conn.rollback() # Annulla tutto se c'è un errore
-            print(f"Errore Database: {e}")
+                conn.rollback()  # nothing of the reply is kept
+            print(f"Database error: {e}")
             raise e
 
 
@@ -680,8 +652,7 @@ class DBManager:
 
     @staticmethod
     def add_message_to_conversation(conversation_id: int, text: str, image_id=None, wardrobe_item_ids=None):
-        """Aggiunge un messaggio a una conversazione: il chiamante ha già verificato che sia del richiedente.
-        Ritorna True se l'operazione ha successo, False altrimenti."""
+        """Adds a user message to a conversation; the caller has checked it is theirs. False if saving failed."""
         conn = None
         try:
             conn = DBManager.get_db_connection()
@@ -699,15 +670,13 @@ class DBManager:
         except Exception as e:
             if conn:
                 conn.rollback()
-            print(f"Errore durante l'inserimento del messaggio: {e}")
+            print(f"Error saving the message: {e}")
             return False
 
     @staticmethod
     def delete_conversation(user_id: int, conversation_id: int) -> bool:
-        """Elimina una conversazione dell'utente e le relative immagini dallo storage.
-
-        Ritorna True se eliminata, False se non trovata o non appartiene all'utente.
-        """
+        """Deletes one of the user's conversations and its photos in storage.
+        False if it doesn't exist or isn't theirs."""
         conn = None
         try:
             conn = DBManager.get_db_connection()
@@ -741,23 +710,20 @@ class DBManager:
             return deleted
 
         except Exception as e:
-            print(f"Errore durante la cancellazione della conversazione: {e}")
+            print(f"Error deleting the conversation: {e}")
             if conn:
                 conn.rollback()
             raise
 
     @staticmethod
     def delete_all_user_conversations(user_id: int) -> int:
-        """Elimina tutte le conversazioni di un utente e le relative immagini dallo storage.
-
-        Ritorna il numero di conversazioni eliminate.
-        """
+        """Deletes all of a user's conversations and their photos in storage. Returns how many were deleted."""
         conn = None
         try:
             conn = DBManager.get_db_connection()
             cursor = conn.cursor()
 
-            # 1. Recupera tutte le immagini delle conversazioni dell'utente
+            # 1. The photos of all the user's conversations
             cursor.execute(
                 """
                 SELECT p.image_id
@@ -770,7 +736,7 @@ class DBManager:
 
             images_to_delete = [str(row[0]) for row in cursor.fetchall()]
 
-            # 2. Elimina tutte le conversazioni dell'utente (CASCADE elimina prompts e risposte)
+            # 2. The conversations (CASCADE deletes their prompts and replies)
             cursor.execute(
                 "DELETE FROM conversations WHERE user_id = %s",
                 (user_id,)
@@ -780,30 +746,27 @@ class DBManager:
             conn.commit()
             cursor.close()
 
-            # 3. Solo dopo il commit: elimina le immagini dallo storage
+            # 3. Only after the commit: the photos in storage
             if images_to_delete:
                 delete_images(images_to_delete)
 
             return deleted_count
 
         except Exception as e:
-            print(f"Errore durante la cancellazione di tutte le conversazioni: {e}")
+            print(f"Error deleting all conversations: {e}")
             if conn:
                 conn.rollback()
             raise
 
     @staticmethod
     def delete_user(user_id: int) -> bool:
-        """Elimina un utente e tutti i suoi dati associati.
-
-        Ritorna True se eliminato, False se non trovato.
-        """
+        """Deletes a user and all their data, photos in storage included. False if not found."""
         conn = None
         try:
             conn = DBManager.get_db_connection()
             cursor = conn.cursor()
 
-            # 1. Immagini di tutte le conversazioni dell'utente (eliminate dallo storage dopo il commit)
+            # 1. The photos of all the user's conversations (deleted from storage after the commit)
             cursor.execute(
                 """
                 SELECT p.image_id
@@ -817,7 +780,7 @@ class DBManager:
             cursor.execute("SELECT image_id FROM wardrobe_items WHERE user_id = %s", (user_id,))
             wardrobe_images = [row[0] for row in cursor.fetchall()]
 
-            # 2. Elimina utente: ON DELETE CASCADE rimuove preferenze, conversazioni, prompt, risposte e guardaroba
+            # 2. The user: ON DELETE CASCADE removes preferences, conversations, prompts, replies and wardrobe
             cursor.execute("DELETE FROM users WHERE id = %s RETURNING avatar_id", (user_id,))
             avatar = cursor.fetchone()
 
@@ -835,12 +798,12 @@ class DBManager:
             return deleted
 
         except Exception as e:
-            print(f"Errore durante l'eliminazione dell'utente {user_id}: {e}")
+            print(f"Error deleting user {user_id}: {e}")
             if conn:
                 conn.rollback()
             raise
 
-    # --- Guardaroba: ogni query filtra per user_id, così un utente tocca solo i propri capi ---
+    # --- Wardrobe: every query filters by user_id, so a user only ever touches their own pieces ---
 
     @staticmethod
     def get_wardrobe(user_id: int) -> list[dict]:
@@ -876,7 +839,7 @@ class DBManager:
 
     @staticmethod
     def update_wardrobe_item(user_id: int, item_id: int, section: str, main_category: str, name, color, brand) -> dict | None:
-        """Ritorna il capo aggiornato, o None se non esiste o non è dell'utente."""
+        """The updated piece, or None if it doesn't exist or isn't the user's."""
         conn = DBManager.get_db_connection()
         try:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -894,7 +857,7 @@ class DBManager:
 
     @staticmethod
     def delete_wardrobe_item(user_id: int, item_id: int) -> str | None:
-        """Ritorna l'image_id del capo eliminato (da togliere dallo storage), o None se non trovato."""
+        """The deleted piece's image_id (to remove from storage), or None if not found."""
         conn = DBManager.get_db_connection()
         try:
             with conn.cursor() as cursor:
@@ -1006,10 +969,7 @@ class DBManager:
 
     @staticmethod
     def rename_conversation(user_id: int, conversation_id: int, new_title: str) -> bool:
-        """Rinomina il titolo di una conversazione dell'utente.
-
-        Ritorna True se aggiornata, False se non trovata o non appartiene all'utente.
-        """
+        """Renames one of the user's conversations. False if it doesn't exist or isn't theirs."""
         try:
             conn = DBManager.get_db_connection()
             cursor = conn.cursor()
@@ -1027,17 +987,13 @@ class DBManager:
 
     @staticmethod
     def preferences():
+        """Every preference with the values to choose from: {id: {"name": ..., "values": [...]}}.
+        Values are filled in for brand, material and gender; the others (colour) are free text."""
         conn = DBManager.get_db_connection()
-        # Usa un cursore dizionario se disponibile (es. psycopg2.extras.RealDictCursor)
-        # altrimenti usa quello standard
         with conn.cursor() as cursor:
-
-            # 1. Recupera le preferenze base
             cursor.execute("SELECT id, name FROM preferences")
             rows = cursor.fetchall()
 
-            # 2. Struttura base uniforme per tutti gli elementi
-            # Ogni elemento sarà un dizionario con "name" e "values" (anche se vuoto)
             preferences = {}
             for row in rows:
                 pref_id = row[0]
@@ -1054,12 +1010,12 @@ class DBManager:
                         brands = [row[0] for row in cursor.fetchall()]
                         pref_data["values"] = brands
 
-                    case 3: # Materiali
+                    case 3: # Material
                         cursor.execute("SELECT name FROM materials")
                         materials = [row[0] for row in cursor.fetchall()]
                         pref_data["values"] = materials
 
-                    case 4: # Genere
+                    case 4: # Gender ('Genere' in the DB)
                         pref_data["values"] = ["male", "female", "non-binary"]
 
             return preferences

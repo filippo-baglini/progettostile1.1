@@ -26,5 +26,5 @@ def generate_title(prompt: str) -> str:
         return str(response.text).strip().strip('*"\' ')
 
     except Exception as e:
-        print(f"Si è verificato un errore: {e}")
+        print(f"Title generation error: {e}")
         raise e

@@ -85,7 +85,7 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
     user_preferences = {f"favorite_{name.lower()}": value
                         for name, value in DBManager.get_user_preferences(user_id_key).items()} if user_id_key else None
 
-    # 1. Recupera items dall'outfit precedente (se esiste) per il refinement
+    # 1. Items of the previous outfit (if any), for refinement
     target_outfit_items = []
     
     # Logic to find the target outfit based on selection

@@ -1,6 +1,6 @@
 import api from './api';
 
-// Nuova struttura delle preferenze dal backend
+// Preferences as the backend sends them
 export interface PreferenceOption {
   id: number;
   name: string;
@@ -10,7 +10,7 @@ export interface PreferenceOption {
 export type AllPreferencesResponse = Record<string, PreferenceOption>;
 
 export const preferencesService = {
-  // Get user preferences (ritorna es. { "Brand": "h&m,zara", "Genere": "male" })
+  // Get user preferences (e.g. { "Brand": "h&m,zara", "gender": "male" })
   getPreferences: async (): Promise<Record<string, string> | null> => {
     try {
       const response = await api.get<{ success: boolean; user: { preferences: Record<string, string> } }>('/user/session');
@@ -21,13 +21,13 @@ export const preferencesService = {
     }
   },
 
-  // Update user preferences (invia es. { "Brand": "h&m,zara", "Genere": "male" })
+  // Update user preferences (e.g. { "Brand": "h&m,zara", "gender": "male" })
   updatePreferences: async (preferences: Record<string, string>): Promise<boolean> => {
     const response = await api.put<{ success: boolean }>('/preferences', preferences);
     return response.data.success;
   },
 
-  // Get all available preferences con i loro valori possibili
+  // Get all available preferences with their possible values
   getAllPreferences: async (): Promise<AllPreferencesResponse> => {
     try {
       const response = await api.get<any>('/preferences/all');
@@ -46,7 +46,7 @@ export const preferencesService = {
         }, {} as AllPreferencesResponse);
       }
 
-      // Assicurati che "Genere" esista sempre (id=4)
+      // "Genere" (gender, id 4) is always there
       const hasGenere = Object.values(prefsData).some(
         (p: any) => p.name === 'Genere' || p.name === 'gender'
       );

@@ -154,7 +154,7 @@ def load_user_from_request(req):
 
 @app.route('/')
 def index():
-    """Homepage che mostra lo stato della connessione al database (checked on each request)."""
+    """API status, with the database connection checked on each request."""
     DBManager.initialize_db_connection()
     if DBManager.check_db_connection()["connected"]:
         return {
@@ -175,12 +175,11 @@ def index():
 def check_session():
     """The logged-in user (from the Supabase token in the Authorization header).
 
-    Risposte:
-      - 401 se il token manca o non è valido
-      - 200 se valido {success: true, user: {...}}
+    Responses:
+      - 401 if the token is missing or invalid
+      - 200 {success: true, user: {...}}
     """
     try:
-        # Recupero completo utente dal DB se servono preferenze
         user_db = DBManager.get_user_by_id(int(current_user.get_id()))
         return {"success": True, "user": user_payload(user_db) if user_db else {}}, 200
     except Exception as e:
@@ -189,17 +188,16 @@ def check_session():
 @app.route('/api/user/delete', methods=['DELETE'])
 @login_required
 def delete_account():
-    """Elimina l'account dell'utente autenticato.
+    """Deletes the logged-in user's account. No body.
 
-    Non richiede parametri nel body (usa current_user).
-    Risposte:
-      - 401 se non autenticato
-      - 200 con {success: true}
+    Responses:
+      - 401 if not logged in
+      - 200 {success: true}
     """
     try:
         user_id = int(current_user.get_id())
         if not DBManager.delete_user(user_id):
-            return {"error": "Utente non trovato"}, 404
+            return {"error": "User not found"}, 404
         # After our data and photos are gone: the login itself goes last
         delete_auth_user(current_user.auth_id)
         return {"success": True}, 200
@@ -210,21 +208,21 @@ def delete_account():
 @login_required
 def update_profile():
     """
-    Endpoint per aggiornare il profilo (nome e username).
-    Richiede JSON: { "name": "...", "username": "..." } (username opzionale: se manca resta quello attuale)
-    Ritorna: { "success": true, "user": {...} }, 409 se lo username è già preso
+    Updates the profile's name and username.
+    JSON: { "name": "...", "username": "..." } (username optional: if missing, the current one stays)
+    Returns: { "success": true, "user": {...} }, or 409 if the username is taken
     """
     try:
         data = request.get_json() or {}
         new_name = (data.get('name') or '').strip()
 
         if not new_name:
-            return {"error": "Nome mancante"}, 400
+            return {"error": "Missing name"}, 400
 
         user_id = int(current_user.get_id())
         user_db = DBManager.get_user_by_id(user_id)
         if not user_db:
-            return {"error": "Utente non trovato"}, 404
+            return {"error": "User not found"}, 404
 
         new_username = (data.get('username') or user_db['username']).strip().lower()
         # The generated default (with '-') is kept as is; a new one must follow the rules
@@ -250,7 +248,7 @@ def update_profile():
 @app.route('/api/user/avatar', methods=['POST'])
 @login_required
 def upload_avatar():
-    """Carica la foto profilo (multipart, campo `image`) e ritorna l'utente aggiornato."""
+    """Uploads the profile picture (multipart, field `image`) and returns the updated user."""
     try:
         avatar_id, _, error = store_uploaded_image("avatars", (512, 512), check=lambda image: check_profile(image=image))
         if error:
@@ -271,7 +269,7 @@ def store_uploaded_image(bucket, max_size, check=None):
     `check(jpeg)`: a refusal message or None, run before the upload so a refused photo never reaches storage."""
     image_uploaded = request.files.get('image')
     if not image_uploaded:
-        return None, None, ({"error": "Immagine mancante"}, 400)
+        return None, None, ({"error": "Missing image"}, 400)
     try:
         image = compress_image(image_uploaded.read(), max_size=max_size)
     except Exception:
@@ -316,7 +314,7 @@ def get_wardrobe():
 @app.route('/api/wardrobe', methods=['POST'])
 @login_required
 def add_wardrobe_item():
-    """Multipart: `image`, `section`, opzionali `name`, `color`, `brand`. Ritorna il capo creato."""
+    """Multipart: `image`, `section`, optional `name`, `color`, `brand`. Returns the new piece."""
     try:
         section = request.form.get('section')
         if section not in WARDROBE_SECTIONS:
@@ -412,7 +410,7 @@ def dismiss_wardrobe_suggestion(ai_response_id):
 @app.route('/api/wardrobe/<int:item_id>', methods=['PUT'])
 @login_required
 def update_wardrobe_item(item_id):
-    """JSON: `section`, `name`, `color`, `brand` (i dettagli mancanti vengono svuotati)."""
+    """JSON: `section`, `name`, `color`, `brand` (details left out are cleared)."""
     try:
         data = request.get_json() or {}
         section = data.get('section')
@@ -460,12 +458,11 @@ def update_user_preferences():
 @app.route('/api/conversations', methods=['GET'])
 @login_required
 def get_conversations():
-    """Recupera tutte le conversazioni dell'utente autenticato.
+    """All the logged-in user's conversations. No body.
 
-    Non richiede parametri nel body (usa current_user).
-    Risposte:
-      - 401 se non autenticato
-      - 200 con {success: true, conversations: [...]}
+    Responses:
+      - 401 if not logged in
+      - 200 {success: true, conversations: [...]}
     """
     try:
         user_id = int(current_user.get_id())
@@ -798,14 +795,14 @@ def load_messages(conv_id, user_id):
 @app.route('/api/conversations/rename', methods=['PUT', 'POST'])
 @login_required
 def rename_conversation():
-    """Rinomina una conversazione dell'utente autenticato.
+    """Renames one of the logged-in user's conversations.
 
-    Body JSON: {"title": "Nuovo titolo"}
-    Risposte:
-      - 401 se non autenticato
-      - 400 se manca il titolo
-      - 404 se conversazione non trovata o non appartiene all'utente
-      - 200 con {success: true}
+    JSON: {"conv_id": ..., "title": "New title"}
+    Responses:
+      - 401 if not logged in
+      - 400 if the title is missing
+      - 404 if the conversation doesn't exist or isn't the user's
+      - 200 {success: true}
     """
     try:
         data = request.get_json() or {}
@@ -814,13 +811,13 @@ def rename_conversation():
         conversation_id = data.get("conv_id")
 
         if not new_title:
-            return {"error": "Titolo mancante"}, 400
+            return {"error": "Missing title"}, 400
 
         user_id = int(current_user.get_id())
         updated = DBManager.rename_conversation(user_id, conversation_id, new_title)
 
         if not updated:
-            return {"error": "Conversazione non trovata"}, 404
+            return {"error": "Conversation not found"}, 404
 
         return {"success": True}, 200
     except Exception as e:
@@ -829,12 +826,13 @@ def rename_conversation():
 @app.route('/api/conversations/delete', methods=['DELETE'])
 @login_required
 def delete_conversation():
-    """Elimina una conversazione dell'utente autenticato.
+    """Deletes one of the logged-in user's conversations. JSON: {"conv_id": ...}
 
-    Risposte:
-      - 401 se non autenticato
-      - 404 se conversazione non trovata o non appartiene all'utente
-      - 200 con {success: true}
+    Responses:
+      - 401 if not logged in
+      - 400 if conv_id is missing
+      - 404 if the conversation doesn't exist or isn't the user's
+      - 200 {success: true}
     """
     try:
         data = request.get_json() or {}
@@ -846,7 +844,7 @@ def delete_conversation():
         deleted = DBManager.delete_conversation(user_id, conversation_id)
 
         if not deleted:
-            return {"error": "Conversazione non trovata"}, 404
+            return {"error": "Conversation not found"}, 404
 
         return {"success": True}, 200
     except Exception as e:
@@ -855,11 +853,11 @@ def delete_conversation():
 @app.route('/api/conversations/delete-all', methods=['DELETE'])
 @login_required
 def delete_all_conversations():
-    """Elimina tutte le conversazioni dell'utente autenticato.
+    """Deletes all the logged-in user's conversations.
 
-    Risposte:
-      - 401 se non autenticato
-      - 200 con {success: true, deleted_count: N}
+    Responses:
+      - 401 if not logged in
+      - 200 {success: true, deleted_count: N}
     """
     try:
         user_id = int(current_user.get_id())
