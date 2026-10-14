@@ -1,3 +1,4 @@
+import logging
 import json
 from google.genai import types
 
@@ -718,7 +719,7 @@ def generate_outfit_plan(
                 img_bytes = past_images[img_id]
                 message_parts.append(types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg"))
             else:
-                print(f"Warning: Bytes for image {img_id} not found in past_images.")
+                logging.warning(f"Photo {img_id} not among the past images sent")
 
         gemini_history.append({
             "role": msg["role"],
@@ -738,7 +739,7 @@ def generate_outfit_plan(
             )
             current_turn_parts.append(img_part)
         except Exception as e:
-            print(f"Error packing image data: {e}")
+            logging.error(f"Error packing image data: {e}")
 
     # Wardrobe: the photos of picked pieces don't count as 'has_images' below. The image prompt would ask
     # whether to copy the look; here the user already said what they want: the rest of the outfit.
@@ -762,7 +763,6 @@ def generate_outfit_plan(
     # --- 4. CHIAMATA API ---
     # One call: the model either asks a question or returns the outfit plan straight away
     try:
-        print("DEBUG: Calling generate_content (with fallback)...")
         response = generate_content_with_fallback(
             contents=gemini_history,
             config=types.GenerateContentConfig(
@@ -773,18 +773,15 @@ def generate_outfit_plan(
             )
         )
         data = response.parsed
-        print(f"DEBUG: Response parsed. Status: {data.get('status')}")
-    except Exception as e:
-        print(f"Error during outfit plan generation: {e}")
-        import traceback
-        traceback.print_exc()
+        logging.info(f"Planner status: {data.get('status')}")
+    except Exception:
+        logging.exception("Error during outfit plan generation")
         return {'status': 'Error', 'message': "Sorry, something went wrong while preparing your outfit. Please try again."}
 
     if data.get('status') == 'AWAITING_INPUT':
         return {
             'status': 'AWAITING_INPUT',
             'prompt_to_user': data.get('missing_info'),
-            'history': chat_history,
             'conversation_title': data.get('conversation_title'),
             'budget_options': data.get('budget_options'),
             'owned_piece': clean_owned_piece(data.get('owned_piece'), image_data is not None, new_user_query),
@@ -807,7 +804,6 @@ def generate_outfit_plan(
             'modifications': data.get('modifications') or [],
             'results_message': data.get('results_message'),
             'no_results_message': data.get('no_results_message'),
-            'history': chat_history,
             'conversation_title': data.get('conversation_title'),
             'owned_piece': clean_owned_piece(data.get('owned_piece'), image_data is not None, new_user_query)
         }

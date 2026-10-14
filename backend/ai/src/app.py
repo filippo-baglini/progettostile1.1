@@ -113,14 +113,12 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
         if outfits and len(outfits) > target_index:
             target_outfit_items = outfits[target_index].get('outfit', [])
             target_outfit_budget = outfits[target_index].get('budget')
-            print(f"DEBUG: Using items from message {target_outfit_message.get('message_id')}, outfit index {target_index} for refinement. Budget: {target_outfit_budget}")
+            logging.info(f"Refining message {target_outfit_message.get('message_id')}, outfit index {target_index}, budget {target_outfit_budget}")
         else:
-             print(f"DEBUG: Target outfit index {target_index} not found in message {target_outfit_message.get('message_id')}.")
-    else:
-        print("DEBUG: No suitable previous outfit found for refinement.")
+            logging.info(f"Outfit index {target_index} not in message {target_outfit_message.get('message_id')}")
 
     # 1. USER'S QUERY HANDLING
-    logging.info("--- Sending request to Gemini for state transition... ---")
+    logging.info("Asking the planner...")
 
     # Inject budget context if refining
     final_prompt = user_prompt
@@ -168,7 +166,6 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
         return {
             "status": "AWAITING_INPUT",
             "prompt_to_user": prompt_to_user,
-            "chat_history": response.get('history', chat_history),
             "conversation_title": response.get('conversation_title'),
             "budget_options": budget_options,
             "outfit_generation_options": outfit_generation_options,
@@ -183,24 +180,14 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
     outfits_list = response.get('outfits')
     
     if not outfits_list and refinement_type != 'REFINE_CURRENT':
-        # Fallback for backward compatibility or if LLM messes up
-        single_outfit = response.get('outfit_plan')
-        if single_outfit:
-            outfits_list = [single_outfit]
-        else:
-            logging.error("Either LLM returned READY_TO_GENERATE but 'outfits' is missing or LLM returned an unexpected status")
-            return {"status": "Error", "message": "Failed to generate an outfit plan after successful budget confirmation.", "status_code": 500}
+        logging.error("The planner returned READY_TO_GENERATE without any outfit")
+        return {"status": "Error", "message": "Failed to generate an outfit plan after successful budget confirmation.", "status_code": 500}
     
     # Ensure the loop runs exactly once for REFINE_CURRENT even if outfits is empty
     if not outfits_list and refinement_type == 'REFINE_CURRENT':
          outfits_list = [{}] # Dummy empty plan to trigger the loop iteration
 
-    budget = response.get('max_budget')
-    if not budget:
-        budget = response.get('budget')
-
-    if not budget or budget == 0:
-        budget = None
+    budget = response.get('budget') or None  # the planner's max_budget; 0 means no limit
     user_constraints = response.get('hard_constraints', {})
 
     logging.info(f"LLM is READY_TO_GENERATE. Global Budget: {budget}. Generating {len(outfits_list)} outfits.")
@@ -214,28 +201,11 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
         is_explicit_request = any(k in user_prompt.lower() for k in keywords)
         
         if not is_explicit_request:
-            logging.info("DEBUG: Refinement (REFINE_CURRENT) detected without explicit option request. Enforcing single outfit.")
+            logging.info("Refinement without an explicit request for options: keeping a single outfit.")
             outfits_list = outfits_list[:1]
 
-    last_outfit = None
-    # Use the target_outfit_items we identified at the start of the function
-    if target_outfit_items:
-         last_outfit = target_outfit_items
-         logging.info(f"DEBUG: last_outfit set for locking: {len(last_outfit)} items.")
-    else:
-         # Fallback: check if response has it (unlikely but safe)
-         if response.get('previous_outfit_items'):
-             last_outfit = response.get('previous_outfit_items')
-             logging.info(f"DEBUG: last_outfit set from response: {len(last_outfit)} items.")
-         else:
-             logging.info("DEBUG: No previous outfit items found for locking.")
-
-    # 2. Setup locking logic
-    if last_outfit:
-        # The DB stores it as a list of dicts with 'main_category'
-        if isinstance(last_outfit, dict) and 'outfit' in last_outfit:
-             last_outfit = last_outfit['outfit']
-        logging.info(f"DEBUG: Found last outfit with {len(last_outfit)} items.")
+    # The outfit being refined: its items can be kept (locked) or replaced
+    last_outfit = target_outfit_items or None
 
     # 3. Initialize Global Diversity Tracker
     global_used_item_ids = set()
@@ -256,10 +226,10 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
                  
                  if is_budget_query and budget and budget > 0 and budget != target_outfit_budget:
                      current_outfit_budget = budget
-                     logging.info(f"DEBUG: Override! User matched budget keywords and global budget {budget} != old {target_outfit_budget}. Using new global budget.")
+                     logging.info(f"Override! User matched budget keywords and global budget {budget} != old {target_outfit_budget}. Using new global budget.")
                  else:
                      current_outfit_budget = target_outfit_budget
-                     logging.info(f"DEBUG: Using preserved budget {current_outfit_budget} from previous outfit for refinement.")
+                     logging.info(f"Using preserved budget {current_outfit_budget} from previous outfit for refinement.")
             else:
                  current_outfit_budget = budget
         if only_wardrobe:
@@ -481,7 +451,6 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
         'status': 'COMPLETED',
         'message': response.get('results_message') or "Here are your outfit options.",
         'status_code': 200,
-        'chat_history': response.get('history', chat_history),
         'conversation_title': response.get('conversation_title'),
         'outfits': final_outfits_results,
         'owned_piece': response.get('owned_piece'),

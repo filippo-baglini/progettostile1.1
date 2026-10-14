@@ -1,3 +1,4 @@
+import logging
 import os
 import threading
 import time
@@ -471,7 +472,7 @@ class DBManager:
         except Exception as e:
             if conn:
                 conn.rollback()  # neither the conversation nor the message is kept
-            print(f"Error creating the conversation: {e}")
+            logging.error(f"Error creating the conversation: {e}")
             return None
 
     @staticmethod
@@ -489,16 +490,7 @@ class DBManager:
             
             explanation = response_data.get('explanation')
             
-            # Handle new 'outfits' structure
             outfits_list = response_data.get('outfits')
-            
-            # Fallback for legacy single outfit
-            if not outfits_list and response_data.get('outfit'):
-                outfits_list = [{'outfit': response_data.get('outfit')}]
-
-            if not outfits_list:
-                # Just save message if no outfits
-                pass
 
             insert_response_query = """
                                     INSERT INTO ai_responses (conversation_id, short_message, explanation, status, wardrobe_suggestion)
@@ -544,7 +536,7 @@ class DBManager:
         except psycopg2.Error as e:
             if conn:
                 conn.rollback()  # nothing of the reply is kept
-            print(f"Database error: {e}")
+            logging.error(f"Database error: {e}")
             raise e
 
     @staticmethod
@@ -575,7 +567,7 @@ class DBManager:
         except psycopg2.Error as e:
             if conn:
                 conn.rollback()  # nothing of the reply is kept
-            print(f"Database error: {e}")
+            logging.error(f"Database error: {e}")
             raise e
 
 
@@ -670,7 +662,7 @@ class DBManager:
         except Exception as e:
             if conn:
                 conn.rollback()
-            print(f"Error saving the message: {e}")
+            logging.error(f"Error saving the message: {e}")
             return False
 
     @staticmethod
@@ -710,7 +702,7 @@ class DBManager:
             return deleted
 
         except Exception as e:
-            print(f"Error deleting the conversation: {e}")
+            logging.error(f"Error deleting the conversation: {e}")
             if conn:
                 conn.rollback()
             raise
@@ -753,7 +745,7 @@ class DBManager:
             return deleted_count
 
         except Exception as e:
-            print(f"Error deleting all conversations: {e}")
+            logging.error(f"Error deleting all conversations: {e}")
             if conn:
                 conn.rollback()
             raise
@@ -798,7 +790,7 @@ class DBManager:
             return deleted
 
         except Exception as e:
-            print(f"Error deleting user {user_id}: {e}")
+            logging.error(f"Error deleting user {user_id}: {e}")
             if conn:
                 conn.rollback()
             raise

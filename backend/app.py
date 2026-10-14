@@ -650,7 +650,6 @@ def send_message():
             "conv_id": conv_id,
             "img_url" : image_url,
             "content" : {
-                "outfit" : output.get("outfit", []),
                 "outfits" : output.get("outfits", []),
                 "message" : text,
                 "explanation": output.get("explanation"),
@@ -760,9 +759,6 @@ def load_messages(conv_id, user_id):
             "message_id": message.get("message_id")
         }
 
-        if message.get("outfit"):
-            simple_message["outfit"] = message["outfit"]
-        
         if message.get("outfits"):
             simple_message["outfits"] = message["outfits"]
 
@@ -782,10 +778,10 @@ def load_messages(conv_id, user_id):
                 if image_bytes:
                     past_images[message_image_id] = image_bytes
                 else:
-                    print("Error while retrieving bytes from past images")
+                    logging.error(f"Couldn't download past chat photo {message_image_id}")
 
-            except Exception as e:
-                print(e)
+            except Exception:
+                logging.exception("Error loading a past chat photo")
 
         chat_history.append(simple_message)
     return chat_history, past_images

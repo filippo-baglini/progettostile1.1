@@ -1,3 +1,4 @@
+import logging
 from google.genai import types
 from dotenv import load_dotenv
 
@@ -13,8 +14,6 @@ def generate_title(prompt: str) -> str:
     )
 
     try:
-        print("Sending title request to Mistral (with fallback)...")
-
         config = types.GenerateContentConfig()
         
         response = generate_content_with_fallback(
@@ -26,5 +25,5 @@ def generate_title(prompt: str) -> str:
         return str(response.text).strip().strip('*"\' ')
 
     except Exception as e:
-        print(f"Title generation error: {e}")
-        raise e
+        logging.error(f"Title generation error: {e}")
+        raise

@@ -42,8 +42,7 @@ interface BackendOutfitResult {
 }
 
 interface BackendOutfitResponse {
-  outfit?: BackendOutfitItem[]; // Legacy support
-  outfits?: BackendOutfitResult[]; // New multiple outfits support
+  outfits?: BackendOutfitResult[];
   message: string;
   explanation?: string;
   budget_options?: any[]; // Budget options for polling
@@ -88,7 +87,6 @@ interface BackendMessage {
   type?: number;  // 0 = outfit, 1 = normal message (default: 0)
   image_id?: string | null;
   explanation?: string;
-  outfit?: BackendOutfitItem[];
   outfits?: BackendOutfitResult[]; // Backend sends 'outfits' list for multiple options
   created_at?: string;  // Backend uses 'created_at', not 'timestamp'
   budget_options?: any[];
@@ -248,9 +246,7 @@ export const chatService = {
     const seenIds = new Set<string>();
     const parsedMessages = response.data.map((msg, index) => {
 
-      // Handle new multiple outfits structure
       const outfitsData = msg.outfits;
-      const singleOutfitData = msg.outfit;
 
       let id = msg.message_id?.toString() || `msg-${index}-${Date.now()}`;
       if (seenIds.has(id)) {
@@ -268,14 +264,6 @@ export const chatService = {
           remainingBudget: outfitResult.remaining_budget ?? undefined,
           explanation: outfitResult.explanation || msg.explanation,
         }));
-      } else if (singleOutfitData && singleOutfitData.length > 0) {
-        // Legacy fallback
-        processedOutfits = [{
-          id: `outfit-${id}`,
-          items: transformOutfitItems(singleOutfitData),
-          totalPrice: calculateTotalPrice(singleOutfitData),
-          explanation: msg.explanation,
-        }];
       }
 
       return {
@@ -353,32 +341,6 @@ export const chatService = {
         totalPrice: outfits[0].totalPrice,
         remainingBudget: outfits[0].remainingBudget,
         explanation: outfits[0].explanation,
-        message: backendResponse.message,
-        budgetOptions: backendResponse.budget_options,
-        outfitGenerationOptions: backendResponse.outfit_generation_options,
-      };
-    }
-
-    // Fallback to single outfit (legacy)
-    const legacyOutfit = backendResponse.outfit;
-    if (legacyOutfit && legacyOutfit.length > 0) {
-      const items = transformOutfitItems(legacyOutfit);
-      const totalPrice = calculateTotalPrice(legacyOutfit);
-      const explanation = backendResponse.explanation || '';
-
-      return {
-        status,
-        hasOutfit: true,
-        outfits: [{
-          id: `outfit-${Date.now()}`,
-          items,
-          totalPrice,
-          explanation
-        }],
-        items,
-        totalPrice,
-        remainingBudget: undefined,
-        explanation,
         message: backendResponse.message,
         budgetOptions: backendResponse.budget_options,
         outfitGenerationOptions: backendResponse.outfit_generation_options,

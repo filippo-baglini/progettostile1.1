@@ -1,3 +1,4 @@
+import logging
 from dotenv import load_dotenv
 from PIL import Image, ImageOps
 
@@ -23,7 +24,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 try:
     SUPABASE_CLIENT: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
-    print(f"Error initializing Supabase client: {e}")
+    logging.error(f"Error initializing Supabase client: {e}")
     raise
 
 def upload_image(filename, image: bytes, bucket: str = "images"):
@@ -39,7 +40,7 @@ def upload_image(filename, image: bytes, bucket: str = "images"):
         return get_image_url(file_path, bucket)
 
     except Exception as e:
-        print(f"Supabase upload error: {e}")
+        logging.error(f"Supabase upload error: {e}")
         return None
 
 def download_image(image_id: str, bucket: str = "images") -> bytes | None:
@@ -49,7 +50,7 @@ def download_image(image_id: str, bucket: str = "images") -> bytes | None:
         return SUPABASE_CLIENT.storage.from_(bucket).download(file_path)
 
     except Exception as e:
-        print(f"Supabase download error: {e}")
+        logging.error(f"Supabase download error: {e}")
         return None
 
 
@@ -66,7 +67,7 @@ def delete_images(images_id: list[str], bucket: str = "images"):
         return True
 
     except Exception as e:
-        print(f"Supabase delete error: {e}")
+        logging.error(f"Supabase delete error: {e}")
         return False
 
 def compress_image(image_bytes: bytes, quality: int = 80, max_size: tuple | None = None) -> bytes:
@@ -105,5 +106,5 @@ def compress_image(image_bytes: bytes, quality: int = 80, max_size: tuple | None
         return compressed_data
 
     except Exception as e:
-        print(f"Image compression error: {e}")
+        logging.error(f"Image compression error: {e}")
         raise e

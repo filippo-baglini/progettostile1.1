@@ -33,7 +33,6 @@ describe('chatService', () => {
             content: {
                 type: 1,
                 message: 'Hello response',
-                outfit: [],
                 explanation: '',
                 status_code: 200
             }
@@ -50,7 +49,7 @@ describe('chatService', () => {
     });
 
     it('sendMessage sends image using FormData', async () => {
-        const mockResponse = { content: { message: 'Image analyzed', outfit: [], explanation: '', status_code: 200 } };
+        const mockResponse = { content: { message: 'Image analyzed', explanation: '', status_code: 200 } };
         const postSpy = vi.spyOn(api, 'post').mockResolvedValue({ data: mockResponse });
 
         const file = new File(['dummy content'], 'test.png', { type: 'image/png' });
@@ -205,7 +204,6 @@ describe('chatService', () => {
 it('transformOutfitResponse handles AWAITING_INPUT status (no outfit)', () => {
     const backendResponse = {
         message: 'Just text',
-        outfit: [],
         explanation: '',
     };
 
@@ -220,15 +218,12 @@ it('transformOutfitResponse handles AWAITING_INPUT status (no outfit)', () => {
 it('transformOutfitResponse handles COMPLETED status (with outfit)', () => {
     const backendResponse = {
         message: 'Here is an outfit',
-        outfit: [
-            {
-                id: '1',
-                title: 'Item',
-                url: 'url',
-                image_link: 'img',
-                price: 50
-            }
-        ],
+        outfits: [{
+            outfit: [{ id: '1', title: 'Item', url: 'url', image_link: 'img', price: 50 }],
+            cost: 50,
+            remaining_budget: null,
+            message: '',
+        }],
         explanation: 'Good choice',
     };
 
@@ -244,7 +239,6 @@ it('transformOutfitResponse handles COMPLETED status (with outfit)', () => {
 it('transformOutfitResponse handles Guardrail status', () => {
     const backendResponse = {
         message: 'I cannot help with that request.',
-        outfit: [],
         explanation: '',
     };
 
