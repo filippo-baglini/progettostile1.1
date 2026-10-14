@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import type { ChatMessage, OutfitFilters, OutfitItem, PickedPiece } from '../types';
 import { chatService } from '../services/chatService';
 import { toWardrobeSuggestion } from '../services/wardrobeService';
@@ -96,6 +96,22 @@ export const useChatMessages = () => {
   const onNewMessageRef = useRef<(() => void) | null>(null);
 
   const [isFetching, setIsFetching] = useState(false);
+
+  // Guest chats exist only while open: end one when it's replaced or cleared (new chat), when the chat
+  // state goes away (logging in) and when the page is closed or reloaded. A page kept in the back/forward
+  // cache may come back, so that one is left to the idle cleanup.
+  useEffect(() => {
+    if (!currentChatId?.startsWith('temp_')) return;
+    const end = () => chatService.endGuestChat(currentChatId);
+    const onPageHide = (event: PageTransitionEvent) => {
+      if (!event.persisted) end();
+    };
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      end();
+    };
+  }, [currentChatId]);
 
   const [selectedOutfitIndex, setSelectedOutfitIndex] = useState<number | null>(null);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);

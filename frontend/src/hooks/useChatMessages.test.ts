@@ -12,6 +12,7 @@ vi.mock('../services/chatService', () => ({
         sendMessage: vi.fn(),
         transformOutfitResponse: vi.fn(),
         getProgress: vi.fn().mockResolvedValue(false),
+        endGuestChat: vi.fn(),
     },
 }));
 
@@ -338,5 +339,46 @@ describe('useChatMessages', () => {
         expect(contents.slice(0, 2)).toEqual(['Second (works)', 'Second reply']);
         expect(contents[2]).toBe('First (fails)');
         expect(result.current.messages.some((m) => m.isError)).toBe(false);
+    });
+
+    describe('guest chats end when left', () => {
+        const startChat = async (convId: string) => {
+            (chatService.sendMessage as any).mockResolvedValue({ status: 'COMPLETED', conv_id: convId, content: { message: 'Hi' } });
+            (chatService.transformOutfitResponse as any).mockReturnValue({ status: 'COMPLETED', hasOutfit: false, message: 'Hi', items: [], totalPrice: 0 });
+            const hook = renderHook(() => useChatMessages());
+            await act(async () => {
+                await hook.result.current.sendMessage('Hello');
+            });
+            return hook;
+        };
+
+        it('on new chat', async () => {
+            const { result } = await startChat('temp_abc');
+            expect(chatService.endGuestChat).not.toHaveBeenCalled();
+
+            act(() => result.current.clearMessages());
+
+            expect(chatService.endGuestChat).toHaveBeenCalledTimes(1);
+            expect(chatService.endGuestChat).toHaveBeenCalledWith('temp_abc');
+        });
+
+        it('when the chat state goes away (login) or the page closes, not when it goes to the back/forward cache', async () => {
+            const { unmount } = await startChat('temp_abc');
+
+            window.dispatchEvent(Object.assign(new Event('pagehide'), { persisted: true }));
+            expect(chatService.endGuestChat).not.toHaveBeenCalled();
+            window.dispatchEvent(Object.assign(new Event('pagehide'), { persisted: false }));
+            expect(chatService.endGuestChat).toHaveBeenCalledTimes(1);
+
+            unmount();
+            expect(chatService.endGuestChat).toHaveBeenCalledTimes(2);  // idempotent on the backend
+        });
+
+        it('never for a user\'s chat', async () => {
+            const { result, unmount } = await startChat('42');
+            act(() => result.current.clearMessages());
+            unmount();
+            expect(chatService.endGuestChat).not.toHaveBeenCalled();
+        });
     });
 });

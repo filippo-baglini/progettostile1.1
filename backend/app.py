@@ -58,8 +58,9 @@ def unauthorized():
 
 # ponytail: in-memory guest chats (with image bytes), capped so guests can't grow it forever;
 # oldest conversations are evicted first and everything is lost on restart.
-# Guest chats are deleted after this long without a message, with their photos
-GUEST_CHAT_IDLE_HOURS = 24
+# Guest chats are deleted when the guest leaves them (see end_guest_chat); this catches the ones whose
+# goodbye never arrived (browser crashed, phone killed the tab), with their photos
+GUEST_CHAT_IDLE_HOURS = 2
 _last_guest_cleanup = 0.0
 
 
@@ -634,6 +635,23 @@ def send_message():
 
     except Exception as e:
         return server_error(e)
+
+@app.route('/api/guest/chat/end', methods=['POST'])
+def end_guest_chat():
+    """A guest left their chat (new chat, login, closed tab): it can't be reopened, so it goes now, photos too.
+    Sent with navigator.sendBeacon as text/plain (no CORS preflight, so it gets out while the page closes),
+    hence get_json(force=True). Always 200: there is nothing for the closing page to do with an error."""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        owned = None if current_user.is_authenticated else find_conversation(data.get('conv_id'))
+        if owned:
+            image_ids = DBManager.delete_guest_conversation(owned[0])
+            if image_ids:
+                delete_images(image_ids)
+    except Exception as e:
+        logging.exception(e)  # the idle cleanup gets it later
+    return {"success": True}, 200
+
 
 @app.route('/api/outfit/explain', methods=['POST'])
 @rate_limit(per_minute=20)

@@ -210,6 +210,14 @@ export const chatService = {
     return response.data.generating;
   },
 
+  // A guest left their chat (new chat, login, closed tab): nobody can reopen it, so the backend deletes it.
+  // A beacon still gets out while the page closes, and as text/plain it needs no CORS preflight.
+  // Best effort: chats whose beacon is lost are deleted after 2 idle hours.
+  endGuestChat: (convId: string): void => {
+    const body = new Blob([JSON.stringify({ conv_id: convId })], { type: 'text/plain' });
+    navigator.sendBeacon?.(`${api.defaults.baseURL}/guest/chat/end`, body);
+  },
+
   // Explain one outfit of an AI reply: the backend finds it in the stored chat
   explainOutfit: async (convId: string, messageId: string, outfitIndex: number): Promise<string> => {
     const response = await api.post<{ success: boolean; explanation: string }>('/outfit/explain', {

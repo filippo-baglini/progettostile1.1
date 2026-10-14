@@ -23,7 +23,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
   - [x] No `MAX_CONTENT_LENGTH`: uploads can be any size. *(fixed in d0e78b6: 10 MB cap, 413)*
   - [x] Pillow still decodes images up to ~179 MP (~0.5 GB RAM each): a small, highly compressed file can pass the 10 MB cap. *(fixed 2026-10-14: refused above 60 MP)*
   - [x] Chat photos are kept at full resolution (`app.py:664`, no `max_size`). *(fixed 2026-10-14: resized to 1024 px)*
-  - [x] Guest chats hold their photos in RAM (200 conversations, no per-conversation image limit). *(fixed 2026-10-14: guest chats are stored in the DB and their photos in storage like users' ones, deleted after 24 h idle; migration `2026-10-14_guest_chats.sql`, `backend/test_guest_chats.py`)*
+  - [x] Guest chats hold their photos in RAM (200 conversations, no per-conversation image limit). *(fixed 2026-10-14: guest chats are stored in the DB and their photos in storage like users' ones, deleted when the guest leaves the chat (new chat, login, closed tab) or after 2 h idle; migration `2026-10-14_guest_chats.sql`, `backend/test_guest_chats.py`)*
 - [ ] **S6. Vulnerable dependencies.** `npm audit`: axios (high), form-data (high), react-router / react-router-dom (high, partly SSR-only), follow-redirects (moderate). Fix: `npm audit fix`. Also pin versions in `backend/requirements.txt`.
 
 ### Low

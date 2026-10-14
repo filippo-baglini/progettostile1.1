@@ -607,6 +607,25 @@ class DBManager:
             raise
 
     @staticmethod
+    def delete_guest_conversation(conversation_id: int) -> list[str]:
+        """Deletes a guest chat (never a user's). Returns its photos' ids, to delete from storage."""
+        conn = DBManager.get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """WITH guest_chat AS (SELECT id FROM conversations WHERE id = %s AND guest_token IS NOT NULL),
+                       photos AS (SELECT p.image_id FROM prompts p JOIN guest_chat g ON p.conversation_id = g.id WHERE p.image_id IS NOT NULL),
+                       gone AS (DELETE FROM conversations WHERE id IN (SELECT id FROM guest_chat))
+                       SELECT image_id FROM photos""",
+                    (conversation_id,))
+                image_ids = [row[0] for row in cursor.fetchall()]
+            conn.commit()
+            return image_ids
+        except Exception:
+            conn.rollback()
+            raise
+
+    @staticmethod
     def conversation_belongs_to(user_id: int, conversation_id) -> bool:
         conn = DBManager.get_db_connection()
         with conn.cursor() as cursor:

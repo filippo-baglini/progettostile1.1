@@ -6,7 +6,7 @@ import app as backend
 from db_manager import DBManager
 
 with backend.app.test_request_context():  # a guest: nobody logged in
-    token = str(uuid.uuid4())
+    token, other = str(uuid.uuid4()), str(uuid.uuid4())
     conv_id = DBManager.create_conversation_with_message(None, 'Test guest chat', 'hi', image_id='test-photo',
                                                          guest_token=token, guest_gender='female')
     try:
@@ -28,8 +28,16 @@ with backend.app.test_request_context():  # a guest: nobody logged in
         conn.commit()
         assert 'test-photo' in DBManager.delete_idle_guest_conversations(backend.GUEST_CHAT_IDLE_HOURS)
         assert DBManager.guest_conversation(token) is None
+        # Leaving the chat deletes it at once (the page sends text/plain via sendBeacon)
+        DBManager.create_conversation_with_message(None, 'Left chat', 'hi', guest_token=other)
+        client = backend.app.test_client()
+        assert client.post('/api/guest/chat/end', data=f'{{"conv_id": "temp_{uuid.uuid4()}"}}', content_type='text/plain').status_code == 200
+        assert DBManager.guest_conversation(other)                                       # someone else's token: kept
+        client.post('/api/guest/chat/end', data=f'{{"conv_id": "temp_{other}"}}', content_type='text/plain')
+        assert DBManager.guest_conversation(other) is None
+        assert client.post('/api/guest/chat/end', data='garbage', content_type='text/plain').status_code == 200
     finally:
-        DBManager.get_db_connection().cursor().execute("DELETE FROM conversations WHERE guest_token = %s", (token,))
+        DBManager.get_db_connection().cursor().execute("DELETE FROM conversations WHERE guest_token IN (%s, %s)", (token, other))
         DBManager.get_db_connection().commit()
 
 # Only the last 3 photos of a chat are downloaded and sent back to the AI
