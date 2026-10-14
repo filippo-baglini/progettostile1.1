@@ -38,7 +38,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 
 ## Bugs
 
-- [ ] **B1. Saved preferences never reach the AI.** `preferences_management.py:37` builds `favorite_Color` (DB names are `Color`, `Brand`, `Material`), but `query_handler.py:866-871` reads `favorite_color`. Fix: lowercase the name.
+- [x] **B1. Saved preferences never reach the AI.** `preferences_management.py:37` builds `favorite_Color` (DB names are `Color`, `Brand`, `Material`), but `query_handler.py:866-871` reads `favorite_color`. Fix: lowercase the name. *(fixed 2026-10-14)*
 - [x] **B2. A wrong current password on the Profile page redirects to /login.** The backend returns 401 (`app.py:339`) and the axios interceptor sends every 401 to `/login` (`frontend/src/services/api.ts:20`). Google-only users hit this too. Fix: return 400 or 403. *(fixed by the Supabase Auth migration, 2026-10-14)*
 - [x] **B3. The frontend times out after 60 s** (`api.ts:7`), but the backend can take much longer (120 s per Mistral call, plus retries and fallback). The user sees an error while the reply is still saved; retrying duplicates the message. *(fixed in d0e78b6: frontend waits 5 min, Mistral calls time out after 60 s)*
 - [x] **B4. Guests can't refine a selected outfit.** Guest replies have no `message_id`; the frontend sends `assistant-<timestamp>`, which the backend never matches (`backend/ai/src/app.py:98-103`); the guest path didn't even pass `selected_message_id`. *(fixed 2026-10-14: guest replies get a uuid, and the guest path passes the selection)*

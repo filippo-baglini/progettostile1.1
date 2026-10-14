@@ -34,7 +34,7 @@ def get_user_preferences(client: Client, user_id_key: int)->dict|None:
             p_name = pref_data.get('name')
             p_value = row.get('value')
 
-            key_name = f"favorite_{p_name}"
+            key_name = f"favorite_{p_name.lower()}"  # DB names are Color, Brand, ...; the planner reads favorite_color
             result_prefs[key_name] = p_value
 
 
