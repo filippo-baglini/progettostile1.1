@@ -1,7 +1,8 @@
 """
 Model Fallback Helper Module
 
-Sends requests to Mistral, with automatic fallback to alternative models when rate limit (429) errors occur.
+Sends requests to Mistral, retrying and then falling back to alternative models when a call fails in a way
+worth retrying (rate limit, Mistral server error, timeout, dropped connection, bad JSON).
 Callers still build requests with Gemini types (contents, GenerateContentConfig); they are translated here.
 """
 
@@ -35,19 +36,19 @@ BACKOFF_MULTIPLIER = 2.0   # Multiply delay for each retry
 MAX_TEMPERATURE = 1.0      # ponytail: callers ask up to 1.5 (tuned for Gemini); Mistral output degrades above ~1
 
 
-def is_rate_limit_error(exception: Exception) -> bool:
-    """
-    Check if the exception is a 429 rate limit error.
-    """
-    error_str = str(exception).lower()
-    # Check for common rate limit indicators
-    return (
-        "429" in error_str or
-        "rate limit" in error_str or
-        "quota exceeded" in error_str or
-        "resource exhausted" in error_str or
-        "too many requests" in error_str
-    )
+class MistralError(Exception):
+    """Mistral answered with an error status."""
+    def __init__(self, status: int, text: str):
+        super().__init__(f"Mistral error {status}: {text[:500]}")
+        self.status = status
+
+
+def is_retryable(exception: Exception) -> bool:
+    """Worth another try: rate limits (429), Mistral's own failures (5xx), timeouts, dropped connections and
+    bad JSON. Anything else (a bad request, a wrong key) would fail again, so it is raised straight away."""
+    if isinstance(exception, MistralError):
+        return exception.status == 429 or exception.status >= 500
+    return isinstance(exception, (requests.Timeout, requests.ConnectionError, json.JSONDecodeError))
 
 
 def _to_mistral_content(parts: list) -> list:
@@ -87,7 +88,7 @@ def _call_mistral(model: str, contents: Any, config: types.GenerateContentConfig
     r = requests.post(MISTRAL_URL, json=body, timeout=60,
                       headers={"Authorization": f"Bearer {os.environ['MISTRAL_API_KEY']}"})
     if not r.ok:
-        raise Exception(f"Mistral error {r.status_code}: {r.text[:500]}")
+        raise MistralError(r.status_code, r.text)
 
     text = r.json()["choices"][0]["message"]["content"]
     # Same shape as a Gemini response: .text always, .parsed when a schema was requested
@@ -101,7 +102,7 @@ def generate_content_with_fallback(
     initial_model: Optional[str] = None
 ) -> Any:
     """
-    Attempts to generate content with automatic fallback on 429 errors.
+    Attempts to generate content, retrying and then falling back to the next model on retryable errors.
 
     Args:
         contents: The content to send to the model (Gemini format)
@@ -147,28 +148,18 @@ def generate_content_with_fallback(
             except Exception as e:
                 last_exception = e
 
-                # Mistral's JSON mode now and then degenerates (e.g. runs of blank lines): one more try usually works
-                if isinstance(e, json.JSONDecodeError) and retry < MAX_RETRIES_PER_MODEL - 1:
-                    logging.warning(f"⚠️ Bad JSON from {model_name}, retrying: {e}")
-                    continue
-
-                if is_rate_limit_error(e):
-                    logging.warning(f"⚠️ Rate limit hit on {model_name}: {e}")
-
-                    # If we have more retries for this model, wait and retry
-                    if retry < MAX_RETRIES_PER_MODEL - 1:
-                        logging.info(f"⏳ Waiting {retry_delay:.1f}s before retry...")
-                        time.sleep(retry_delay)
-                        retry_delay *= BACKOFF_MULTIPLIER
-                    else:
-                        # Move to next model
-                        if model_index < len(fallback_models) - 1:
-                            logging.info(f"🔀 Switching to fallback model: {fallback_models[model_index + 1]}")
-                        break
-                else:
-                    # Non-rate-limit error, raise immediately
-                    logging.error(f"❌ Non-rate-limit error on {model_name}: {e}")
+                if not is_retryable(e):
+                    logging.error(f"❌ Error on {model_name}, not retrying: {e}")
                     raise e
+
+                # Mistral's JSON mode now and then degenerates (e.g. runs of blank lines): one more try usually works
+                logging.warning(f"⚠️ {model_name} failed ({type(e).__name__}): {e}")
+                if retry < MAX_RETRIES_PER_MODEL - 1:
+                    logging.info(f"⏳ Waiting {retry_delay:.1f}s before retry...")
+                    time.sleep(retry_delay)
+                    retry_delay *= BACKOFF_MULTIPLIER
+                elif model_index < len(fallback_models) - 1:
+                    logging.info(f"🔀 Switching to fallback model: {fallback_models[model_index + 1]}")
 
     # All models exhausted
     logging.error(f"❌ All models exhausted. Last error: {last_exception}")

@@ -201,6 +201,7 @@ venv/bin/python -m ai.test_drop_owned_categories
 venv/bin/python -m ai.test_accessories
 venv/bin/python -m ai.test_drop_targets
 venv/bin/python -m ai.test_kept_items_budget
+venv/bin/python -m ai.test_model_fallback
 venv/bin/python test_auth.py
 venv/bin/python test_rate_limit.py
 venv/bin/python test_explain.py   # loads the app (and CLIP)

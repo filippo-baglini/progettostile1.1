@@ -59,7 +59,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
   - [ ] A catalogue item with a NULL price crashes outfit assembly (`assemble_outfit.py`, `item['price'] * 100`). *(constraint in `migrations/2026-10-14_product_constraints.sql`, not applied yet)*
   - [ ] A product with an empty colour matches every colour filter (`schema.sql`, `ILIKE '%' || schema_color || '%'`). *(same migration, not applied yet)*
   - [x] Chat titles aren't length-capped (LLM title or rename): anything over 255 characters gives a 500. *(cut to 255 where they are saved)*
-- [ ] **B11. Most Mistral errors aren't retried.** `model_fallback.py` only retries on rate limits (found by searching the error text for "429") and on bad JSON. Check `r.status_code` and also retry on 5xx and `requests.Timeout`.
+- [x] **B11. Most Mistral errors aren't retried.** `model_fallback.py` only retries on rate limits (found by searching the error text for "429") and on bad JSON. Check `r.status_code` and also retry on 5xx and `requests.Timeout`. *(fixed 2026-10-14: retried by status: 429, 5xx, timeouts, dropped connections and bad JSON; other errors are raised at once)*
 
 ## Performance
 
