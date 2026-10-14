@@ -11,11 +11,14 @@ from supabase import create_client, Client
 
 load_dotenv()
 
+# The one Supabase client: Storage and deleting Auth accounts. The database itself goes through psycopg2 (db_manager.py).
+# A secret key (sb_secret_...): it bypasses RLS, so it stays on the server.
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_RLS_KEY")
+SUPABASE_KEY = os.environ.get("SUPABASE_SECRET_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    raise ValueError("Supabase credentials (SUPABASE_URL, SUPABASE_KEY) must be set in the environment or .env file.")
+    raise ValueError("SUPABASE_URL and SUPABASE_SECRET_KEY must be set in the environment or .env file "
+                     "(SUPABASE_SECRET_KEY replaced SUPABASE_KEY and SUPABASE_RLS_KEY, which held the same key).")
 
 try:
     SUPABASE_CLIENT: Client = create_client(SUPABASE_URL, SUPABASE_KEY)

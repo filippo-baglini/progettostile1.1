@@ -102,6 +102,19 @@ class DBManager:
         return DBManager._status
 
     @staticmethod
+    def run_search(sql: str, params: dict) -> list[dict]:
+        """Rows of a read-only search function (search_outfits_batch, search_wardrobe_batch).
+        A failed search is rolled back, so the request can still save its messages afterwards."""
+        conn = DBManager.get_db_connection()
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute(sql, params)
+                return cursor.fetchall()
+        except Exception:
+            conn.rollback()
+            raise
+
+    @staticmethod
     def close_db_connection(e=None):
         """End of request: the connection goes back to the pool, never with a transaction still open."""
         conn = g.pop('db', None)

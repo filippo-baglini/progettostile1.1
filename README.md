@@ -147,8 +147,7 @@ DB_USER=...
 DB_PASSWORD=...
 
 SUPABASE_URL=https://<project>.supabase.co
-SUPABASE_KEY=...                         # used by the outfit pipeline (vector search RPCs)
-SUPABASE_RLS_KEY=...                     # used for Storage and for deleting Supabase Auth accounts
+SUPABASE_SECRET_KEY=sb_secret_...       # Storage and deleting Supabase Auth accounts; bypasses RLS, server only
 
 MISTRAL_API_KEY=...
 

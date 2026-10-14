@@ -4,7 +4,7 @@ import logging
 from collections import defaultdict
 
 from google.genai import types
-from supabase import Client
+from psycopg2.extras import Json
 
 from ai.src.model_fallback import generate_content_with_fallback
 from storage_manager import get_image_url
@@ -118,7 +118,7 @@ def wardrobe_candidate(piece: dict, similarity: float = 1.0) -> dict:
     }
 
 
-def search_wardrobe_candidates(client: Client, items: list[dict], user_id: int, exclude_ids: set[int]) -> list[list[dict]]:
+def search_wardrobe_candidates(items: list[dict], user_id: int, exclude_ids: set[int]) -> list[list[dict]]:
     """For each planned item, the user's pieces in that category ranked by similarity (possibly none).
     `exclude_ids` are pieces already in the outfit because the user picked them."""
     queries = [{
@@ -128,10 +128,10 @@ def search_wardrobe_candidates(client: Client, items: list[dict], user_id: int, 
         "brand": (item.get('hard_constraints') or {}).get('brand'),
     } for item in items]
 
+    from db_manager import DBManager  # here, not at the top: db_manager imports this module
     try:
-        rows = client.rpc("search_wardrobe_batch", {
-            "queries": queries, "wardrobe_user_id": user_id, "match_count": 20,
-        }).execute().data or []
+        rows = DBManager.run_search("SELECT * FROM search_wardrobe_batch(%(queries)s, %(user)s, 20)",
+                                    {"queries": Json(queries), "user": user_id})
     except Exception as e:
         logging.error(f"Wardrobe search failed: {e}")
         rows = []

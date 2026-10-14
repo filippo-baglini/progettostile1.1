@@ -3,7 +3,6 @@ import logging
 
 from flask_login import current_user
 import torch
-from supabase import create_client, Client
 from transformers import CLIPProcessor, CLIPModel
 from typing import Optional, List, Dict, Any
 from dotenv import load_dotenv
@@ -24,25 +23,6 @@ from ai.src.get_explanations import explain_selected_outfit
 
 # Load environment variables (like the MISTRAL_API_KEY)
 load_dotenv()
-
-SUPABASE_URL: Optional[str] = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY: Optional[str] = os.environ.get("SUPABASE_KEY")
-
-if not SUPABASE_URL or not SUPABASE_KEY:
-    # Handle environment variables missing: Critical, must stop.
-    logging.critical("Supabase credentials (SUPABASE_URL, SUPABASE_KEY) are missing.")
-    raise ValueError("Supabase credentials must be set in the environment or .env file.")
-    
-# 1. Supabase Client Initialization
-try:
-    SUPABASE_CLIENT: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-    # Optional: Perform a small check query here to ensure connectivity (e.g., SELECT 1)
-    logging.info("✅ Supabase client initialized successfully.")
-except Exception as e:
-    # Handle Supabase connection failure: Critical, must stop.
-    logging.critical(f"❌ Error initializing Supabase client: {e}", exc_info=True)
-    # Reraise the exception to stop the server process from starting
-    raise ConnectionError("Failed to connect to Supabase.") from e
 
 # 2. LLM: Mistral, called over HTTP in model_fallback.py (needs MISTRAL_API_KEY)
 if not os.environ.get("MISTRAL_API_KEY"):
@@ -411,10 +391,10 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
                 if only_wardrobe:
                     logging.info("Searching the user's wardrobe...")
                     picked_ids = {piece['id'] for piece in picked_items or []}
-                    search_results = search_wardrobe_candidates(SUPABASE_CLIENT, items_to_search, user_id_key, picked_ids)
+                    search_results = search_wardrobe_candidates(items_to_search, user_id_key, picked_ids)
                 else:
                     logging.info("Searching product candidates in vector DB...")
-                    search_results = search_product_candidates_with_vector_db(SUPABASE_CLIENT, items_to_search, current_outfit_budget, gender)
+                    search_results = search_product_candidates_with_vector_db(items_to_search, current_outfit_budget, gender)
                 
                 if search_results:
                     # If search_results is shorter than items_to_search (error?), handle it.
