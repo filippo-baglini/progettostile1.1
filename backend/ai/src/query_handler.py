@@ -1,19 +1,18 @@
 import logging
 import json
-from google.genai import types
 
-from ai.src.model_fallback import generate_content_with_fallback
+from ai.src.model_fallback import generate_content_with_fallback, image_part, text_part
 from ai.src.progress import mark_generating
 from ai.src.wardrobe import describe_piece, clean_owned_piece, WARDROBE_SECTIONS
 
 # --- Schema Definitions ---
 
 # Define the schema for an individual item (e.g., "shirt", "relaxed")
-item_schema = types.Schema(
-    type=types.Type.OBJECT,
+item_schema = dict(
+    type="object",
     properties={
-        "tag": types.Schema(type=types.Type.STRING, description="The descriptive item tag (e.g., shirt, sweater)."),
-        "fit": types.Schema(type=types.Type.STRING, description="A description of the appropriate fit (e.g., relaxed, fitted).")
+        "tag": dict(type="string", description="The descriptive item tag (e.g., shirt, sweater)."),
+        "fit": dict(type="string", description="A description of the appropriate fit (e.g., relaxed, fitted).")
     },
     required=["tag", "fit"]
 )
@@ -22,65 +21,65 @@ FASHION_CATEGORIES = ['top', 'bottom', 'dresses', 'outerwear', 'swimwear', 'shoe
 SINGLE_ITEM_CATEGORIES = {'bottom', 'dresses', 'outerwear', 'swimwear', 'shoes'}  # 'top' and 'accessories' can layer
 
 # Define the schema for a category (e.g., "top")
-category_schema = types.Schema(
-    type=types.Type.OBJECT,
+category_schema = dict(
+    type="object",
     description="A collection of item suggestions for a specific clothing category. If 'accessories' limit to sunglasses, caps/hats, watches, scarves, necklaces or handbags, at most one of each kind.",
     properties={
-        "color_palette": types.Schema(type=types.Type.STRING, description="A specific color or color description (e.g., 'sky blue', 'dark indigo')."),
-        "pattern": types.Schema(type=types.Type.STRING, description="A specific pattern (e.g., 'solid', 'striped', 'gingham')."),
-        "items": types.Schema(type=types.Type.ARRAY, items=item_schema, description="A list of specific items for this category.")
+        "color_palette": dict(type="string", description="A specific color or color description (e.g., 'sky blue', 'dark indigo')."),
+        "pattern": dict(type="string", description="A specific pattern (e.g., 'solid', 'striped', 'gingham')."),
+        "items": dict(type="array", items=item_schema, description="A list of specific items for this category.")
     },
     required=["color_palette", "pattern", "items"]
 )
 
 # Defines the structure for hard constraints applied to a single item category.
 # (This was likely the original 'constraint_item_schema')
-constraint_item_schema = types.Schema(
-    type=types.Type.OBJECT,
+constraint_item_schema = dict(
+    type="object",
     description="Any color, material, or brand constraints specified by the user for this category.",
     properties={
-        "material": types.Schema(type=types.Type.STRING, description="A single English material word, with no adjectives."),
-        "brand": types.Schema(type=types.Type.STRING, description="Only a brand the user explicitly named; never a style, fit or quality word."),
+        "material": dict(type="string", description="A single English material word, with no adjectives."),
+        "brand": dict(type="string", description="Only a brand the user explicitly named; never a style, fit or quality word."),
     },
 )
 
 # Defines a budget option for the interactive poll
-budget_option_schema = types.Schema(
-    type=types.Type.OBJECT,
+budget_option_schema = dict(
+    type="object",
     description="A clickable budget range option to present to the user.",
     properties={
-        "label": types.Schema(type=types.Type.STRING, description="Short display label (e.g., '€200 - €300')."),
-        "min_budget": types.Schema(type=types.Type.NUMBER, description="The lower bound of the budget range."),
-        "max_budget": types.Schema(type=types.Type.NUMBER, description="The upper bound of the budget range."),
-        "description": types.Schema(type=types.Type.STRING, description="A persuasive, short description of what this budget affords (e.g., 'High street brands, good value')."),
+        "label": dict(type="string", description="Short display label (e.g., '€200 - €300')."),
+        "min_budget": dict(type="number", description="The lower bound of the budget range."),
+        "max_budget": dict(type="number", description="The upper bound of the budget range."),
+        "description": dict(type="string", description="A persuasive, short description of what this budget affords (e.g., 'High street brands, good value')."),
     },
     required=["label", "min_budget", "max_budget", "description"]
 )
 
 
 # Defines an outfit generation option for the interactive poll
-outfit_generation_option_schema = types.Schema(
-    type=types.Type.OBJECT,
+outfit_generation_option_schema = dict(
+    type="object",
     description="A clickable option for how many outfits to generate and how to split the budget.",
     properties={
-        "id": types.Schema(type=types.Type.STRING, description="Unique ID for the option."),
-        "label": types.Schema(type=types.Type.STRING, description="Short display label (e.g., '1 Option')."),
-        "description": types.Schema(type=types.Type.STRING, description="Short description of what this option implies."),
-        "value": types.Schema(type=types.Type.STRING, description="The text to send back if selected (e.g., 'I want 1 option')."),
+        "id": dict(type="string", description="Unique ID for the option."),
+        "label": dict(type="string", description="Short display label (e.g., '1 Option')."),
+        "description": dict(type="string", description="Short description of what this option implies."),
+        "value": dict(type="string", description="The text to send back if selected (e.g., 'I want 1 option')."),
     },
     required=["id", "label", "description", "value"]
 )
 
 # Defines the primary schema for managing the conversational state
-input_gathering_schema = types.Schema(
-    type=types.Type.OBJECT,
+input_gathering_schema = dict(
+    type="object",
     description="Schema used for multi-turn conversations to gather required information before generating the final outfit plan.",
     properties={
-        "status": types.Schema(type=types.Type.STRING, description="The current status. Must be 'AWAITING_INPUT' if max_budget or sufficient hard_constraints are missing, or 'READY_TO_GENERATE' if all necessary inputs are gathered."),
-        "missing_info": types.Schema(type=types.Type.STRING, description="A polite, conversational TEXTUAL message asking the user for the specific missing information (e.g., 'What is your maximum budget and what constraints do you have for the top?') This is the message presented to the user."),
-        "max_budget": types.Schema(type=types.Type.NUMBER, description="The maximum budget (€) extracted from the conversation history so far. Must be 0 if not yet specified or ambiguous."),
-        "hard_constraints": types.Schema(
-            type=types.Type.OBJECT,
+        "status": dict(type="string", description="The current status. Must be 'AWAITING_INPUT' if max_budget or sufficient hard_constraints are missing, or 'READY_TO_GENERATE' if all necessary inputs are gathered."),
+        "missing_info": dict(type="string", description="A polite, conversational TEXTUAL message asking the user for the specific missing information (e.g., 'What is your maximum budget and what constraints do you have for the top?') This is the message presented to the user."),
+        "max_budget": dict(type="number", description="The maximum budget (€) extracted from the conversation history so far. Must be 0 if not yet specified or ambiguous."),
+        "hard_constraints": dict(
+            type="object",
             description="All extracted hard constraints (material, brand) organized by category (top, bottom, shoes, etc.).",
             properties={
                 "top": constraint_item_schema,
@@ -90,16 +89,16 @@ input_gathering_schema = types.Schema(
                 "accessories": constraint_item_schema,
             }
         ),
-        "message": types.Schema(type=types.Type.STRING, description="field that must contain ONLY the error message if a guardrail condition triggers"),
-        "conversation_title": types.Schema(type=types.Type.STRING, description="A short, concise title for the conversation (max 5 words), written in the same language as the user's message. Generate this ONLY if it is the first message in the conversation."),
-        "num_outfits": types.Schema(type=types.Type.INTEGER, description="The number of outfit options the user wants to see (default 1, max 3). Extract this from the user's request."),
-        "budget_options": types.Schema(
-            type=types.Type.ARRAY,
+        "message": dict(type="string", description="field that must contain ONLY the error message if a guardrail condition triggers"),
+        "conversation_title": dict(type="string", description="A short, concise title for the conversation (max 5 words), written in the same language as the user's message. Generate this ONLY if it is the first message in the conversation."),
+        "num_outfits": dict(type="integer", description="The number of outfit options the user wants to see (default 1, max 3). Extract this from the user's request."),
+        "budget_options": dict(
+            type="array",
             items=budget_option_schema,
             description="A list of 4 distinct budget range options. Generate these ONLY if 'max_budget' is MISSING. If 'max_budget' is present, this list MUST be empty []."
         ),
-        "outfit_generation_options": types.Schema(
-            type=types.Type.ARRAY,
+        "outfit_generation_options": dict(
+            type="array",
             items=outfit_generation_option_schema,
             description="A list of options for the user to choose the number of outfits or specific style variations. Use this to propose 3 specific themes + 'All 3' when appropriate."
         ),
@@ -109,23 +108,23 @@ input_gathering_schema = types.Schema(
 )
 
 # 3. Modification Schema for Refinement
-modification_schema = types.Schema(
-    type=types.Type.OBJECT,
+modification_schema = dict(
+    type="object",
     description="A specific modification action to apply to the current outfit context.",
     properties={
-        "action": types.Schema(type=types.Type.STRING, enum=["ADD", "REMOVE", "REPLACE"], description=" The type of modification."),
-        "item_id": types.Schema(type=types.Type.STRING, description="The ID of the item in the current outfit to target, exactly as listed in the history (Required for REMOVE and REPLACE)."),
-        "category": types.Schema(type=types.Type.STRING, description="The category of the item (Required for ADD and REPLACE)."),
+        "action": dict(type="string", enum=["ADD", "REMOVE", "REPLACE"], description=" The type of modification."),
+        "item_id": dict(type="string", description="The ID of the item in the current outfit to target, exactly as listed in the history (Required for REMOVE and REPLACE)."),
+        "category": dict(type="string", description="The category of the item (Required for ADD and REPLACE)."),
         "new_item": item_schema, # Reuse item_schema for the new item definition
-        "new_color_palette": types.Schema(type=types.Type.STRING, description="Color palette for the new item (Required for ADD/REPLACE)"),
-        "new_pattern": types.Schema(type=types.Type.STRING, description="Pattern for the new item (Required for ADD/REPLACE)"),
+        "new_color_palette": dict(type="string", description="Color palette for the new item (Required for ADD/REPLACE)"),
+        "new_pattern": dict(type="string", description="Pattern for the new item (Required for ADD/REPLACE)"),
     },
     required=["action"]
 )
 
 # 1. New Schema for ONLY the Outfit Categories (The nested 'outfit_plan')
-outfit_categories_schema = types.Schema(
-    type=types.Type.OBJECT,
+outfit_categories_schema = dict(
+    type="object",
     description="Contains the suggested clothing items and accessories, excluding metadata like budget and constraints.",
     properties={
         "top": category_schema,
@@ -135,35 +134,35 @@ outfit_categories_schema = types.Schema(
         "swimwear": category_schema,
         "shoes": category_schema,
         "accessories": category_schema,
-        "budget": types.Schema(type=types.Type.NUMBER, description="Contains the suggested clothing items and accessories for a specific outfit option, including an optional specific budget."),
+        "budget": dict(type="number", description="Contains the suggested clothing items and accessories for a specific outfit option, including an optional specific budget."),
     },
 )
 
 # 2. Revised Main Outfit Generation Schema (The LLM's full output)
 # This schema separates the outfit plan, budget, and constraints at the top level.
-outfit_schema = types.Schema(
-    type=types.Type.OBJECT,
+outfit_schema = dict(
+    type="object",
     properties={
         # Listed before 'outfits' so the model decides this first
-        "owned_categories": types.Schema(
-            type=types.Type.ARRAY,
-            items=types.Schema(type=types.Type.STRING, enum=FASHION_CATEGORIES),
+        "owned_categories": dict(
+            type="array",
+            items=dict(type="string", enum=FASHION_CATEGORIES),
             description="Categories of the piece(s) the user ALREADY HAS and wants items to go with (e.g. the sweater in their photo when they ask for an outfit to match it). Empty if they want to find or buy that piece itself. A piece the user names as part of the outfit they want is wanted, NOT owned."
         ),
         # The nested categories container
-        "outfits": types.Schema(
-            type=types.Type.ARRAY,
+        "outfits": dict(
+            type="array",
             items=outfit_categories_schema,
             description="A list of distinct outfit plans. Generate multiple if the user requested options."
         ),
 
         # Metadata fields at the top level
-        "max_budget": types.Schema(
-            type=types.Type.NUMBER,
+        "max_budget": dict(
+            type="number",
             description="The maximum budget (€ or $) extracted from the conversation history. Must be 0 if not yet specified or ambiguous."
         ),
-        "hard_constraints": types.Schema(
-            type=types.Type.OBJECT,
+        "hard_constraints": dict(
+            type="object",
             description="All extracted hard constraints organized by category.",
             properties={
                 "top": constraint_item_schema,
@@ -173,52 +172,52 @@ outfit_schema = types.Schema(
                 "accessories": constraint_item_schema,
             }
         ),
-        "refinement_type": types.Schema(
-             type=types.Type.STRING,
+        "refinement_type": dict(
+             type="string",
              enum=["NEW_OUTFIT", "REFINE_CURRENT"],
              description="Determines if we are generating a completely new outfit (NEW_OUTFIT) or modifying the existing one (REFINE_CURRENT)."
         ),
-        "modifications": types.Schema(
-            type=types.Type.ARRAY,
+        "modifications": dict(
+            type="array",
             items=modification_schema,
             description="A list of specific modifications to apply if refinement_type is REFINE_CURRENT, only those asked for in the latest user message. Leave empty if NEW_OUTFIT."
         ),
-        "message": types.Schema(
-            type=types.Type.STRING,
+        "message": dict(
+            type="string",
             description="A message for non-fashion related inquiries. MUST ONLY be present for guardrail messages."
         ),
         # The search runs after this call, so both outcomes are worded up front in the user's language
-        "results_message": types.Schema(type=types.Type.STRING, description="One short sentence presenting the outfit options found, written in the same language as the user's messages. Never say whether they fit the budget: prices are only known after the search."),
-        "no_results_message": types.Schema(type=types.Type.STRING, description="One short sentence saying the catalog has nothing that suits the request and asking if they want to look for something else, written in the same language as the user's messages.")
+        "results_message": dict(type="string", description="One short sentence presenting the outfit options found, written in the same language as the user's messages. Never say whether they fit the budget: prices are only known after the search."),
+        "no_results_message": dict(type="string", description="One short sentence saying the catalog has nothing that suits the request and asking if they want to look for something else, written in the same language as the user's messages.")
     },
     required=["outfits", "max_budget", "refinement_type", "results_message", "no_results_message"]
 )
 
 # One call either asks a question or returns the plan: status first, then the question fields, then the plan fields
-_combined_properties = {**input_gathering_schema.properties, **outfit_schema.properties}
+_combined_properties = {**input_gathering_schema["properties"], **outfit_schema["properties"]}
 # A piece the user owns in the photo they just sent: the reply offers to add it to their wardrobe
-_combined_properties['owned_piece'] = types.Schema(
-    type=types.Type.OBJECT,
+_combined_properties['owned_piece'] = dict(
+    type="object",
     description="ONLY when the photo in the user's LATEST message shows a single clothing item or accessory that "
                 "the user says they own (e.g. 'what goes with this sweater I have?'). Leave it out for shop or "
                 "inspiration photos, items they want to find or buy, or photos of a whole outfit.",
     properties={
-        "owner_words": types.Schema(type=types.Type.STRING,
+        "owner_words": dict(type="string",
                                     description="The user's exact words, copied from their message, saying the item is theirs."),
-        "section": types.Schema(type=types.Type.STRING, enum=list(WARDROBE_SECTIONS),
+        "section": dict(type="string", enum=list(WARDROBE_SECTIONS),
                                 description="Wardrobe section of the item."),
-        "name": types.Schema(type=types.Type.STRING, description="Short name of the item, e.g. 'Black graphic t-shirt'."),
-        "color": types.Schema(type=types.Type.STRING, description="Main colour, in English."),
-        "brand": types.Schema(type=types.Type.STRING, description="Brand ONLY if the user named it; printed text is not a brand."),
+        "name": dict(type="string", description="Short name of the item, e.g. 'Black graphic t-shirt'."),
+        "color": dict(type="string", description="Main colour, in English."),
+        "brand": dict(type="string", description="Brand ONLY if the user named it; printed text is not a brand."),
     },
     required=["owner_words", "section", "name"],
 )
-_combined_properties['status'] = types.Schema(
-    type=types.Type.STRING, enum=["AWAITING_INPUT", "READY_TO_GENERATE", "Guardrail"],
+_combined_properties['status'] = dict(
+    type="string", enum=["AWAITING_INPUT", "READY_TO_GENERATE", "Guardrail"],
     description="'AWAITING_INPUT' to ask the user for missing information (fill only the question fields), "
                 "'READY_TO_GENERATE' when everything is known (fill the outfit plan fields in this same response).")
 # Mistral often skips optional fields, and the reply needs these two in the user's language (no strict mode: only a hint)
-response_schema = types.Schema(type=types.Type.OBJECT, properties=_combined_properties,
+response_schema = dict(type="object", properties=_combined_properties,
                                required=["status", "results_message", "no_results_message"])
 
 # Appended to the latest user turn: the model follows rules there more reliably than in the system prompt
@@ -639,9 +638,6 @@ the field 'message' MUST BE PRESENT ONLY if a guardrail triggers.
 """
 
 
-import json
-from google.genai import types
-
 def generate_outfit_plan(
         new_user_query: str,
         chat_history: list[dict],  # read-only: backend/app.py appends the new turns
@@ -657,8 +653,8 @@ def generate_outfit_plan(
     if past_images is None:
         past_images = {}
 
-    # --- 1. RICOSTRUZIONE STORIA PER API (Solo Testo Grezzo) ---
-    gemini_history = []
+    # --- 1. The conversation as Mistral messages ---
+    messages = []
     
     # Identify the target message for refinement context
     # Default to the last model message with outfits if no specific ID is provided
@@ -671,7 +667,7 @@ def generate_outfit_plan(
             target_msg_id = last_outfit_msg.get('message_id')
 
     for msg in chat_history:
-        message_parts = [types.Part(text=msg["text"])]
+        message_parts = [text_part(msg["text"])]
         
         # --- NEW CONTEXT INJECTION: EXPOSE ITEM IDs TO LLM ---
         # If the message is from the model and contains detailed outfit data (with IDs),
@@ -710,68 +706,46 @@ def generate_outfit_plan(
                             
                             outfit_context += f"- [{main_cat}] ID: {item_id} | Name: {title}\n"
                 
-                # Append this context to the message parts sent to Gemini
-                message_parts.append(types.Part(text=outfit_context))
+                message_parts.append(text_part(outfit_context))
 
         if msg.get("role") == "user" and "image_id" in msg:
             img_id = msg["image_id"]
             if img_id in past_images:
                 img_bytes = past_images[img_id]
-                message_parts.append(types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg"))
+                message_parts.append(image_part(img_bytes))
             else:
                 logging.warning(f"Photo {img_id} not among the past images sent")
 
-        gemini_history.append({
-            "role": msg["role"],
-            "parts": message_parts
-        })
+        messages.append({"role": "assistant" if msg["role"] == "model" else "user", "content": message_parts})
 
     full_text_prompt = create_text_prompt(gender, new_user_query, user_preferences)
 
-    current_turn_parts = [types.Part(text=full_text_prompt + PLAN_RULES.replace("{query}", new_user_query))]
+    current_turn_parts = [text_part(full_text_prompt + PLAN_RULES.replace("{query}", new_user_query))]
 
-    # Part B: Immagine (se presente)
+    # The photo sent with this message, if any
     if image_data:
-        try:
-            img_part = types.Part.from_bytes(
-                data=image_data[1],
-                mime_type="image/jpeg"
-            )
-            current_turn_parts.append(img_part)
-        except Exception as e:
-            logging.error(f"Error packing image data: {e}")
+        current_turn_parts.append(image_part(image_data[1]))
 
     # Wardrobe: the photos of picked pieces don't count as 'has_images' below. The image prompt would ask
     # whether to copy the look; here the user already said what they want: the rest of the outfit.
     if picked_items:
         pieces = "; ".join(describe_piece(p) for p in picked_items)
-        current_turn_parts.append(types.Part(text=PICKED_PIECES_NOTE.format(pieces=pieces)))
-        current_turn_parts.extend(types.Part.from_bytes(data=p['image_bytes'], mime_type="image/jpeg")
-                                  for p in picked_items if p.get('image_bytes'))
+        current_turn_parts.append(text_part(PICKED_PIECES_NOTE.format(pieces=pieces)))
+        current_turn_parts.extend(image_part(p['image_bytes']) for p in picked_items if p.get('image_bytes'))
     if only_wardrobe:
-        current_turn_parts.append(types.Part(text=ONLY_WARDROBE_NOTE))
+        current_turn_parts.append(text_part(ONLY_WARDROBE_NOTE))
     if image_data:
-        current_turn_parts.append(types.Part(text=OWNED_PIECE_NOTE))
+        current_turn_parts.append(text_part(OWNED_PIECE_NOTE))
 
-    # Aggiungiamo il turno corrente alla storia PER L'API
-    gemini_history.append({"role": "user", "parts": current_turn_parts})
+    messages.append({"role": "user", "content": current_turn_parts})
 
 
     has_images = image_data is not None or (past_images is not None and len(past_images) > 0)
     base_prompt = IMAGE_SYSTEM_PROMPT if has_images else TEXTUAL_SYSTEM_PROMPT
 
-    # --- 4. CHIAMATA API ---
     # One call: the model either asks a question or returns the outfit plan straight away
     try:
-        response = generate_content_with_fallback(
-            contents=gemini_history,
-            config=types.GenerateContentConfig(
-                system_instruction = base_prompt,
-                response_mime_type = "application/json",
-                response_schema = response_schema,
-                temperature = 1.0
-            )
-        )
+        response = generate_content_with_fallback(messages, system=base_prompt, schema=response_schema, temperature=1.0)
         data = response.parsed
         logging.info(f"Planner status: {data.get('status')}")
     except Exception:
@@ -813,7 +787,7 @@ def generate_outfit_plan(
 
 def clean_constraints(constraints: dict | None) -> dict:
     """Keeps only the non-empty fields of constraint_item_schema: the model sometimes invents others (e.g. 'color': 'dark')."""
-    allowed = constraint_item_schema.properties.keys()
+    allowed = constraint_item_schema["properties"].keys()
     return {category: kept for category, fields in (constraints or {}).items() if isinstance(fields, dict)
             if (kept := {k: v for k, v in fields.items() if k in allowed and v})}
 

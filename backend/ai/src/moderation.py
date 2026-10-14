@@ -3,9 +3,7 @@ Checked once, when created or changed: with friends or sharing, that's when othe
 
 import logging
 
-from google.genai import types
-
-from ai.src.model_fallback import generate_content_with_fallback
+from ai.src.model_fallback import generate_content_with_fallback, image_part, text_part
 
 OFFENSIVE_MESSAGE = ("I cannot fulfill this request. Content that promotes hate speech, discrimination, "
                      "or is offensive toward any group or individual violates my safety policy and is strictly forbidden.")
@@ -18,18 +16,10 @@ PROFILE_CHECK_PROMPT = """You check the profile picture and names users show to 
 def verdict(prompt: str, verdicts: list[str], text: str, image: bytes | None) -> str | None:
     """The model's verdict on a text and an optional JPEG.
     An unreachable model raises: the content is refused rather than let in unchecked."""
-    parts = [types.Part(text=text)]
-    if image is not None:
-        parts.append(types.Part.from_bytes(data=image, mime_type="image/jpeg"))
+    parts = [text_part(text)] + ([image_part(image)] if image is not None else [])
     response = generate_content_with_fallback(
-        contents=[{"role": "user", "parts": parts}],
-        config=types.GenerateContentConfig(
-            system_instruction=prompt,
-            response_mime_type="application/json",
-            response_schema=types.Schema(type=types.Type.OBJECT, required=["verdict"], properties={
-                "verdict": types.Schema(type=types.Type.STRING, enum=verdicts)}),
-            temperature=0,
-        ),
+        [{"role": "user", "content": parts}], system=prompt, temperature=0,
+        schema={"type": "object", "properties": {"verdict": {"type": "string", "enum": verdicts}}, "required": ["verdict"]},
     )
     return (response.parsed or {}).get("verdict")
 

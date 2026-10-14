@@ -1,5 +1,4 @@
 import logging
-from google.genai import types
 from dotenv import load_dotenv
 
 from ai.src.model_fallback import generate_content_with_fallback
@@ -14,12 +13,7 @@ def generate_title(prompt: str) -> str:
     )
 
     try:
-        config = types.GenerateContentConfig()
-        
-        response = generate_content_with_fallback(
-            contents=prompt_text,
-            config=config
-        )
+        response = generate_content_with_fallback([{"role": "user", "content": prompt_text}])
 
         # Mistral tends to wrap the title in **bold** and quotes
         return str(response.text).strip().strip('*"\' ')

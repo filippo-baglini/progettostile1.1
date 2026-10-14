@@ -3,7 +3,8 @@ Model Fallback Helper Module
 
 Sends requests to Mistral, retrying and then falling back to alternative models when a call fails in a way
 worth retrying (rate limit, Mistral server error, timeout, dropped connection, bad JSON).
-Callers still build requests with Gemini types (contents, GenerateContentConfig); they are translated here.
+Callers pass Mistral chat messages ({"role": "user" | "assistant", "content": str | [parts]}), built with
+text_part / image_part, and a JSON Schema dict when they want structured output.
 """
 
 import base64
@@ -12,10 +13,9 @@ import logging
 import os
 import time
 from types import SimpleNamespace
-from typing import Any, List, Optional
+from typing import List, Optional
 
 import requests
-from google.genai import types
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -51,38 +51,19 @@ def is_retryable(exception: Exception) -> bool:
     return isinstance(exception, (requests.Timeout, requests.ConnectionError, json.JSONDecodeError))
 
 
-def _to_mistral_content(parts: list) -> list:
-    """Converts Gemini parts (types.Part or {"text": ...} dicts) to Mistral content chunks."""
-    content = []
-    for part in parts:
-        if isinstance(part, dict):
-            part = types.Part(**part)
-        if part.text is not None:
-            content.append({"type": "text", "text": part.text})
-        elif part.inline_data is not None:
-            b64 = base64.b64encode(part.inline_data.data).decode()
-            content.append({"type": "image_url", "image_url": f"data:{part.inline_data.mime_type};base64,{b64}"})
-    return content
+def text_part(text: str) -> dict:
+    return {"type": "text", "text": text}
 
 
-def _to_mistral_messages(contents: Any, system_instruction: Optional[str]) -> list:
-    """Converts Gemini `contents` (a string, a list of strings, or a list of {"role", "parts"} dicts)."""
-    messages = [{"role": "system", "content": system_instruction}] if system_instruction else []
-    for item in contents if isinstance(contents, list) else [contents]:
-        if isinstance(item, str):
-            messages.append({"role": "user", "content": item})
-        else:
-            role = "assistant" if item["role"] == "model" else "user"
-            messages.append({"role": role, "content": _to_mistral_content(item["parts"])})
-    return messages
+def image_part(jpeg: bytes) -> dict:
+    return {"type": "image_url", "image_url": f"data:image/jpeg;base64,{base64.b64encode(jpeg).decode()}"}
 
 
-def _call_mistral(model: str, contents: Any, config: types.GenerateContentConfig) -> SimpleNamespace:
-    body = {"model": model, "messages": _to_mistral_messages(contents, config.system_instruction)}
-    if config.temperature is not None:
-        body["temperature"] = min(config.temperature, MAX_TEMPERATURE)
-    if config.response_schema is not None:
-        schema = config.response_schema.json_schema.model_dump(mode="json", exclude_none=True)
+def _call_mistral(model: str, messages: list, schema: Optional[dict], temperature: Optional[float]) -> SimpleNamespace:
+    body = {"model": model, "messages": messages}
+    if temperature is not None:
+        body["temperature"] = min(temperature, MAX_TEMPERATURE)
+    if schema is not None:
         body["response_format"] = {"type": "json_schema", "json_schema": {"name": "response", "schema": schema}}
 
     r = requests.post(MISTRAL_URL, json=body, timeout=60,
@@ -91,27 +72,31 @@ def _call_mistral(model: str, contents: Any, config: types.GenerateContentConfig
         raise MistralError(r.status_code, r.text)
 
     text = r.json()["choices"][0]["message"]["content"]
-    # Same shape as a Gemini response: .text always, .parsed when a schema was requested
-    return SimpleNamespace(text=text, parsed=json.loads(text) if config.response_schema is not None else None)
+    # .text always, .parsed (the decoded JSON) when a schema was requested
+    return SimpleNamespace(text=text, parsed=json.loads(text) if schema is not None else None)
 
 
 def generate_content_with_fallback(
-    contents: Any,
-    config: types.GenerateContentConfig,
+    messages: list,
+    system: Optional[str] = None,
+    schema: Optional[dict] = None,
+    temperature: Optional[float] = None,
     models: Optional[List[str]] = None,
     initial_model: Optional[str] = None
-) -> Any:
+) -> SimpleNamespace:
     """
     Attempts to generate content, retrying and then falling back to the next model on retryable errors.
 
     Args:
-        contents: The content to send to the model (Gemini format)
-        config: GenerateContentConfig for the request
+        messages: Mistral chat messages (the system prompt goes in `system`)
+        system: Optional system prompt
+        schema: Optional JSON Schema the answer must follow; the result's .parsed is then the decoded JSON
+        temperature: Optional sampling temperature (capped at MAX_TEMPERATURE)
         models: Optional list of models to try (defaults to DEFAULT_FALLBACK_MODELS)
         initial_model: Optional specific model to try first (will be prepended to models list)
 
     Returns:
-        An object with .text and .parsed, like a Gemini response
+        An object with .text and .parsed
 
     Raises:
         Exception: If all models fail
@@ -126,6 +111,7 @@ def generate_content_with_fallback(
         fallback_models.remove(initial_model)
         fallback_models = [initial_model] + fallback_models
 
+    messages = ([{"role": "system", "content": system}] if system else []) + messages
     last_exception = None
 
     for model_index, model_name in enumerate(fallback_models):
@@ -138,7 +124,7 @@ def generate_content_with_fallback(
                 else:
                     logging.info(f"📡 Using model: {model_name}")
 
-                response = _call_mistral(model_name, contents, config)
+                response = _call_mistral(model_name, messages, schema, temperature)
 
                 # Success!
                 if model_index > 0:

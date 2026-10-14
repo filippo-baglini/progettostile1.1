@@ -54,7 +54,7 @@ assert len(clean_owned_piece({**guess, 'color': 'x' * 500}, True, msg)['color'])
 # Wardrobe piece check (model stubbed): verdict -> refusal message; an edit with no text skips the model
 calls = []
 def stub(verdict):
-    moderation.generate_content_with_fallback = lambda **kw: calls.append(kw) or SimpleNamespace(parsed={'verdict': verdict})
+    moderation.generate_content_with_fallback = lambda messages, **kw: calls.append(messages) or SimpleNamespace(parsed={'verdict': verdict})
 stub('OFFENSIVE')
 assert check_wardrobe_piece(b'jpg', [None, None, None]) == wardrobe.OFFENSIVE_MESSAGE
 assert check_wardrobe_piece(None, ['bad words', None, None]) == wardrobe.OFFENSIVE_MESSAGE
@@ -70,7 +70,7 @@ assert check_wardrobe_piece(None, [None, None, None]) is None and calls == []
 stub('OFFENSIVE')
 assert moderation.check_profile(image=b'jpg') == moderation.OFFENSIVE_MESSAGE
 assert moderation.check_profile(name='bad words', username='x') == moderation.OFFENSIVE_MESSAGE
-assert 'name: bad words; username: x' in calls[-1]['contents'][0]['parts'][0].text
+assert 'name: bad words; username: x' in calls[-1][0]['content'][0]['text']
 stub('OK')
 assert moderation.check_profile(image=b'jpg', name='Mario') is None
 

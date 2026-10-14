@@ -1,5 +1,3 @@
-from google.genai import types
-
 from ai.src.model_fallback import generate_content_with_fallback
 
 SYSTEM_PROMPT = """
@@ -22,8 +20,5 @@ def explain_selected_outfit(user_prompt: str, retrieved_outfit) -> str:
         f"{retrieved_outfit}"
         "\n**************************\n"
     )
-    response = generate_content_with_fallback(
-        contents=[full_prompt],
-        config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT)
-    )
+    response = generate_content_with_fallback([{"role": "user", "content": full_prompt}], system=SYSTEM_PROMPT)
     return response.text

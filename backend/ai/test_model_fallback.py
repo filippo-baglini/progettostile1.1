@@ -4,18 +4,16 @@ import json
 from unittest import mock
 
 import requests
-from google.genai import types
 
 from ai.src import model_fallback as mf
 
-config = types.GenerateContentConfig()
 ok = mf.SimpleNamespace(text='hi', parsed=None)
 
 
 def run(*outcomes):
     """Calls generate_content_with_fallback with _call_mistral failing or answering as listed; returns (result, models tried)."""
     calls = []
-    def call(model, contents, config):
+    def call(model, messages, schema, temperature):
         calls.append(model)
         outcome = outcomes[len(calls) - 1]
         if isinstance(outcome, Exception):
@@ -23,7 +21,7 @@ def run(*outcomes):
         return outcome
     with mock.patch.object(mf, '_call_mistral', side_effect=call), mock.patch.object(mf.time, 'sleep'):
         try:
-            return mf.generate_content_with_fallback('hello', config), calls
+            return mf.generate_content_with_fallback([{'role': 'user', 'content': 'hello'}]), calls
         except Exception as e:
             return e, calls
 
