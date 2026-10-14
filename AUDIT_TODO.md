@@ -69,7 +69,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 
 ## Inconsistencies and cleanup
 
-- [ ] **C1.** Two ways of reading preferences: Supabase REST in `ai/src/preferences_management.py` and psycopg2 in `db_manager.py` (the REST path has B1). Keep one.
+- [x] **C1.** Two ways of reading preferences: Supabase REST in `ai/src/preferences_management.py` and psycopg2 in `db_manager.py` (the REST path has B1). Keep one. *(fixed 2026-10-14: the outfit planner uses `DBManager.get_user_preferences` too; `preferences_management.py` is gone)*
 - [ ] **C2.** Two Supabase clients; `SUPABASE_RLS_KEY` is a secret key that bypasses RLS, so the name is misleading. With psycopg2 that makes three ways into the same DB: the search RPCs could be plain SQL through `DBManager`.
 - [x] **C3.** Image size caps differ: avatars 512 px, wardrobe 1024 px, chat photos none. *(fixed 2026-10-14: chat photos 1024 px like the wardrobe)*
 - [ ] **C4.** Wardrobe pieces get the offensive-content check; avatars don't.
@@ -104,6 +104,8 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 - [ ] Freemium quota: a few outfit generations a day for guests and free users, many more (or unlimited) for paid ones. Count per user and day in the DB; guests can only be counted per IP or browser, so keep their allowance small. Separate from the per-IP rate limit, which stays for everyone.
 - [ ] Several server workers: move the rate-limit counts to Redis (Flask-Limiter supports it); the progress store too (only the "putting your outfit together" text depends on it).
 - [ ] Behind a reverse proxy, add werkzeug's `ProxyFix`, or the rate limit sees every request as coming from the proxy.
+- [ ] Database: use Supabase's pooler in transaction mode (port 6543 in `DB_PORT`) instead of session mode (5432). In session mode each of our connections takes one of the plan's ~15 real DB connections; in transaction mode ~200 clients share them, a real one taken only while a query runs. psycopg2 works there (no server-side prepared statements).
+- [ ] Database: hand the request's connection back to the pool before the Mistral call in `send_message` and take one again to save the reply. Today an outfit being generated holds its connection for the whole 10-30 s, so ~15 generating at once would hit "max clients" (P3).
 - [ ] Privacy policy (there is none yet). Among the rest, say that chat, wardrobe and profile photos can be opened by anyone who has their link, until they're deleted (S12).
 - [ ] Terms of Service (there are none yet), linked from signup next to the privacy policy.
 

@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Import custom modules
-from ai.src.preferences_management import get_user_preferences
+from db_manager import DBManager
 from ai.src.accessories import narrow_accessories
 from ai.src.query_handler import generate_outfit_plan, parse_outfit_plan, item_description, SINGLE_ITEM_CATEGORIES
 from ai.src.query_embedder import get_text_embedding_vector
@@ -101,13 +101,9 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
         except Exception:
             gender = None
     
-    if user_id_key:
-        #get_user_preferences FOR NOW QUERIES THE MOCK-UP USER DB I MADE
-        #NEEDS TO BE CHANGED SO THAT IT QUERIES THE RIGHT DB OR REMOVED
-        #ALTOGETHER IF NOT NEEDED
-        user_preferences = get_user_preferences(SUPABASE_CLIENT, user_id_key)
-    else:
-        user_preferences = None
+    # DB names are Color, Brand, ...; the planner reads favorite_color, favorite_brand, ...
+    user_preferences = {f"favorite_{name.lower()}": value
+                        for name, value in DBManager.get_user_preferences(user_id_key).items()} if user_id_key else None
 
     # 1. Recupera items dall'outfit precedente (se esiste) per il refinement
     target_outfit_items = []
