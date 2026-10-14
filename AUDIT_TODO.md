@@ -1,6 +1,7 @@
 # Audit TODO
 
-Findings from the codebase audit of 2026-10-13. Tick an item (`[x]`) when its fix is committed.
+Findings from the codebase audit of 2026-10-13, merged with the colleague's review of the same day
+(the former `TODO.md`). Tick an item (`[x]`) when its fix is committed.
 "Likely" items were traced in the code but not reproduced.
 
 ## Security
@@ -16,7 +17,7 @@ Findings from the codebase audit of 2026-10-13. Tick an item (`[x]`) when its fi
 - [x] **S3b. Logout is a GET** (`app.py:265`), so any `<img>` tag on another page can log users out. Fix: make it POST. *(fixed by the Supabase Auth migration, 2026-10-14)*
 - [x] **S4. Sessions can't be revoked.** Flask's signed-cookie sessions stay valid after logout and after a password change; `SESSION_COOKIE_SECURE` isn't set for production. *(fixed by the Supabase Auth migration, 2026-10-14: logout and password changes revoke the session; an access token already issued stays valid until it expires, 1 hour by default)*
 - [ ] **S5. No rate or size limits on paid/heavy endpoints.**
-  - [ ] `/api/messages/send` and `/api/outfit/explain` work without login and have no rate limit.
+  - [ ] `/api/messages/send` and `/api/outfit/explain` work without login and have no rate limit; each call can trigger several Mistral calls plus CLIP inference. Guests can also flood the 200-slot `not_auth_convs` cache and evict other guests' chats. Add a per-IP limit (e.g. Flask-Limiter).
   - [ ] `/explain` takes any `user_prompt` and `outfit_data`, so it works as an open LLM proxy.
   - [x] No `MAX_CONTENT_LENGTH`: uploads can be any size. *(fixed in d0e78b6: 10 MB cap, 413)*
   - [ ] Pillow still decodes images up to ~179 MP (~0.5 GB RAM each): a small, highly compressed file can pass the 10 MB cap. Lower `Image.MAX_IMAGE_PIXELS`.
@@ -28,6 +29,8 @@ Findings from the codebase audit of 2026-10-13. Tick an item (`[x]`) when its fi
 - [ ] **S8.** The explanation endpoint returns the raw exception text to the client (`backend/ai/src/get_explanations.py`, last line).
 - [ ] **S9.** Personal data in logs: `print(user_preferences, gender)` and full LLM responses on the backend; `console.log('DEBUG: Raw history...')` in `frontend/src/services/chatService.ts:238`.
 - [ ] **S10.** Chat photos are uploaded before the ownership check and before the AI call (`app.py:678`), so failed or rejected requests leave orphan files in storage.
+- [ ] **S11. DB credentials have defaults.** `DBManager` falls back to `DB_PASSWORD='password'` and `DB_HOST='localhost'` (`backend/db_manager.py:21`). Fail at startup like `SECRET_KEY` does.
+- [ ] **S12. Photos are public.** Chat and wardrobe photos live in public buckets (the UUIDs can't be guessed, but anyone with the URL can see them). Use signed URLs, or at least say so in the privacy notes.
 
 ## Bugs
 
@@ -43,27 +46,47 @@ Findings from the codebase audit of 2026-10-13. Tick an item (`[x]`) when its fi
 - [ ] **B10. Small ones:**
   - [ ] A request with no `message` crashes with a 500 (`query_handler.py:731`, `ai/src/app.py:220`).
   - [ ] Deleting a conversation without `conv_id` raises on `int(None)` and returns 500 (`app.py:941`).
+  - [ ] A non-image file sent to `/api/messages/send` crashes `compress_image` with a 500 instead of a 400.
+  - [ ] `/api/chat` accepts `GET` but reads a JSON body, and its docstring is copied from `get_conversations`. Make it `POST` only (the frontend already uses POST).
+  - [ ] `query_embedder.py`'s `__main__` calls `get_text_embedding_vector(test_text)` with one argument instead of four.
+  - [ ] The DB status on `/` is checked once, at startup, not on each request.
   - [ ] A negative `selected_outfit_index` is accepted (`ai/src/app.py:115-132`).
   - [ ] A double tap on "Add to wardrobe" can create two pieces (`app.py:498-509` checks, then inserts, without locking).
   - [ ] A catalogue item with a NULL price crashes outfit assembly (`assemble_outfit.py`, `item['price'] * 100`).
   - [ ] A product with an empty colour matches every colour filter (`schema.sql`, `ILIKE '%' || schema_color || '%'`).
   - [ ] Chat titles aren't length-capped (LLM title or rename): anything over 255 characters gives a 500.
+- [ ] **B11. Most Mistral errors aren't retried.** `model_fallback.py` only retries on rate limits (found by searching the error text for "429") and on bad JSON. Check `r.status_code` and also retry on 5xx and `requests.Timeout`.
+
+## Performance
+
+- [ ] **P1. No vector index on `product_data.img_embedding`**, so every search reads the whole catalogue. Add `CREATE INDEX ... USING hnsw (img_embedding vector_cosine_ops)` in a migration, and move the `similarity > match_threshold` filter after `ORDER BY ... LIMIT` (otherwise the index isn't used).
+- [ ] **P2. Text embeddings run the image model on a dummy image** (`query_embedder.py`). Use `MODEL.get_text_features(**PROC(text=[...]))`.
+- [ ] **P3. A new Postgres connection per request.** Use `psycopg2.pool`.
 
 ## Inconsistencies and cleanup
 
 - [ ] **C1.** Two ways of reading preferences: Supabase REST in `ai/src/preferences_management.py` and psycopg2 in `db_manager.py` (the REST path has B1). Keep one.
-- [ ] **C2.** Two Supabase clients; `SUPABASE_RLS_KEY` is a secret key that bypasses RLS, so the name is misleading.
+- [ ] **C2.** Two Supabase clients; `SUPABASE_RLS_KEY` is a secret key that bypasses RLS, so the name is misleading. With psycopg2 that makes three ways into the same DB: the search RPCs could be plain SQL through `DBManager`.
 - [ ] **C3.** Image size caps differ: avatars 512 px, wardrobe 1024 px, chat photos none.
 - [ ] **C4.** Wardrobe pieces get the offensive-content check; avatars don't.
 - [ ] **C5.** Error messages and docstrings mix Italian and English.
 - [ ] **C6.** Outdated docs:
   - [x] `frontend/.env.example` (Supabase and OpenAI options that aren't used) *(rewritten with the migration)*
   - [ ] `frontend/.github/copilot-instructions.md` (says React 18, Router v6)
-  - [ ] `frontend/docs/StyleFinder_Frontend_Manual.tex`
+  - [ ] `frontend/docs/StyleFinder_Frontend_Manual.tex` (mentions a missing `mockData.ts`)
+  - [ ] `frontend/.env.local.example` (duplicate of `.env.example`), the unused Vite `/api` proxy, the unused vitest `@` alias
 - [ ] **C7.** The README says to run migrations in filename order, which runs `wardrobe_from_chat` before `wardrobe_outfits`, the opposite of what its own header says it needs.
-- [ ] **C8.** Deployment: the CORS origins are hardcoded to localhost and the app runs on Flask's development server.
-- [ ] **C9.** Leftover code: the unused `chat_history`/`history` passing, the "legacy single outfit" fallbacks, and `DEBUG` prints.
+- [ ] **C8.** Deployment: the CORS origins are hardcoded to localhost and the app runs on Flask's development server. Use gunicorn with **1** worker (the progress store and guest chats live in process memory), not `app.run(use_reloader=True)`, which loads CLIP twice.
+- [ ] **C9.** Leftover code: the unused `chat_history`/`history` passing, the "legacy single outfit" fallbacks, and `DEBUG` prints. Replace `print()` with `logging` (see S9).
 - [ ] **C10.** ESLint: 44 errors and 8 warnings (mostly `no-explicit-any` and unused variables).
+- [ ] **C11.** Remove `pandas`: it does one group-by in `outfit_retrieval_logic.py`, which a dict can do.
+- [ ] **C12.** `google-genai` is only installed for its request types, which get translated to Mistral. Writing Mistral messages directly would remove it and most of `model_fallback.py` (bigger refactor).
+- [ ] **C13.** `schema.sql` contains `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` lines; move them into migrations, as the README says.
+
+## Missing
+
+- [ ] **M1. CI:** a GitHub Actions workflow running `npm test`, `npm run lint` and the backend checks.
+- [ ] **M2. Backend tests** for the knapsack (`assemble_outfit.py`) and for ownership checks (user A can't read or edit user B's chats or wardrobe pieces).
 
 ## Before production
 
