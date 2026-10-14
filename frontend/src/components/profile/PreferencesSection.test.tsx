@@ -25,6 +25,11 @@ vi.mock('../../utils/toast', () => ({
     },
 }));
 
+const mockUpdateUser = vi.fn();
+vi.mock('../../context/AuthContext', () => ({
+    useAuth: () => ({ user: { id: '1', name: 'Test' }, updateUser: mockUpdateUser }),
+}));
+
 vi.mock('../../utils/confetti', () => ({
     triggerSuccessConfetti: vi.fn(),
 }));
@@ -67,7 +72,7 @@ vi.mock('framer-motion', () => ({
 
 describe('PreferencesSection', () => {
     const mockAllPreferences = {
-        '1': { id: 1, name: 'Gender', values: ['Man', 'Woman'] },
+        '1': { id: 1, name: 'Genere', values: ['male', 'female'] },
         '2': { id: 2, name: 'Style', values: ['Casual', 'Formal'] },
         '3': { id: 3, name: 'Color', values: ['Blue', 'Red'] },
         '4': { id: 4, name: 'Brand', values: ['Nike', 'Adidas'] },
@@ -75,7 +80,7 @@ describe('PreferencesSection', () => {
     };
 
     const mockUserPreferences = {
-        Gender: 'Man',
+        gender: 'male',
         Style: 'Casual',
         Color: '',
         Brand: '',
@@ -108,7 +113,7 @@ describe('PreferencesSection', () => {
         );
 
         await waitFor(() => {
-            expect(screen.getByText('Gender')).toBeInTheDocument();
+            expect(screen.getByText('Genere')).toBeInTheDocument();
             expect(screen.getByText('Style')).toBeInTheDocument();
             expect(screen.getByText('Color')).toBeInTheDocument();
             expect(screen.getByText('Brand')).toBeInTheDocument();
@@ -188,6 +193,9 @@ describe('PreferencesSection', () => {
             expect(preferencesService.updatePreferences).toHaveBeenCalled();
             expect(triggerSuccessConfetti).toHaveBeenCalled();
             expect(showToast.success).toHaveBeenCalledWith('Preferences saved!');
+            expect(mockUpdateUser).toHaveBeenCalledWith(expect.objectContaining({
+                preferences: expect.objectContaining({ gender: 'male', Style: 'Casual' }),
+            }));
             // Navigate is called after timeout, might be tricky to test without fake timers
         });
     });
@@ -208,5 +216,22 @@ describe('PreferencesSection', () => {
         await waitFor(() => {
             expect(showToast.error).toHaveBeenCalledWith('Failed to save preferences');
         });
+    });
+
+    it('does not save without a gender', async () => {
+        (preferencesService.getPreferences as any).mockResolvedValue({ Style: 'Casual' });
+
+        render(
+            <BrowserRouter>
+                <PreferencesSection />
+            </BrowserRouter>
+        );
+
+        await waitFor(() => screen.getByText('Save Preferences'));
+
+        fireEvent.click(screen.getByText('Save Preferences'));
+
+        expect(showToast.error).toHaveBeenCalledWith('Choose a gender before saving');
+        expect(preferencesService.updatePreferences).not.toHaveBeenCalled();
     });
 });

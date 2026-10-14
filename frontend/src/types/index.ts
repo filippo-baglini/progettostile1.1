@@ -24,12 +24,8 @@ export interface WardrobeDetails {
   brand?: string;
 }
 
-export interface UserPreferences {
-  gender: 'man' | 'woman' | 'non-binary';
-  favoriteStyles: string[];
-  favoriteColors: string[];
-  favoriteBrands?: string[];
-}
+// As /user/session returns them: preference name -> comma-separated values, plus `gender`
+export type UserPreferences = Record<string, string>;
 
 // Chat types
 // Outfit Generation Option for the poll

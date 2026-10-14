@@ -24,6 +24,7 @@ import ScrollToBottomButton from '../components/ui/ScrollToBottomButton';
 import KeyboardShortcutsHelper from '../components/ui/KeyboardShortcutsHelper';
 import { chatService } from '../services/chatService';
 import { wardrobeService } from '../services/wardrobeService';
+import { preferencesService } from '../services/preferencesService';
 import { apiErrorMessage } from '../services/api';
 import { beautifyUsername } from '../utils/stringUtils';
 import { showToast } from '../utils/toast';
@@ -48,7 +49,7 @@ const ChatPage = () => {
   const navigate = useNavigate();
 
   // Auth context
-  const { isAuthenticated, isLoading: isAuthLoading, user } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading, user, updateUser } = useAuth();
   const isLoggedIn = isAuthenticated;
   let userName = user?.name || 'Guest';
   userName = beautifyUsername(userName);
@@ -57,6 +58,21 @@ const ChatPage = () => {
   const handleGuestGenderSelect = (gender: GuestGender) => {
     setGuestGender(gender);
     localStorage.setItem('stylefinder_guest_gender', gender);
+  };
+
+  // Logged-in users without a gender (e.g. just confirmed their email) pick it here before chatting
+  const userGender = user?.preferences?.gender;
+  const needsGender = isAuthenticated ? !userGender : !guestGender;
+  const handleUserGenderSelect = async (gender: GuestGender) => {
+    if (!user) return;
+    try {
+      // The endpoint replaces every preference, so the saved ones go back with the gender
+      const preferences = { ...user.preferences, gender };
+      await preferencesService.updatePreferences(preferences);
+      updateUser({ ...user, preferences });
+    } catch {
+      showToast.error('Could not save your clothing preference');
+    }
   };
 
   // Chat state is shared with the app (see ChatContext); guestGender is sent for non-authenticated users
@@ -400,12 +416,12 @@ const ChatPage = () => {
 
         <Header chatTitle={chatHistory.find(c => c.id === currentChatId)?.title || currentChatTitle} />
 
-        {/* Gender Selector for non-authenticated users */}
-        {!isAuthenticated && (
+        {/* Gender Selector for guests, and for users who haven't set one (changed later in the profile) */}
+        {(!isAuthenticated || !userGender) && (
           <GenderSelector
-            selectedGender={guestGender}
-            onSelectGender={handleGuestGenderSelect}
-            disabled={messages.length > 0}
+            selectedGender={isAuthenticated ? null : guestGender}
+            onSelectGender={isAuthenticated ? handleUserGenderSelect : handleGuestGenderSelect}
+            disabled={!isAuthenticated && messages.length > 0}
           />
         )}
 
@@ -420,7 +436,7 @@ const ChatPage = () => {
               isLoggedIn={isLoggedIn}
               userName={userName}
               onSuggestionClick={(suggestion) => setInputMessage(suggestion)}
-              suggestionsDisabled={!isAuthenticated && !guestGender}
+              suggestionsDisabled={needsGender}
             />
           ) : (
             <div className="max-w-[992px] mx-auto space-y-6">
@@ -477,8 +493,8 @@ const ChatPage = () => {
           onRemoveImage={handleRemoveImage}
           onSendMessage={handleSendMessage}
           isLoading={isLoading}
-          disabled={!isAuthenticated && !guestGender}
-          disabledMessage={!isAuthenticated && !guestGender ? "Please select your style preference above to start chatting" : undefined}
+          disabled={needsGender}
+          disabledMessage={needsGender ? "Please select your clothing preference above to start chatting" : undefined}
           hasAttachments={wardrobe.picked.length > 0}
           toolbarSlot={wardrobe.hasWardrobe && (
             <button

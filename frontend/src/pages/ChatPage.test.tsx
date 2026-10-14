@@ -10,6 +10,7 @@ import { useChat } from '../context/ChatContext';
 import { useImageUpload } from '../hooks/useImageUpload';
 import { useScrollToBottom } from '../hooks/useScrollToBottom';
 import { chatService } from '../services/chatService';
+import { preferencesService } from '../services/preferencesService';
 
 // Mock hooks
 vi.mock('../context/AuthContext', () => ({
@@ -34,6 +35,10 @@ vi.mock('../hooks/useScrollToBottom', () => ({
 
 vi.mock('../hooks/useKeyboardShortcuts', () => ({
     useKeyboardShortcuts: vi.fn(),
+}));
+
+vi.mock('../services/preferencesService', () => ({
+    preferencesService: { updatePreferences: vi.fn().mockResolvedValue(true) },
 }));
 
 // Mock services
@@ -78,8 +83,8 @@ vi.mock('../components/chat/ChatMessage', () => ({
 }));
 
 vi.mock('../components/chat/ChatInput', () => ({
-    default: ({ setInputMessage, onSendMessage }: any) => (
-        <div data-testid="chat-input">
+    default: ({ setInputMessage, onSendMessage, disabled }: any) => (
+        <div data-testid="chat-input" data-disabled={!!disabled}>
             <input onChange={(e) => setInputMessage(e.target.value)} placeholder="Type message" />
             <button onClick={onSendMessage}>Send</button>
         </div>
@@ -156,13 +161,28 @@ describe('ChatPage', () => {
 
         (useAuth as any).mockReturnValue({
             isAuthenticated: true,
-            user: { name: 'Test User' },
+            user: { name: 'Test User', preferences: { gender: 'male' } },
         });
 
         (useChat as any).mockReturnValue(defaultChatMessages);
         (useImageUpload as any).mockReturnValue(defaultImageUpload);
         (useScrollToBottom as any).mockReturnValue(defaultScroll);
         (chatService.getChatHistory as any).mockResolvedValue([]);
+    });
+
+    it('asks a logged-in user without a gender to pick one before chatting', async () => {
+        const updateUser = vi.fn();
+        const user = { name: 'New User', preferences: { Brand: 'zara' } };
+        (useAuth as any).mockReturnValue({ isAuthenticated: true, user, updateUser });
+
+        renderWithRouter(<ChatPage />);
+        expect(screen.getByTestId('chat-input')).toHaveAttribute('data-disabled', 'true');
+
+        fireEvent.click(screen.getByText('Woman'));
+
+        await vi.waitFor(() => expect(updateUser).toHaveBeenCalledWith({ ...user, preferences: { Brand: 'zara', gender: 'female' } }));
+        // Saved preferences go back with the gender, since the endpoint replaces them all
+        expect(preferencesService.updatePreferences).toHaveBeenCalledWith({ Brand: 'zara', gender: 'female' });
     });
 
     it('renders empty state initially', () => {

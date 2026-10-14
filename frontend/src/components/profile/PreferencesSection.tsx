@@ -5,6 +5,7 @@ import SearchableMultiSelect from '../ui/SearchableMultiSelect';
 import { preferencesService } from '../../services/preferencesService';
 import type { AllPreferencesResponse } from '../../services/preferencesService';
 import { showToast } from '../../utils/toast';
+import { useAuth } from '../../context/AuthContext';
 import { triggerSuccessConfetti } from '../../utils/confetti';
 
 // Soglia per mostrare dropdown invece di bottoni
@@ -14,6 +15,7 @@ const DROPDOWN_THRESHOLD = 10;
 const SINGLE_SELECT_PREFERENCES = ['Genere', 'gender', 'Gender'];
 
 const PreferencesSection = () => {
+  const { user, updateUser } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingPrefs, setIsLoadingPrefs] = useState(true);
 
@@ -93,6 +95,11 @@ const PreferencesSection = () => {
   };
 
   const handleSave = async () => {
+    // The AI needs it to pick men's or women's clothes
+    if (!(preferences['Genere'] || preferences['gender'])) {
+      showToast.error('Choose a gender before saving');
+      return;
+    }
     setIsLoading(true);
     try {
       // Costruisci l'oggetto completo con TUTTE le preferenze disponibili
@@ -131,6 +138,7 @@ const PreferencesSection = () => {
 
       const success = await preferencesService.updatePreferences(completePreferences);
       if (success) {
+        if (user) updateUser({ ...user, preferences: completePreferences });
         triggerSuccessConfetti();
         showToast.success('Preferences saved!');
       } else {
