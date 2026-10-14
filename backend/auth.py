@@ -17,7 +17,8 @@ def verify_token(token: str) -> dict | None:
     """The token's claims if Supabase signed it for a logged-in user and it hasn't expired, else None."""
     try:
         key = _jwks.get_signing_key_from_jwt(token).key
-        return jwt.decode(token, key, algorithms=["ES256"], audience="authenticated")
+        # Leeway: a token from a login a moment ago has `iat` in the future if this clock is slightly behind
+        return jwt.decode(token, key, algorithms=["ES256"], audience="authenticated", leeway=30)
     except jwt.PyJWTError:
         return None
 

@@ -135,7 +135,7 @@ describe('LoginPage', () => {
     });
 
     it('handles login failure', async () => {
-        mockLogin.mockRejectedValue(new Error('Login failed'));
+        mockLogin.mockRejectedValue(new Error('Invalid login credentials'));
 
         render(
             <BrowserRouter>
@@ -152,6 +152,24 @@ describe('LoginPage', () => {
             expect(mockLogin).toHaveBeenCalled();
             expect(screen.getByText('Invalid email or password')).toBeInTheDocument();
             expect(showToast.error).toHaveBeenCalledWith('Invalid email or password');
+        });
+    });
+
+    it('does not blame the password when something else failed', async () => {
+        mockLogin.mockRejectedValue(new Error('Request failed with status code 500'));
+
+        render(
+            <BrowserRouter>
+                <LoginPage />
+            </BrowserRouter>
+        );
+
+        fireEvent.change(screen.getByTestId('input-email'), { target: { value: 'test@example.com' } });
+        fireEvent.change(screen.getByTestId('input-password'), { target: { value: 'right' } });
+        fireEvent.click(screen.getByText('Log In', { selector: 'button' }));
+
+        await waitFor(() => {
+            expect(showToast.error).toHaveBeenCalledWith('Could not log in. Please try again.');
         });
     });
 

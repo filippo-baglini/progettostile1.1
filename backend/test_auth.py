@@ -26,7 +26,8 @@ def token(signing_key=key, algorithm="ES256", **claims):
 
 assert auth.verify_token(token())["sub"] == "4f1c-uuid"
 assert auth.verify_token(token(aud="anon")) is None                       # not a logged-in user's token
-assert auth.verify_token(token(exp=int(time.time()) - 10)) is None        # expired
+assert auth.verify_token(token(exp=int(time.time()) - 60)) is None        # expired (past the 30 s leeway)
+assert auth.verify_token(token(iat=int(time.time()) + 2))["sub"] == "4f1c-uuid"  # this clock a little behind Supabase's
 assert auth.verify_token(token(signing_key=ec.generate_private_key(ec.SECP256R1()))) is None  # someone else's key
 assert auth.verify_token(token(signing_key="a-secret-long-enough-for-hs256-0123456789", algorithm="HS256")) is None  # algorithm swap
 assert auth.verify_token("garbage") is None

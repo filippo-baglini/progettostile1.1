@@ -28,9 +28,12 @@ const LoginPage = () => {
       showToast.success('Welcome back!');
       navigate('/chat');
     } catch (err) {
-      const errorMessage = err instanceof Error && err.message === 'Email not confirmed'
+      const message = err instanceof Error ? err.message : '';
+      const errorMessage = message === 'Email not confirmed'
         ? 'Confirm your email first: check your inbox for the link'
-        : 'Invalid email or password';
+        : message === 'Invalid login credentials'
+          ? 'Invalid email or password'
+          : 'Could not log in. Please try again.'; // e.g. our server is down
       setError(errorMessage);
       showToast.error(errorMessage);
       console.error('Login error:', err);
