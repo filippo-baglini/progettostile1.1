@@ -22,44 +22,27 @@ Object.defineProperty(window, 'matchMedia', {
 });
 
 // Mock ResizeObserver
-(globalThis as any).ResizeObserver = vi.fn().mockImplementation(() => ({
+globalThis.ResizeObserver = vi.fn().mockImplementation(() => ({
     observe: vi.fn(),
     unobserve: vi.fn(),
     disconnect: vi.fn(),
-}));
+})) as unknown as typeof ResizeObserver;
 
-// Mock framer-motion
+// Mock framer-motion: motion.<tag> renders the plain tag, minus the animation props
 vi.mock('framer-motion', async () => {
-    const actual = await vi.importActual('framer-motion');
-    const filterProps = (props: any) => {
-        const {
-            whileHover, whileTap, whileInView,
-            initial, animate, exit, transition, variants,
-            layout, layoutId,
-            drag, dragConstraints, dragElastic,
-            onTap,
-            ...validProps
-        } = props;
-        return validProps;
+    const actual = await vi.importActual<object>('framer-motion');
+    const MOTION_PROPS = new Set(['whileHover', 'whileTap', 'whileInView', 'initial', 'animate', 'exit', 'transition',
+        'variants', 'layout', 'layoutId', 'drag', 'dragConstraints', 'dragElastic', 'onTap']);
+    const plain = (tag: string) => ({ children, ...props }: { children?: React.ReactNode; [prop: string]: unknown }) => {
+        const Tag = tag as React.ElementType;
+        return <Tag {...Object.fromEntries(Object.entries(props).filter(([name]) => !MOTION_PROPS.has(name)))}>{children}</Tag>;
     };
+    const tags = ['div', 'button', 'span', 'img', 'textarea', 'h1', 'h2', 'h3', 'p', 'nav', 'section', 'a'];
 
     return {
-        ...actual as any,
-        motion: {
-            div: ({ children, ...props }: any) => <div {...filterProps(props)}>{children}</div>,
-            button: ({ children, ...props }: any) => <button {...filterProps(props)}>{children}</button>,
-            span: ({ children, ...props }: any) => <span {...filterProps(props)}>{children}</span>,
-            img: ({ ...props }: any) => <img {...filterProps(props)} />,
-            textarea: ({ ...props }: any) => <textarea {...filterProps(props)} />,
-            h1: ({ children, ...props }: any) => <h1 {...filterProps(props)}>{children}</h1>,
-            h2: ({ children, ...props }: any) => <h2 {...filterProps(props)}>{children}</h2>,
-            h3: ({ children, ...props }: any) => <h3 {...filterProps(props)}>{children}</h3>,
-            p: ({ children, ...props }: any) => <p {...filterProps(props)}>{children}</p>,
-            nav: ({ children, ...props }: any) => <nav {...filterProps(props)}>{children}</nav>,
-            section: ({ children, ...props }: any) => <section {...filterProps(props)}>{children}</section>,
-            a: ({ children, ...props }: any) => <a {...filterProps(props)}>{children}</a>,
-        },
-        AnimatePresence: ({ children }: any) => <>{children}</>,
+        ...actual,
+        motion: Object.fromEntries(tags.map(tag => [tag, plain(tag)])),
+        AnimatePresence: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
     };
 });
 

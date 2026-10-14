@@ -1,5 +1,5 @@
 import api from './api';
-import type { ChatHistory, OutfitFilters, OutfitItem } from '../types';
+import type { BudgetOption, ChatHistory, OutfitFilters, OutfitGenerationOption, OutfitItem } from '../types';
 import { toWardrobeSuggestion, type BackendWardrobeSuggestion } from './wardrobeService';
 
 /**
@@ -45,8 +45,8 @@ interface BackendOutfitResponse {
   outfits?: BackendOutfitResult[];
   message: string;
   explanation?: string;
-  budget_options?: any[]; // Budget options for polling
-  outfit_generation_options?: any[]; // Outfit generation options for polling
+  budget_options?: BudgetOption[]; // Budget options for polling
+  outfit_generation_options?: OutfitGenerationOption[]; // Outfit generation options for polling
   wardrobe_suggestion?: BackendWardrobeSuggestion | null;
 }
 
@@ -67,8 +67,8 @@ export interface TransformedOutfitResponse {
   remainingBudget?: number;
   explanation?: string;
   message: string;
-  budgetOptions?: any[];
-  outfitGenerationOptions?: any[];
+  budgetOptions?: BudgetOption[];
+  outfitGenerationOptions?: OutfitGenerationOption[];
 }
 
 interface SendMessageResponse {
@@ -89,8 +89,8 @@ interface BackendMessage {
   explanation?: string;
   outfits?: BackendOutfitResult[]; // Backend sends 'outfits' list for multiple options
   created_at?: string;  // Backend uses 'created_at', not 'timestamp'
-  budget_options?: any[];
-  outfit_generation_options?: any[];
+  budget_options?: BudgetOption[];
+  outfit_generation_options?: OutfitGenerationOption[];
   wardrobe_items?: { id: number; image_url: string }[];
   wardrobe_suggestion?: BackendWardrobeSuggestion | null;
 }

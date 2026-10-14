@@ -61,39 +61,13 @@ describe('preferencesService', () => {
         expect(result).toBe(true);
     });
 
-    it('getAllPreferences handles array format', async () => {
-        const mockPrefs = [
-            { id: 1, name: 'Style' },
-            { id: 2, name: 'Color' },
-            { id: 4, name: 'Genere', values: ['male', 'female'] } // Include Genere to prevent auto-add
-        ];
-        vi.spyOn(api, 'get').mockResolvedValue({
-            data: { success: true, preferences: mockPrefs }
-        });
-
-        const result = await preferencesService.getAllPreferences();
-
-        // Result is converted to Record
-        expect(Object.keys(result)).toHaveLength(3);
-        expect(result['1']).toEqual({ id: 1, name: 'Style' });
-    });
-
-    it('getAllPreferences handles object format (dictionary)', async () => {
-        const mockPrefs = {
-            "1": "Style",
-            "2": "Color",
-            "success": true // Should be filtered out
-        };
+    it('getAllPreferences returns the backend format { id: { name, values } } and always includes Genere', async () => {
+        const mockPrefs = { '1': { name: 'Color', values: [] }, '2': { name: 'Brand', values: ['Nike', 'Zara'] } };
         vi.spyOn(api, 'get').mockResolvedValue({ data: mockPrefs });
 
         const result = await preferencesService.getAllPreferences();
 
-        // Should return the object as is (minus success if filtered, but service currently returns data as is if not array)
-        // Wait, the service returns response.data if not array.
-        // So it returns { "1": "Style", "2": "Color", "success": true }
-
-        expect(Array.isArray(result)).toBe(false);
-        expect(result['1']).toBe('Style');
-        expect(result['2']).toBe('Color');
+        expect(result['2']).toEqual({ name: 'Brand', values: ['Nike', 'Zara'] });
+        expect(result['4']).toEqual({ name: 'Genere', values: ['male', 'female', 'non-binary'] });
     });
 });

@@ -1,8 +1,7 @@
 import api from './api';
 
-// Preferences as the backend sends them
+// Preferences as /preferences/all sends them: { "<id>": { name, values } }
 export interface PreferenceOption {
-  id: number;
   name: string;
   values: string[];
 }
@@ -30,26 +29,11 @@ export const preferencesService = {
   // Get all available preferences with their possible values
   getAllPreferences: async (): Promise<AllPreferencesResponse> => {
     try {
-      const response = await api.get<any>('/preferences/all');
-
-      // Handle response format { success: true, preferences: [...] }
-      let prefsData = response.data;
-      if (response.data.preferences) {
-        prefsData = response.data.preferences;
-      }
-
-      // If it's an array, convert to Record
-      if (Array.isArray(prefsData)) {
-        prefsData = prefsData.reduce((acc, pref) => {
-          acc[pref.id] = pref;
-          return acc;
-        }, {} as AllPreferencesResponse);
-      }
+      const response = await api.get<AllPreferencesResponse>('/preferences/all');
+      const prefsData = response.data;
 
       // "Genere" (gender, id 4) is always there
-      const hasGenere = Object.values(prefsData).some(
-        (p: any) => p.name === 'Genere' || p.name === 'gender'
-      );
+      const hasGenere = Object.values(prefsData).some(p => p.name === 'Genere' || p.name === 'gender');
       if (!hasGenere) {
         prefsData[4] = {
           name: 'Genere',
