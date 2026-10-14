@@ -89,22 +89,11 @@ class DBManager:
                 WHERE u.id = %s
                 """
 
-        preferences = {}
-
-        try:
-            conn = DBManager.get_db_connection()
-
-            with conn.cursor() as cursor:
-                cursor.execute(query, (user_id,))
-
-                rows = cursor.fetchall()
-
-                preferences = {row[0]: row[1] for row in rows}
-
-        except Exception as e:
-            print(f"Errore nel recupero preferenze per user {user_id}: {e}")
-
-        return preferences
+        # An error must not read as "no preferences": saving replaces them all, so a later save would wipe them
+        conn = DBManager.get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute(query, (user_id,))
+            return {row[0]: row[1] for row in cursor.fetchall()}
 
 
     @staticmethod
@@ -191,12 +180,10 @@ class DBManager:
             cursor.close()
             return True
 
-        except Exception as e:
+        except Exception:
             if conn:
                 conn.rollback()
-
-            print(f"Errore replace preferences per user {user_id}: {e}")
-            return False
+            raise
 
     @staticmethod
     def get_user_by_id(user_id: int):
@@ -279,141 +266,136 @@ class DBManager:
         Recupera la cronologia chat. Per i messaggi dell'AI, ricostruisce l'array 'outfits'
         con i dettagli completi.
         """
-        try:
-            conn = DBManager.get_db_connection()
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+        conn = DBManager.get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-            query = """
-                    WITH chat_history AS (
-                        -- 1. MESSAGGI UTENTE (Prompts)
-                        SELECT
-                            p.id AS message_id,
-                            p.prompt AS text,
-                            NULL AS explanation,
-                            'user' AS role,
-                            p.created_at,
-                            '[]'::json AS outfits,
-                            p.image_id,
-                            NULL as status,
-                            NULL::jsonb AS budget_options,
-                            NULL::jsonb AS outfit_generation_options,
-                            NULL::jsonb AS wardrobe_suggestion,
-                            -- Wardrobe pieces the user picked for this message (deleted ones drop out)
-                            (SELECT json_agg(json_build_object('id', wi.id, 'image_id', wi.image_id) ORDER BY wi.id)
-                             FROM wardrobe_items wi
-                             WHERE wi.id = ANY(p.wardrobe_item_ids) AND wi.user_id = c.user_id) AS wardrobe_items
-                        FROM prompts p
-                                 JOIN conversations c ON p.conversation_id = c.id
-                        WHERE p.conversation_id = %s AND c.user_id IS NOT DISTINCT FROM %s
+        query = """
+                WITH chat_history AS (
+                    -- 1. MESSAGGI UTENTE (Prompts)
+                    SELECT
+                        p.id AS message_id,
+                        p.prompt AS text,
+                        NULL AS explanation,
+                        'user' AS role,
+                        p.created_at,
+                        '[]'::json AS outfits,
+                        p.image_id,
+                        NULL as status,
+                        NULL::jsonb AS budget_options,
+                        NULL::jsonb AS outfit_generation_options,
+                        NULL::jsonb AS wardrobe_suggestion,
+                        -- Wardrobe pieces the user picked for this message (deleted ones drop out)
+                        (SELECT json_agg(json_build_object('id', wi.id, 'image_id', wi.image_id) ORDER BY wi.id)
+                         FROM wardrobe_items wi
+                         WHERE wi.id = ANY(p.wardrobe_item_ids) AND wi.user_id = c.user_id) AS wardrobe_items
+                    FROM prompts p
+                             JOIN conversations c ON p.conversation_id = c.id
+                    WHERE p.conversation_id = %s AND c.user_id IS NOT DISTINCT FROM %s
 
-                        UNION ALL
+                    UNION ALL
 
-                        -- 2. MESSAGGI AI (AI Responses)
-                        SELECT
-                            ar.id AS message_id,
-                            ar.short_message AS text,
-                            ar.explanation AS explanation,
-                            'model' AS role,
-                            ar.created_at,
-                            COALESCE(
-                                (
-                                    SELECT json_agg(
-                                        json_build_object(
-                                            'outfit', items,
-                                            'cost', cost,
-                                            'budget', budget, -- Retrieve stored budget
-                                            'explanation', (SELECT oe.explanation FROM outfit_explanations oe
-                                                            WHERE oe.ai_response_id = ar.id AND oe.outfit_index = grouped_outfits.outfit_index)
-                                        ) ORDER BY outfit_index
-                                    )
-                                    FROM (
-                                        SELECT 
-                                            os.outfit_index,
-                                            json_agg(
-                                                CASE WHEN os.wardrobe_item_id IS NOT NULL THEN
-                                                    -- The user's own piece: completed by wardrobe_candidate() below
-                                                    json_build_object(
-                                                        'source', 'wardrobe',
-                                                        'id', wi.id,
-                                                        'section', wi.section,
-                                                        'image_id', wi.image_id,
-                                                        'name', wi.name,
-                                                        'color', wi.color,
-                                                        'brand', wi.brand,
-                                                        'main_category', wi.main_category
-                                                    )
-                                                ELSE json_build_object(
-                                                    'id', pd.id,
-                                                    'title', pd.title,
-                                                    'url', pd.url,
-                                                    'price', pd.price,
-                                                    'image_link', pd.image_link,
-                                                    'brand', pd.brand,
-                                                    'material', pd.material,
-                                                    'availability', pd.availability,
-                                                    'main_category', pd.main_category,
-                                                    'description', pd.schema_description
-                                                ) END
-                                            ) AS items,
-                                            SUM(COALESCE(pd.price, 0)) as cost,
-                                            MAX(os.budget) as budget -- Since budget is replicated for items in same outfit, MAX/MIN is fine
-                                        FROM outfit_suggestion os
-                                        LEFT JOIN product_data pd ON os.product_id = pd.id
-                                        LEFT JOIN wardrobe_items wi ON os.wardrobe_item_id = wi.id
-                                        WHERE os.ai_response_id = ar.id
-                                        GROUP BY os.outfit_index
-                                    ) grouped_outfits
-                                ),
-                                '[]'::json
-                            ) AS outfits,
-                            NULL AS image_id,
-                            ar.status as status,
-                            ar.budget_options,
-                            ar.outfit_generation_options,
-                            ar.wardrobe_suggestion,
-                            NULL::json AS wardrobe_items
-                        FROM ai_responses ar
-                                 JOIN conversations c ON ar.conversation_id = c.id
-                        WHERE ar.conversation_id = %s AND c.user_id IS NOT DISTINCT FROM %s
-                    )
+                    -- 2. MESSAGGI AI (AI Responses)
+                    SELECT
+                        ar.id AS message_id,
+                        ar.short_message AS text,
+                        ar.explanation AS explanation,
+                        'model' AS role,
+                        ar.created_at,
+                        COALESCE(
+                            (
+                                SELECT json_agg(
+                                    json_build_object(
+                                        'outfit', items,
+                                        'cost', cost,
+                                        'budget', budget, -- Retrieve stored budget
+                                        'explanation', (SELECT oe.explanation FROM outfit_explanations oe
+                                                        WHERE oe.ai_response_id = ar.id AND oe.outfit_index = grouped_outfits.outfit_index)
+                                    ) ORDER BY outfit_index
+                                )
+                                FROM (
+                                    SELECT 
+                                        os.outfit_index,
+                                        json_agg(
+                                            CASE WHEN os.wardrobe_item_id IS NOT NULL THEN
+                                                -- The user's own piece: completed by wardrobe_candidate() below
+                                                json_build_object(
+                                                    'source', 'wardrobe',
+                                                    'id', wi.id,
+                                                    'section', wi.section,
+                                                    'image_id', wi.image_id,
+                                                    'name', wi.name,
+                                                    'color', wi.color,
+                                                    'brand', wi.brand,
+                                                    'main_category', wi.main_category
+                                                )
+                                            ELSE json_build_object(
+                                                'id', pd.id,
+                                                'title', pd.title,
+                                                'url', pd.url,
+                                                'price', pd.price,
+                                                'image_link', pd.image_link,
+                                                'brand', pd.brand,
+                                                'material', pd.material,
+                                                'availability', pd.availability,
+                                                'main_category', pd.main_category,
+                                                'description', pd.schema_description
+                                            ) END
+                                        ) AS items,
+                                        SUM(COALESCE(pd.price, 0)) as cost,
+                                        MAX(os.budget) as budget -- Since budget is replicated for items in same outfit, MAX/MIN is fine
+                                    FROM outfit_suggestion os
+                                    LEFT JOIN product_data pd ON os.product_id = pd.id
+                                    LEFT JOIN wardrobe_items wi ON os.wardrobe_item_id = wi.id
+                                    WHERE os.ai_response_id = ar.id
+                                    GROUP BY os.outfit_index
+                                ) grouped_outfits
+                            ),
+                            '[]'::json
+                        ) AS outfits,
+                        NULL AS image_id,
+                        ar.status as status,
+                        ar.budget_options,
+                        ar.outfit_generation_options,
+                        ar.wardrobe_suggestion,
+                        NULL::json AS wardrobe_items
+                    FROM ai_responses ar
+                             JOIN conversations c ON ar.conversation_id = c.id
+                    WHERE ar.conversation_id = %s AND c.user_id IS NOT DISTINCT FROM %s
+                )
 
-                    -- 3. ORDINAMENTO FINALE
-                    SELECT * FROM chat_history
-                    ORDER BY created_at; \
-                    """
+                -- 3. ORDINAMENTO FINALE
+                SELECT * FROM chat_history
+                ORDER BY created_at; \
+                """
 
-            # Eseguiamo la query passando i parametri per entrambe le parti della UNION
-            cursor.execute(query, (conversation_id, user_id, conversation_id, user_id))
+        # Eseguiamo la query passando i parametri per entrambe le parti della UNION
+        cursor.execute(query, (conversation_id, user_id, conversation_id, user_id))
 
-            results = cursor.fetchall()
-            cursor.close()
+        results = cursor.fetchall()
+        cursor.close()
 
-            last_user_photo = None  # the "Add to your wardrobe?" card shows the photo it answers
-            for message in results:
-                if message.get("role") == "user":
-                    del message['explanation'], message['outfits'], message['budget_options'], message['outfit_generation_options']
-                    del message['wardrobe_suggestion']
-                    if message['image_id']:
-                        file_path = f"public/{message['image_id']}.jpg"
-                        message['image_id'] = get_image_url(file_path)
-                    last_user_photo = message['image_id']
-                    message['wardrobe_items'] = [
-                        {"id": piece['id'], "image_url": get_image_url(f"public/{piece['image_id']}.jpg", "wardrobe")}
-                        for piece in message['wardrobe_items'] or []
-                    ]
-                else:
-                    del message['wardrobe_items']
-                    if message['wardrobe_suggestion']:
-                        message['wardrobe_suggestion'] = {**message['wardrobe_suggestion'], 'image_url': last_user_photo}
-                    for outfit in message['outfits']:
-                        outfit['outfit'] = [wardrobe_candidate(item) if item.get('source') == 'wardrobe' else item
-                                            for item in outfit['outfit']]
+        last_user_photo = None  # the "Add to your wardrobe?" card shows the photo it answers
+        for message in results:
+            if message.get("role") == "user":
+                del message['explanation'], message['outfits'], message['budget_options'], message['outfit_generation_options']
+                del message['wardrobe_suggestion']
+                if message['image_id']:
+                    file_path = f"public/{message['image_id']}.jpg"
+                    message['image_id'] = get_image_url(file_path)
+                last_user_photo = message['image_id']
+                message['wardrobe_items'] = [
+                    {"id": piece['id'], "image_url": get_image_url(f"public/{piece['image_id']}.jpg", "wardrobe")}
+                    for piece in message['wardrobe_items'] or []
+                ]
+            else:
+                del message['wardrobe_items']
+                if message['wardrobe_suggestion']:
+                    message['wardrobe_suggestion'] = {**message['wardrobe_suggestion'], 'image_url': last_user_photo}
+                for outfit in message['outfits']:
+                    outfit['outfit'] = [wardrobe_candidate(item) if item.get('source') == 'wardrobe' else item
+                                        for item in outfit['outfit']]
 
-            return results
-
-        except Exception as e:
-            print(f"Errore recupero chat: {e}")
-            return []
+        return results
 
     @staticmethod
     def create_conversation_with_message(user_id: int | None, title: str, message_text: str, image_id = None, wardrobe_item_ids=None,
@@ -961,44 +943,39 @@ class DBManager:
 
     @staticmethod
     def preferences():
-        try:
-            conn = DBManager.get_db_connection()
-            # Usa un cursore dizionario se disponibile (es. psycopg2.extras.RealDictCursor)
-            # altrimenti usa quello standard
-            with conn.cursor() as cursor:
+        conn = DBManager.get_db_connection()
+        # Usa un cursore dizionario se disponibile (es. psycopg2.extras.RealDictCursor)
+        # altrimenti usa quello standard
+        with conn.cursor() as cursor:
 
-                # 1. Recupera le preferenze base
-                cursor.execute("SELECT id, name FROM preferences")
-                rows = cursor.fetchall()
+            # 1. Recupera le preferenze base
+            cursor.execute("SELECT id, name FROM preferences")
+            rows = cursor.fetchall()
 
-                # 2. Struttura base uniforme per tutti gli elementi
-                # Ogni elemento sarà un dizionario con "name" e "values" (anche se vuoto)
-                preferences = {}
-                for row in rows:
-                    pref_id = row[0]
-                    pref_name = row[1]
-                    preferences[pref_id] = {
-                        "name": pref_name,
-                        "values": []
-                    }
+            # 2. Struttura base uniforme per tutti gli elementi
+            # Ogni elemento sarà un dizionario con "name" e "values" (anche se vuoto)
+            preferences = {}
+            for row in rows:
+                pref_id = row[0]
+                pref_name = row[1]
+                preferences[pref_id] = {
+                    "name": pref_name,
+                    "values": []
+                }
 
-                for pref_id, pref_data in preferences.items():
-                    match int(pref_id):
-                        case 2: # Brand
-                            cursor.execute("SELECT brand FROM product_data WHERE brand IS NOT NULL GROUP BY brand")
-                            brands = [row[0] for row in cursor.fetchall()]
-                            pref_data["values"] = brands
+            for pref_id, pref_data in preferences.items():
+                match int(pref_id):
+                    case 2: # Brand
+                        cursor.execute("SELECT brand FROM product_data WHERE brand IS NOT NULL GROUP BY brand")
+                        brands = [row[0] for row in cursor.fetchall()]
+                        pref_data["values"] = brands
 
-                        case 3: # Materiali
-                            cursor.execute("SELECT name FROM materials")
-                            materials = [row[0] for row in cursor.fetchall()]
-                            pref_data["values"] = materials
+                    case 3: # Materiali
+                        cursor.execute("SELECT name FROM materials")
+                        materials = [row[0] for row in cursor.fetchall()]
+                        pref_data["values"] = materials
 
-                        case 4: # Genere
-                            pref_data["values"] = ["male", "female", "non-binary"]
+                    case 4: # Genere
+                        pref_data["values"] = ["male", "female", "non-binary"]
 
-                return preferences
-
-        except Exception as e:
-            print(f"Errore durante il recupero delle preferenze: {e}")
-            return {}
+            return preferences

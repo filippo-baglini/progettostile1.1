@@ -437,11 +437,7 @@ def update_user_preferences():
         data = request.get_json() or {}
 
         user_id = int(current_user.get_id())
-        updated = DBManager.update_user_preferences(user_id, data)
-
-        if not updated:
-            return {"error": "Utente non trovato"}, 404
-
+        DBManager.update_user_preferences(user_id, data)
         return {"success": True}, 200
     except Exception as e:
         return server_error(e)

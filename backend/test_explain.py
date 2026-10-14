@@ -1,6 +1,8 @@
 # Run with: venv/bin/python test_explain.py  (from backend/; loads the app, so CLIP too)
 from unittest import mock
 
+import psycopg2
+
 import app as backend
 from db_manager import DBManager
 
@@ -49,4 +51,8 @@ with mock.patch.object(DBManager, 'guest_conversation', side_effect=lambda token
     llm.return_value = None
     assert explain(conv_id=f'temp_{TOKEN}', message_id='7', outfit_index=0).status_code == 502
     assert save.call_count == 1
+
+    # The chat couldn't be read: an error, not an answer without the history (B7)
+    read_chat.side_effect = psycopg2.OperationalError('connection lost')
+    assert explain(conv_id=f'temp_{TOKEN}', message_id='7', outfit_index=0).status_code == 500
 print("ok")
