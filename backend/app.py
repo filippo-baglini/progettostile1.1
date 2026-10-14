@@ -493,6 +493,18 @@ def message_progress(request_id):
     # Polled by the browser while a message is being answered
     return {"generating": progress.is_generating(request_id)}, 200
 
+
+def upload_chat_photo(image_id, image):
+    """The photo's public URL, or None if there is no photo or the upload failed."""
+    return upload_image(image_id, image) if image_id else None
+
+
+def drop_chat_photo(image_id):
+    """Its message couldn't be saved: nothing in the DB points at the file, so nothing else would ever delete it."""
+    if image_id:
+        delete_images([image_id])
+
+
 @app.route('/api/messages/send', methods=['POST', 'PUT'])
 @rate_limit(per_minute=10)
 def send_message():
@@ -536,11 +548,9 @@ def send_message():
             except ValueError:
                 selected_outfit_index = None
 
-        image_id = None
+        # The AI gets the bytes; the file is uploaded only right before its message is saved (S10)
+        image_id = str(uuid.uuid4()) if image else None
         image_url = None
-        if image:
-            image_id = str(uuid.uuid4())
-            image_url = upload_image(image_id, image)
         image_data = (image_id, image) if image_id else None
 
         # Wardrobe pieces the user picked (only their own) and the "only my clothes" toggle: logged-in users only
@@ -566,9 +576,13 @@ def send_message():
 
             conv_title = chat_title(output, msg_text)
             guest_token = None if is_authenticated else str(uuid.uuid4())
+            image_url = upload_chat_photo(image_id, image)
+            if image_id and not image_url:
+                return {"error": "Unable to save the photo"}, 500
             db_conv_id = DBManager.create_conversation_with_message(user_id, conv_title, msg_text, image_id=image_id, wardrobe_item_ids=picked_ids,
                                                                     guest_token=guest_token, guest_gender=guest_gender)
             if db_conv_id is None:
+                drop_chat_photo(image_id)
                 return {"error": "Error while creating a new conversation"}, 500
             conv_id = db_conv_id if is_authenticated else f"temp_{guest_token}"
 
@@ -593,7 +607,11 @@ def send_message():
             output = outfit_recommendation_handler(msg_text, chat_history, user_id, image_data=image_data, past_images=past_images, selected_outfit_index=selected_outfit_index, selected_message_id=selected_message_id, guest_gender=saved_gender or guest_gender, picked_items=picked_items, only_wardrobe=only_wardrobe)
 
             # Saved only after the AI call: a failure no longer leaves a prompt without a reply
+            image_url = upload_chat_photo(image_id, image)
+            if image_id and not image_url:
+                return {"error": "Unable to save the photo"}, 500
             if not DBManager.add_message_to_conversation(db_conv_id, msg_text, image_id=image_id, wardrobe_item_ids=picked_ids):
+                drop_chat_photo(image_id)
                 return {"error": "Unable to save the message"}, 500
 
         status = output.get('status')
