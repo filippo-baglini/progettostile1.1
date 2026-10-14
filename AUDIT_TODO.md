@@ -34,7 +34,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 - [x] **S9.** Personal data in logs: `print(user_preferences, gender)` and full LLM responses on the backend; `console.log('DEBUG: Raw history...')` in `frontend/src/services/chatService.ts:238`. *(removed, 2026-10-14; the remaining `DEBUG` prints log no personal data, see C9)*
 - [x] **S10.** Chat photos are uploaded before the ownership check and before the AI call (`app.py:678`), so failed or rejected requests leave orphan files in storage. *(fixed 2026-10-14: uploaded right before the message is saved, deleted again if the save fails)*
 - [x] **S11. DB credentials have defaults.** `DBManager` falls back to `DB_PASSWORD='password'` and `DB_HOST='localhost'` (`backend/db_manager.py:21`). Fail at startup like `SECRET_KEY` does. *(fixed 2026-10-14: DB_HOST, DB_NAME, DB_USER and DB_PASSWORD are required; DB_PORT keeps 5432)*
-- [ ] **S12. Photos are public.** Chat and wardrobe photos live in public buckets (the UUIDs can't be guessed, but anyone with the URL can see them). Use signed URLs, or at least say so in the privacy notes.
+- [x] **S12. Photos are public.** Chat and wardrobe photos live in public buckets (the UUIDs can't be guessed, but anyone with the URL can see them). *(decided 2026-10-14: they stay public. Listing the `images`, `wardrobe` and `avatars` buckets with the public key returns nothing, so the names can't be enumerated; signed URLs aren't worth the work. The remaining step, saying so in the privacy policy, is under Before production.)*
 
 ## Bugs
 
@@ -104,6 +104,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 - [ ] Freemium quota: a few outfit generations a day for guests and free users, many more (or unlimited) for paid ones. Count per user and day in the DB; guests can only be counted per IP or browser, so keep their allowance small. Separate from the per-IP rate limit, which stays for everyone.
 - [ ] Several server workers: move the rate-limit counts to Redis (Flask-Limiter supports it); the progress store too (only the "putting your outfit together" text depends on it).
 - [ ] Behind a reverse proxy, add werkzeug's `ProxyFix`, or the rate limit sees every request as coming from the proxy.
+- [ ] Privacy policy (there is none yet). Among the rest, say that chat, wardrobe and profile photos can be opened by anyone who has their link, until they're deleted (S12).
 
 - [ ] Supabase: custom SMTP with the production domain (see S2b)
 - [ ] Supabase: Site URL and Redirect URLs set to the production domain; the same domain on the Google OAuth client
