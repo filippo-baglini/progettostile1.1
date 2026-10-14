@@ -88,8 +88,6 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
     else:
         user_preferences = None
 
-    print(user_preferences, gender)
-
     # 1. Recupera items dall'outfit precedente (se esiste) per il refinement
     target_outfit_items = []
     
@@ -199,8 +197,6 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
     # Ensure the loop runs exactly once for REFINE_CURRENT even if outfits is empty
     if not outfits_list and refinement_type == 'REFINE_CURRENT':
          outfits_list = [{}] # Dummy empty plan to trigger the loop iteration
-
-    logging.info(f"Raw LLM Response: {response}")
 
     budget = response.get('max_budget')
     if not budget:

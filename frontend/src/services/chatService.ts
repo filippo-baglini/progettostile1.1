@@ -244,7 +244,6 @@ export const chatService = {
     // Use POST with JSON body since GET with body is not standard
     // Backend expects conv_id in JSON body
     const response = await api.post<BackendMessage[]>('/chat', { conv_id: convId });
-    console.log('DEBUG: Raw history response:', response.data);
 
     const seenIds = new Set<string>();
     const parsedMessages = response.data.map((msg, index) => {
@@ -298,7 +297,6 @@ export const chatService = {
       };
     });
 
-    console.log('DEBUG: Parsed messages:', response.data.map(m => ({ id: m.message_id, hasOutfit: (m.outfit || m.outfits) && (m.outfit || m.outfits)!.length > 0 })));
     return parsedMessages;
   },
 

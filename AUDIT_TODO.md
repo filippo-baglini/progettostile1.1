@@ -31,7 +31,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 ### Low
 - [x] **S7.** The backend has no password rules (only the frontend checks for at least 6 characters). Emails are case-sensitive, so `Foo@x.com` and `foo@x.com` become two accounts, and the Google email match misses. *(fixed by the Supabase Auth migration, 2026-10-14)*
 - [x] **S8.** The explanation endpoint returns the raw exception text to the client (`backend/ai/src/get_explanations.py`, last line). *(fixed 2026-10-14: logged, generic message to the client)*
-- [ ] **S9.** Personal data in logs: `print(user_preferences, gender)` and full LLM responses on the backend; `console.log('DEBUG: Raw history...')` in `frontend/src/services/chatService.ts:238`.
+- [x] **S9.** Personal data in logs: `print(user_preferences, gender)` and full LLM responses on the backend; `console.log('DEBUG: Raw history...')` in `frontend/src/services/chatService.ts:238`. *(removed, 2026-10-14; the remaining `DEBUG` prints log no personal data, see C9)*
 - [ ] **S10.** Chat photos are uploaded before the ownership check and before the AI call (`app.py:678`), so failed or rejected requests leave orphan files in storage.
 - [ ] **S11. DB credentials have defaults.** `DBManager` falls back to `DB_PASSWORD='password'` and `DB_HOST='localhost'` (`backend/db_manager.py:21`). Fail at startup like `SECRET_KEY` does.
 - [ ] **S12. Photos are public.** Chat and wardrobe photos live in public buckets (the UUIDs can't be guessed, but anyone with the URL can see them). Use signed URLs, or at least say so in the privacy notes.

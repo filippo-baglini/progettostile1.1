@@ -14,7 +14,6 @@ export const preferencesService = {
   getPreferences: async (): Promise<Record<string, string> | null> => {
     try {
       const response = await api.get<{ success: boolean; user: { preferences: Record<string, string> } }>('/user/session');
-      console.log('Raw preferences from backend:', response.data.user.preferences);
       return response.data.user.preferences || {};
     } catch (error) {
       console.error('Error loading preferences:', error);
@@ -32,7 +31,6 @@ export const preferencesService = {
   getAllPreferences: async (): Promise<AllPreferencesResponse> => {
     try {
       const response = await api.get<any>('/preferences/all');
-      console.log('Raw all preferences response:', response.data);
 
       // Handle response format { success: true, preferences: [...] }
       let prefsData = response.data;

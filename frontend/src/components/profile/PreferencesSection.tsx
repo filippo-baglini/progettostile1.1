@@ -132,9 +132,6 @@ const PreferencesSection = () => {
       const genderValue = preferences['Genere'] || preferences['gender'] || '';
       completePreferences['gender'] = genderValue;
 
-      // Debug: log delle preferenze che verranno inviate
-      console.log('Preferences state before save:', preferences);
-      console.log('Complete preferences to send:', completePreferences);
 
       const success = await preferencesService.updatePreferences(completePreferences);
       if (success) {
