@@ -113,7 +113,12 @@ frontend/
 
 1. Run `backend/schema.sql` on the database. It creates the tables, the `search_outfits_batch` function
    and the preference names.
-2. Run the files in `backend/migrations/` in filename order.
+2. Run the files in `backend/migrations/` in this order (filename order, except that `wardrobe_outfits`
+   must come before `wardrobe_from_chat`):
+   `2026-10-13_supabase_auth`, `2026-10-13_username_avatar`, `2026-10-13_wardrobe`,
+   `2026-10-13_wardrobe_outfits`, `2026-10-13_wardrobe_from_chat`, `2026-10-14_guest_chats`,
+   `2026-10-14_outfit_explanations`, `2026-10-14_product_constraints`.
+   New migrations go at the end of this list.
 3. In Supabase Storage create three **public** buckets: `images` (chat photos), `wardrobe` and `avatars`.
 4. In Supabase Authentication:
    - **Sign In / Providers**: turn on **Confirm email**. In the Email provider set the minimum password
@@ -153,6 +158,8 @@ MISTRAL_API_KEY=...
 
 EBAY_CLIENT_ID=...                       # optional: import_ebay.py
 EBAY_CLIENT_SECRET=...
+
+FRONTEND_ORIGINS=https://your-site.app   # production only: where the frontend is served (comma-separated); default: the Vite dev server
 ```
 
 Start the server (port 5000, restarts automatically when a `.py` file changes):
@@ -162,6 +169,18 @@ venv/bin/python app.py
 ```
 
 The first start downloads the FashionCLIP model from Hugging Face.
+
+In production, use gunicorn instead of `python app.py` (Flask's own server is for development only):
+
+```bash
+venv/bin/gunicorn -w 1 --threads 8 --timeout 300 -b 0.0.0.0:5000 app:app
+```
+
+- `-w 1`: one worker process. The rate-limit counts and the "putting your outfit together" progress live in
+  that process's memory, and each worker loads its own CLIP model (~850 MB). More workers need Redis first
+  (see "Before production" in `AUDIT_TODO.md`).
+- `--timeout 300`: an outfit request can take minutes (Mistral calls with retries); the default 30 s would cut it off.
+- Set `FRONTEND_ORIGINS` in `backend/.env` to the frontend's address, or the browser blocks every API call.
 
 ### Catalogue
 

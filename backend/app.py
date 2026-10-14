@@ -33,14 +33,13 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 # Uploads bigger than this get a 413 before they reach PIL
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
 
-# CORS configuration for frontend
-CORS(app, 
-     origins=[
-         "http://localhost:5173", 
-         "http://localhost:5174",
-         "http://127.0.0.1:5173",
-         "http://127.0.0.1:5174"
-     ],
+# The addresses the frontend is served from: browsers block API calls from any other site.
+# FRONTEND_ORIGINS in production (comma-separated, e.g. https://stylefinder.app); the Vite dev server otherwise.
+FRONTEND_ORIGINS = [origin.strip() for origin in os.getenv(
+    'FRONTEND_ORIGINS', 'http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174'
+).split(',') if origin.strip()]
+CORS(app,
+     origins=FRONTEND_ORIGINS,
      supports_credentials=True,
      allow_headers=["Content-Type", "Authorization", "X-Request-Id"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])

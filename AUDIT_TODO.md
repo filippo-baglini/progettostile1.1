@@ -79,8 +79,8 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
   - [x] `frontend/.github/copilot-instructions.md` (says React 18, Router v6) *(deleted 2026-10-14)*
   - [x] `frontend/docs/StyleFinder_Frontend_Manual.tex` (mentions a missing `mockData.ts`) *(deleted 2026-10-14)*
   - [x] `frontend/.env.local.example` (duplicate of `.env.example`), the unused Vite `/api` proxy, the unused vitest `@` alias *(deleted 2026-10-14)*
-- [ ] **C7.** The README says to run migrations in filename order, which runs `wardrobe_from_chat` before `wardrobe_outfits`, the opposite of what its own header says it needs.
-- [ ] **C8.** Deployment: the CORS origins are hardcoded to localhost and the app runs on Flask's development server. Use gunicorn with **1** worker (the progress store and the rate-limit counts live in process memory; guest chats moved to the DB), not `app.run(use_reloader=True)`, which loads CLIP twice.
+- [x] **C7.** The README says to run migrations in filename order, which runs `wardrobe_from_chat` before `wardrobe_outfits`, the opposite of what its own header says it needs. *(fixed 2026-10-14: the README lists the order)*
+- [x] **C8.** Deployment: the CORS origins are hardcoded to localhost and the app runs on Flask's development server. Use gunicorn with **1** worker (the progress store and the rate-limit counts live in process memory; guest chats moved to the DB), not `app.run(use_reloader=True)`, which loads CLIP twice. *(fixed 2026-10-14: `FRONTEND_ORIGINS` env var; gunicorn command in the README, Backend setup)*
 - [ ] **C9.** Leftover code: the unused `chat_history`/`history` passing, the "legacy single outfit" fallbacks, and `DEBUG` prints. Replace `print()` with `logging` (see S9).
 - [ ] **C10.** ESLint: 44 errors and 8 warnings (mostly `no-explicit-any` and unused variables).
 - [x] **C11.** Remove `pandas`: it does one group-by in `outfit_retrieval_logic.py`, which a dict can do. *(fixed 2026-10-14 with C2)*
