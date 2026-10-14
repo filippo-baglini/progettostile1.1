@@ -105,6 +105,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 - [ ] Several server workers: move the rate-limit counts to Redis (Flask-Limiter supports it); the progress store too (only the "putting your outfit together" text depends on it).
 - [ ] Behind a reverse proxy, add werkzeug's `ProxyFix`, or the rate limit sees every request as coming from the proxy.
 - [ ] Privacy policy (there is none yet). Among the rest, say that chat, wardrobe and profile photos can be opened by anyone who has their link, until they're deleted (S12).
+- [ ] Terms of Service (there are none yet), linked from signup next to the privacy policy.
 
 - [ ] Supabase: custom SMTP with the production domain (see S2b)
 - [ ] Supabase: Site URL and Redirect URLs set to the production domain; the same domain on the Google OAuth client
