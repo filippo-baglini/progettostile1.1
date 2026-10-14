@@ -1,5 +1,9 @@
 import os
+import threading
+import time
+
 import psycopg2
+import psycopg2.pool
 from dotenv import load_dotenv
 from flask import g
 from psycopg2 import extras
@@ -14,6 +18,8 @@ load_dotenv()
 USER_FIELDS = ("id", "name", "email", "gender", "username", "avatar_id", "auth_id")
 USER_COLUMNS = ", ".join(USER_FIELDS)
 WARDROBE_COLUMNS = "id, section, image_id, name, color, brand, main_category"
+POOL_SIZE = 4             # connections kept open (see DBManager._pool)
+IDLE_CHECK_SECONDS = 30   # idle longer than this: checked with SELECT 1 before use
 
 # No fallbacks: a missing value should stop the start, not quietly try a default password
 _missing = [k for k in ('DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD') if not os.getenv(k)]
@@ -48,19 +54,47 @@ class DBManager:
                 "error": str(e)
             }
     
+    # Opening a connection to Supabase takes ~330 ms, so they're kept open between requests (P3).
+    # minconn = maxconn: psycopg2's pool closes a returned connection once it holds minconn idle ones.
+    # ponytail: one worker (C8); Supabase's session-mode pooler holds a DB connection for each of ours,
+    # shared with every other dev server and script on the project, so keep it small.
+    _pool = None
+    _pool_lock = threading.Lock()
+    _idle_since = {}  # id(connection) -> when it went back into the pool
+
+    @staticmethod
+    def _connect_args():
+        return dict(host=DBManager.DB_HOST, port=DBManager.DB_PORT, database=DBManager.DB_NAME,
+                    user=DBManager.DB_USER, password=DBManager.DB_PASSWORD)
+
+    @staticmethod
+    def _checkout():
+        """(connection, pooled?): a pooled one when free, alive, else a connection of its own."""
+        with DBManager._pool_lock:
+            if DBManager._pool is None:
+                DBManager._pool = psycopg2.pool.ThreadedConnectionPool(POOL_SIZE, POOL_SIZE, **DBManager._connect_args())
+        try:
+            for _ in range(POOL_SIZE + 1):
+                conn = DBManager._pool.getconn()
+                idle = time.monotonic() - DBManager._idle_since.pop(id(conn), time.monotonic())
+                if not conn.closed and idle < IDLE_CHECK_SECONDS:
+                    return conn, True
+                try:  # Supabase drops connections left idle: check before use
+                    with conn.cursor() as cursor:
+                        cursor.execute("SELECT 1")
+                    conn.rollback()
+                    return conn, True
+                except psycopg2.Error:
+                    DBManager._pool.putconn(conn, close=True)  # the pool opens a fresh one next time
+        except psycopg2.pool.PoolError:
+            pass  # all in use (long outfit requests hold theirs): no worse than before the pool
+        return psycopg2.connect(**DBManager._connect_args()), False
+
     @staticmethod
     def get_db_connection():
-        """Crea e restituisce una connessione al database PostgreSQL"""
-
+        """This request's connection: the same one for all its queries, from the pool."""
         if 'db' not in g:
-            g.db = psycopg2.connect(
-                host=DBManager.DB_HOST,
-                port=DBManager.DB_PORT,
-                database=DBManager.DB_NAME,
-                user=DBManager.DB_USER,
-                password=DBManager.DB_PASSWORD
-            )
-
+            g.db, g.db_pooled = DBManager._checkout()
         return g.db
 
     @staticmethod
@@ -69,9 +103,21 @@ class DBManager:
 
     @staticmethod
     def close_db_connection(e=None):
-        db = g.pop('db', None)
-        if db is not None:
-            db.close()
+        """End of request: the connection goes back to the pool, never with a transaction still open."""
+        conn = g.pop('db', None)
+        pooled = g.pop('db_pooled', False)
+        if conn is None:
+            return
+        if not pooled:
+            conn.close()
+            return
+        try:
+            conn.rollback()  # a failed or unfinished request must not hand its transaction to the next one
+        except psycopg2.Error:
+            DBManager._pool.putconn(conn, close=True)
+            return
+        DBManager._idle_since[id(conn)] = time.monotonic()
+        DBManager._pool.putconn(conn)
 
     @staticmethod
     def get_user_preferences(user_id: int) -> dict:

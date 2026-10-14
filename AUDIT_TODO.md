@@ -65,7 +65,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 
 - [x] **P1. No vector index on `product_data.img_embedding`.** *(decided 2026-10-14: not needed. A search reads only its category and gender, ~300 of 3,649 products, in ~60 ms; an approximate HNSW index pays off from ~50k products. Revisit then, and test it with the filters: HNSW fetches its ~40 nearest before the `WHERE` filters, so a brand or category filter can leave a slot with no candidates.)*
 - [x] **P2. Text embeddings run the image model on a dummy image** (`query_embedder.py`). Use `MODEL.get_text_features(**PROC(text=[...]))`. *(fixed 2026-10-14: same vectors, 266 → 48 ms per text on CPU)*
-- [ ] **P3. A new Postgres connection per request.** Use `psycopg2.pool`.
+- [x] **P3. A new Postgres connection per request.** Use `psycopg2.pool`. *(fixed 2026-10-14: 4 pooled connections, rolled back on return and checked after 30 s idle; ~420 → ~130 ms for a one-query request)*
 
 ## Inconsistencies and cleanup
 
