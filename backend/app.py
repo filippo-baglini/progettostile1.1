@@ -17,6 +17,7 @@ import title_generator
 from ai.src.app import outfit_recommendation_handler, generate_explanation_only, MODEL, PROC, DEVICE
 from ai.src.query_embedder import get_image_embedding_vector
 from ai.src.wardrobe import WARDROBE_SECTIONS, wardrobe_candidate, check_wardrobe_piece
+from ai.src.moderation import check_profile
 from ai.src.query_handler import SINGLE_ITEM_CATEGORIES
 from ai.src import progress
 from storage_manager import upload_image, compress_image, download_image, get_image_url, delete_images
@@ -230,6 +231,12 @@ def update_profile():
         if new_username != user_db['username'] and not USERNAME_RE.fullmatch(new_username):
             return {"error": "Username must be 3-30 characters: letters, numbers, '.' or '_'"}, 400
 
+        # Others will see these (friends, shared outfits): checked when they change, like wardrobe pieces
+        if new_name != user_db['name'] or new_username != user_db['username']:
+            rejection = check_profile(name=new_name, username=new_username)
+            if rejection:
+                return {"error": rejection}, 400
+
         try:
             DBManager.update_user_profile(user_id, new_name, new_username)
         except psycopg2.errors.UniqueViolation:
@@ -245,7 +252,7 @@ def update_profile():
 def upload_avatar():
     """Carica la foto profilo (multipart, campo `image`) e ritorna l'utente aggiornato."""
     try:
-        avatar_id, _, error = store_uploaded_image("avatars", (512, 512))
+        avatar_id, _, error = store_uploaded_image("avatars", (512, 512), check=lambda image: check_profile(image=image))
         if error:
             return error
 
@@ -259,8 +266,9 @@ def upload_avatar():
         return server_error(e)
 
 
-def store_uploaded_image(bucket, max_size):
-    """Compress the request's `image` file and upload it. Returns (image_id, jpeg bytes, None) or (None, None, error response)."""
+def store_uploaded_image(bucket, max_size, check=None):
+    """Compress the request's `image` file and upload it. Returns (image_id, jpeg bytes, None) or (None, None, error response).
+    `check(jpeg)`: a refusal message or None, run before the upload so a refused photo never reaches storage."""
     image_uploaded = request.files.get('image')
     if not image_uploaded:
         return None, None, ({"error": "Immagine mancante"}, 400)
@@ -268,6 +276,9 @@ def store_uploaded_image(bucket, max_size):
         image = compress_image(image_uploaded.read(), max_size=max_size)
     except Exception:
         return None, None, ({"error": "Not a valid image"}, 400)
+    rejection = check(image) if check else None
+    if rejection:
+        return None, None, ({"error": rejection}, 400)
 
     image_id = str(uuid.uuid4())
     if not upload_image(image_id, image, bucket):

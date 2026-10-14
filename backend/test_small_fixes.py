@@ -1,6 +1,9 @@
 # Run with: venv/bin/python test_small_fixes.py  (from backend/; loads the app, so CLIP too)
-# The B10 request checks. Everything is mocked: no DB, storage or Mistral calls.
+# The B10 request checks and the C4 profile checks. Everything is mocked: no DB, storage or Mistral calls.
+import io
 from unittest import mock
+
+from PIL import Image
 
 import app as backend
 import rate_limit
@@ -54,4 +57,23 @@ with mock.patch.object(backend, 'verify_token', side_effect=lambda t: {'sub': 'u
         second = client.post('/api/wardrobe/from-chat/9', json={'section': 'shirts'}, headers=USER)
         assert first.status_code == 404 and second.status_code == 409   # the photo was gone; the second tap lost the race
         restore.assert_called_once_with(9, {'section': 'shirts'})
+
+    # C4: avatars and names are checked like wardrobe pieces; a refused photo never reaches storage
+    jpeg = io.BytesIO()
+    Image.new('RGB', (8, 8)).save(jpeg, 'JPEG')
+    me = {'id': 3, 'name': 'Filippo', 'username': 'filippo', 'email': 'a@b.co', 'avatar_id': None}
+    with mock.patch.object(backend, 'check_profile', return_value='Refused') as check, \
+         mock.patch.object(backend, 'upload_image') as upload, \
+         mock.patch.object(DBManager, 'get_user_by_id', return_value=me), \
+         mock.patch.object(DBManager, 'update_user_profile') as save:
+        r = client.post('/api/user/avatar', data={'image': (io.BytesIO(jpeg.getvalue()), 'me.jpg')},
+                        content_type='multipart/form-data', headers=USER)
+        assert r.status_code == 400 and r.json['error'] == 'Refused' and upload.call_count == 0
+        r = client.put('/api/user/profile', json={'name': 'Bad Name', 'username': 'filippo'}, headers=USER)
+        assert r.status_code == 400 and save.call_count == 0
+        assert check.call_args.kwargs == {'name': 'Bad Name', 'username': 'filippo'}
+        check.reset_mock()
+        with mock.patch.object(backend, 'user_payload', return_value={}):
+            assert client.put('/api/user/profile', json={'name': 'Filippo'}, headers=USER).status_code == 200
+        assert check.call_count == 0 and save.call_count == 1   # nothing changed: no model call
 print("ok")

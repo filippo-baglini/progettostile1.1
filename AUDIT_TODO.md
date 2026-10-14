@@ -72,7 +72,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 - [x] **C1.** Two ways of reading preferences: Supabase REST in `ai/src/preferences_management.py` and psycopg2 in `db_manager.py` (the REST path has B1). Keep one. *(fixed 2026-10-14: the outfit planner uses `DBManager.get_user_preferences` too; `preferences_management.py` is gone)*
 - [x] **C2.** Two Supabase clients; `SUPABASE_RLS_KEY` is a secret key that bypasses RLS, so the name is misleading. With psycopg2 that makes three ways into the same DB: the search RPCs could be plain SQL through `DBManager`. *(fixed 2026-10-14: the searches run through `DBManager` (same results, ~300 ms instead of ~1.3 s); one Supabase client left, for Storage and deleting accounts, with one key, `SUPABASE_SECRET_KEY`)*
 - [x] **C3.** Image size caps differ: avatars 512 px, wardrobe 1024 px, chat photos none. *(fixed 2026-10-14: chat photos 1024 px like the wardrobe)*
-- [ ] **C4.** Wardrobe pieces get the offensive-content check; avatars don't.
+- [x] **C4.** Wardrobe pieces get the offensive-content check; avatars don't. *(fixed 2026-10-14: avatars before upload, and name/username when they change, through the same check as wardrobe pieces (`ai/src/moderation.py`). Names set at signup aren't checked yet: add it with the social features)*
 - [ ] **C5.** Error messages and docstrings mix Italian and English.
 - [ ] **C6.** Outdated docs:
   - [x] `frontend/.env.example` (Supabase and OpenAI options that aren't used) *(rewritten with the migration)*

@@ -1,7 +1,7 @@
 # Run with: venv/bin/python -m ai.test_wardrobe_picks
 from ai.src.query_handler import drop_picked_categories, keep_one_item_per_category
 from types import SimpleNamespace
-from ai.src import wardrobe
+from ai.src import moderation, wardrobe
 from ai.src.wardrobe import wardrobe_candidate, describe_piece, clean_owned_piece, check_wardrobe_piece
 
 outfit = lambda: {'top': {'items': [{'tag': 'sweater'}]}, 'bottom': {'items': [{'tag': 'chinos'}]},
@@ -54,7 +54,7 @@ assert len(clean_owned_piece({**guess, 'color': 'x' * 500}, True, msg)['color'])
 # Wardrobe piece check (model stubbed): verdict -> refusal message; an edit with no text skips the model
 calls = []
 def stub(verdict):
-    wardrobe.generate_content_with_fallback = lambda **kw: calls.append(kw) or SimpleNamespace(parsed={'verdict': verdict})
+    moderation.generate_content_with_fallback = lambda **kw: calls.append(kw) or SimpleNamespace(parsed={'verdict': verdict})
 stub('OFFENSIVE')
 assert check_wardrobe_piece(b'jpg', [None, None, None]) == wardrobe.OFFENSIVE_MESSAGE
 assert check_wardrobe_piece(None, ['bad words', None, None]) == wardrobe.OFFENSIVE_MESSAGE
@@ -65,5 +65,13 @@ stub('OK')
 assert check_wardrobe_piece(b'jpg', [None, None, None]) is None
 calls.clear()
 assert check_wardrobe_piece(None, [None, None, None]) is None and calls == []
+
+# Profile check: same model call, its own prompt; any photo is fine unless offensive (C4)
+stub('OFFENSIVE')
+assert moderation.check_profile(image=b'jpg') == moderation.OFFENSIVE_MESSAGE
+assert moderation.check_profile(name='bad words', username='x') == moderation.OFFENSIVE_MESSAGE
+assert 'name: bad words; username: x' in calls[-1]['contents'][0]['parts'][0].text
+stub('OK')
+assert moderation.check_profile(image=b'jpg', name='Mario') is None
 
 print("wardrobe picks ok")
