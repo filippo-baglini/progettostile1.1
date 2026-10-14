@@ -12,6 +12,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Import custom modules
 from ai.src.preferences_management import get_user_preferences
+from ai.src.accessories import narrow_accessories
 from ai.src.query_handler import generate_outfit_plan, parse_outfit_plan, item_description, SINGLE_ITEM_CATEGORIES
 from ai.src.query_embedder import get_text_embedding_vector
 from ai.src.outfit_retrieval_logic import search_product_candidates_with_vector_db
@@ -436,12 +437,15 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
                             all_candidates[original_idx] = filtered_candidates
                             # --- DIVERSITY LOGIC END ---
                 
-            # Only my clothes: a piece the user owns nothing like is left out of the outfit
-            if only_wardrobe:
-                all_candidates = [c for c in all_candidates if c != []]
-                if not all_candidates:
-                    logging.info(f"No wardrobe pieces fit outfit {i+1}.")
-                    continue
+            # Catalogue accessories: each slot gets its own kind, one of each kind per outfit (see accessories.py)
+            if not only_wardrobe:
+                all_candidates = narrow_accessories(all_candidates, dict(zip(indices_to_search, items_to_search)))
+
+            # A slot nothing fits (an accessory the catalogue lacks, a piece the user owns nothing like) is left out
+            all_candidates = [c for c in all_candidates if c != []]
+            if not all_candidates:
+                logging.info(f"Nothing fits outfit {i+1}.")
+                continue
 
             # Check for missing candidates (vector search failure)
             if any(c is None for c in all_candidates):

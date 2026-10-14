@@ -23,7 +23,7 @@ SINGLE_ITEM_CATEGORIES = {'bottom', 'dresses', 'outerwear', 'swimwear', 'shoes'}
 # Define the schema for a category (e.g., "top")
 category_schema = types.Schema(
     type=types.Type.OBJECT,
-    description="A collection of item suggestions for a specific clothing category. If 'accessories' limit to sunglasses, caps/hats, scarves, gloves, watches or simple jewelry.",
+    description="A collection of item suggestions for a specific clothing category. If 'accessories' limit to sunglasses, caps/hats, watches, scarves, necklaces or handbags, at most one of each kind.",
     properties={
         "color_palette": types.Schema(type=types.Type.STRING, description="A specific color or color description (e.g., 'sky blue', 'dark indigo')."),
         "pattern": types.Schema(type=types.Type.STRING, description="A specific pattern (e.g., 'solid', 'striped', 'gingham')."),
