@@ -33,7 +33,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 - [x] **S8.** The explanation endpoint returns the raw exception text to the client (`backend/ai/src/get_explanations.py`, last line). *(fixed 2026-10-14: logged, generic message to the client)*
 - [x] **S9.** Personal data in logs: `print(user_preferences, gender)` and full LLM responses on the backend; `console.log('DEBUG: Raw history...')` in `frontend/src/services/chatService.ts:238`. *(removed, 2026-10-14; the remaining `DEBUG` prints log no personal data, see C9)*
 - [x] **S10.** Chat photos are uploaded before the ownership check and before the AI call (`app.py:678`), so failed or rejected requests leave orphan files in storage. *(fixed 2026-10-14: uploaded right before the message is saved, deleted again if the save fails)*
-- [ ] **S11. DB credentials have defaults.** `DBManager` falls back to `DB_PASSWORD='password'` and `DB_HOST='localhost'` (`backend/db_manager.py:21`). Fail at startup like `SECRET_KEY` does.
+- [x] **S11. DB credentials have defaults.** `DBManager` falls back to `DB_PASSWORD='password'` and `DB_HOST='localhost'` (`backend/db_manager.py:21`). Fail at startup like `SECRET_KEY` does. *(fixed 2026-10-14: DB_HOST, DB_NAME, DB_USER and DB_PASSWORD are required; DB_PORT keeps 5432)*
 - [ ] **S12. Photos are public.** Chat and wardrobe photos live in public buckets (the UUIDs can't be guessed, but anyone with the URL can see them). Use signed URLs, or at least say so in the privacy notes.
 
 ## Bugs

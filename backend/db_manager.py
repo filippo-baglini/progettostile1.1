@@ -15,13 +15,18 @@ USER_FIELDS = ("id", "name", "email", "gender", "username", "avatar_id", "auth_i
 USER_COLUMNS = ", ".join(USER_FIELDS)
 WARDROBE_COLUMNS = "id, section, image_id, name, color, brand, main_category"
 
+# No fallbacks: a missing value should stop the start, not quietly try a default password
+_missing = [k for k in ('DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD') if not os.getenv(k)]
+if _missing:
+    raise RuntimeError(f"{', '.join(_missing)} missing from the environment / .env file.")
+
 class DBManager:
     # Configurazione database PostgreSQL
-    DB_USER = os.getenv('DB_USER', 'postgres')
-    DB_PASSWORD = os.getenv('DB_PASSWORD', 'password')
-    DB_HOST = os.getenv('DB_HOST', 'localhost')
+    DB_USER = os.getenv('DB_USER')
+    DB_PASSWORD = os.getenv('DB_PASSWORD')
+    DB_HOST = os.getenv('DB_HOST')
     DB_PORT = os.getenv('DB_PORT', '5432')
-    DB_NAME = os.getenv('DB_NAME', 'stylefinderai')
+    DB_NAME = os.getenv('DB_NAME')
 
     _status = {"connected": False, "error": "Not checked yet"}
 
