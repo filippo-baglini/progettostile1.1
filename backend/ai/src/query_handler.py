@@ -651,9 +651,6 @@ def generate_outfit_plan(
         picked_items: list[dict] | None = None,  # wardrobe pieces the user picked, with their 'image_bytes'
         only_wardrobe: bool = False
 ) -> dict:
-    if gender is None:
-        gender = "male"
-
     if past_images is None:
         past_images = {}
 

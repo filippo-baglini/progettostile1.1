@@ -494,6 +494,10 @@ def message_progress(request_id):
     return {"generating": progress.is_generating(request_id)}, 200
 
 
+# The chat's gender picker offers these; the planner needs one and the catalogue search filters by it
+GENDERS = ('male', 'female', 'non-binary')
+
+
 def upload_chat_photo(image_id, image):
     """The photo's public URL, or None if there is no photo or the upload failed."""
     return upload_image(image_id, image) if image_id else None
@@ -569,6 +573,8 @@ def send_message():
             cleanup_guest_chats()
 
         if not conv_id:
+            if (current_user.gender if is_authenticated else guest_gender) not in GENDERS:
+                return {"error": "Choose a gender first"}, 400
             # First message: the AI answers first, so a failure leaves no empty conversation behind
             chat_history = []
             past_images = {}
@@ -592,6 +598,8 @@ def send_message():
             if not owned:
                 return {"error": "Conversation not found"}, 404
             db_conv_id, saved_gender = owned
+            if (current_user.gender if is_authenticated else saved_gender or guest_gender) not in GENDERS:
+                return {"error": "Choose a gender first"}, 400
 
             chat_history, past_images = load_messages(db_conv_id, user_id)
 

@@ -1,23 +1,29 @@
 # Run with: venv/bin/python test_chat_photos.py  (from backend/; loads the app, so CLIP too)
 # A chat photo is uploaded only once its message can be saved, and removed if the save fails (S10).
+# A message needs one of the picker's genders (B6).
 import io
 from unittest import mock
 
 from PIL import Image
 
 import app as backend
+import rate_limit
 from db_manager import DBManager
 
 client = backend.app.test_client()
 TOKEN = '5f0c8a5e-1b0e-4c39-9a51-2a0d9d2f1c11'
+OLD_TOKEN = '5f0c8a5e-1b0e-4c39-9a51-2a0d9d2f1c12'  # a chat saved without a gender
 REPLY = {'status': 'AWAITING_INPUT', 'prompt_to_user': 'Which occasion?'}
 
 jpeg = io.BytesIO()
 Image.new('RGB', (8, 8)).save(jpeg, 'JPEG')
 
 
-def send(conv_id=None):
+def send(conv_id=None, gender='female'):
+    rate_limit._recent_requests.clear()  # more sends than the per-minute limit
     form = {'message': 'Style this', 'image': (io.BytesIO(jpeg.getvalue()), 'shirt.jpg')}
+    if gender:
+        form['gender'] = gender
     if conv_id:
         form['conv_id'] = conv_id
     return client.post('/api/messages/send', data=form, content_type='multipart/form-data')
@@ -29,10 +35,19 @@ with mock.patch.object(backend, 'upload_image', return_value='https://x/photo.jp
      mock.patch.object(backend, 'chat_title', return_value='Shirt'), \
      mock.patch.object(backend, 'outfit_recommendation_handler', return_value=REPLY) as ai, \
      mock.patch.object(backend, 'load_messages', return_value=([], {})), \
-     mock.patch.object(DBManager, 'guest_conversation', side_effect=lambda token: (42, 'female') if token == TOKEN else None), \
+     mock.patch.object(DBManager, 'guest_conversation', side_effect=lambda token: {TOKEN: (42, 'female'), OLD_TOKEN: (43, None)}.get(token)), \
      mock.patch.object(DBManager, 'create_conversation_with_message', return_value=42) as create, \
      mock.patch.object(DBManager, 'add_message_to_conversation', return_value=True) as add, \
      mock.patch.object(DBManager, 'add_simple_ai_response', return_value=7):
+    # No usable gender: rejected before the AI
+    assert send(gender=None).status_code == 400
+    assert send(gender='banana').status_code == 400
+    assert send(f'temp_{OLD_TOKEN}', gender=None).status_code == 400
+    assert ai.call_count == 0
+    assert send(f'temp_{TOKEN}', gender=None).status_code == 200   # the chat's saved one counts
+    assert send(f'temp_{OLD_TOKEN}', gender='non-binary').status_code == 200
+    ai.reset_mock(); upload.reset_mock(); add.reset_mock()
+
     # Rejected before the AI: no file
     assert send('temp_5f0c8a5e-0000-4c39-9a51-2a0d9d2f1c11').status_code == 404
     assert upload.call_count == 0
