@@ -6,15 +6,15 @@ Findings from the codebase audit of 2026-10-13. Tick an item (`[x]`) when its fi
 ## Security
 
 ### High
-- [ ] **S1. Any Google access token logs in.** The frontend uses the implicit flow (access token); the backend falls back to Google's userinfo endpoint (`backend/app.py:225-238`) without checking the token was issued to our client ID, so a token from any other Google-login app can be replayed here. Fix: use the ID-token flow (`<GoogleLogin>` / `credential`) and remove the access-token fallback.
-- [ ] **S2. Account pre-hijacking.** Signup never verifies the email; Google login links to any account with the same email (`app.py:244-251`) and doesn't check `email_verified`. An attacker who registers the victim's email first keeps password access after the victim signs in with Google. Fix: check `email_verified`; when linking to an unverified password account, refuse or clear its password.
+- [x] **S1. Any Google access token logs in.** The frontend uses the implicit flow (access token); the backend falls back to Google's userinfo endpoint (`backend/app.py:225-238`) without checking the token was issued to our client ID, so a token from any other Google-login app can be replayed here. Fix: use the ID-token flow (`<GoogleLogin>` / `credential`) and remove the access-token fallback. *(fixed by the Supabase Auth migration, 2026-10-14)*
+- [x] **S2. Account pre-hijacking.** Signup never verifies the email; Google login links to any account with the same email (`app.py:244-251`) and doesn't check `email_verified`. An attacker who registers the victim's email first keeps password access after the victim signs in with Google. Fix: check `email_verified`; when linking to an unverified password account, refuse or clear its password. *(fixed by the Supabase Auth migration, 2026-10-14)*
 
-- [ ] **S2b. Email confirmation at signup** (waits for a domain with a mailbox). Either send our own signed link (`itsdangerous` + the domain's SMTP via `smtplib`), or move logins to Supabase Auth like olanda_project. Password reset ("forgot password", which doesn't exist yet) needs the same email setup.
+- [ ] **S2b. Email from our own domain.** Email confirmation and password reset now work through Supabase Auth; what remains is custom SMTP with the production domain (Supabase's built-in sender only reaches project team members, a few emails an hour).
 
 ### Medium
-- [ ] **S3. CSRF on multipart endpoints.** `/api/messages/send` (form branch), `POST /api/wardrobe` and `/api/user/avatar` have no CSRF token and `SameSite` isn't set; Firefox and Safari send the cookie cross-site. Fix: `SESSION_COOKIE_SAMESITE='Lax'`.
-- [ ] **S3b. Logout is a GET** (`app.py:265`), so any `<img>` tag on another page can log users out. Fix: make it POST.
-- [ ] **S4. Sessions can't be revoked.** Flask's signed-cookie sessions stay valid after logout and after a password change; `SESSION_COOKIE_SECURE` isn't set for production.
+- [x] **S3. CSRF on multipart endpoints.** `/api/messages/send` (form branch), `POST /api/wardrobe` and `/api/user/avatar` have no CSRF token and `SameSite` isn't set; Firefox and Safari send the cookie cross-site. Fix: `SESSION_COOKIE_SAMESITE='Lax'`. *(fixed by the Supabase Auth migration, 2026-10-14)*
+- [x] **S3b. Logout is a GET** (`app.py:265`), so any `<img>` tag on another page can log users out. Fix: make it POST. *(fixed by the Supabase Auth migration, 2026-10-14)*
+- [x] **S4. Sessions can't be revoked.** Flask's signed-cookie sessions stay valid after logout and after a password change; `SESSION_COOKIE_SECURE` isn't set for production. *(fixed by the Supabase Auth migration, 2026-10-14: logout and password changes revoke the session; an access token already issued stays valid until it expires, 1 hour by default)*
 - [ ] **S5. No rate or size limits on paid/heavy endpoints.**
   - [ ] `/api/messages/send` and `/api/outfit/explain` work without login and have no rate limit.
   - [ ] `/explain` takes any `user_prompt` and `outfit_data`, so it works as an open LLM proxy.
@@ -23,7 +23,7 @@ Findings from the codebase audit of 2026-10-13. Tick an item (`[x]`) when its fi
 - [ ] **S6. Vulnerable dependencies.** `npm audit`: axios (high), form-data (high), react-router / react-router-dom (high, partly SSR-only), follow-redirects (moderate). Fix: `npm audit fix`. Also pin versions in `backend/requirements.txt`.
 
 ### Low
-- [ ] **S7.** The backend has no password rules (only the frontend checks for at least 6 characters). Emails are case-sensitive, so `Foo@x.com` and `foo@x.com` become two accounts, and the Google email match misses.
+- [x] **S7.** The backend has no password rules (only the frontend checks for at least 6 characters). Emails are case-sensitive, so `Foo@x.com` and `foo@x.com` become two accounts, and the Google email match misses. *(fixed by the Supabase Auth migration, 2026-10-14)*
 - [ ] **S8.** The explanation endpoint returns the raw exception text to the client (`backend/ai/src/get_explanations.py`, last line).
 - [ ] **S9.** Personal data in logs: `print(user_preferences, gender)` and full LLM responses on the backend; `console.log('DEBUG: Raw history...')` in `frontend/src/services/chatService.ts:238`.
 - [ ] **S10.** Chat photos are uploaded before the ownership check and before the AI call (`app.py:678`), so failed or rejected requests leave orphan files in storage.
@@ -31,7 +31,7 @@ Findings from the codebase audit of 2026-10-13. Tick an item (`[x]`) when its fi
 ## Bugs
 
 - [ ] **B1. Saved preferences never reach the AI.** `preferences_management.py:37` builds `favorite_Color` (DB names are `Color`, `Brand`, `Material`), but `query_handler.py:866-871` reads `favorite_color`. Fix: lowercase the name.
-- [ ] **B2. A wrong current password on the Profile page redirects to /login.** The backend returns 401 (`app.py:339`) and the axios interceptor sends every 401 to `/login` (`frontend/src/services/api.ts:20`). Google-only users hit this too. Fix: return 400 or 403.
+- [x] **B2. A wrong current password on the Profile page redirects to /login.** The backend returns 401 (`app.py:339`) and the axios interceptor sends every 401 to `/login` (`frontend/src/services/api.ts:20`). Google-only users hit this too. Fix: return 400 or 403. *(fixed by the Supabase Auth migration, 2026-10-14)*
 - [ ] **B3. The frontend times out after 60 s** (`api.ts:7`), but the backend can take much longer (120 s per Mistral call, plus retries and fallback). The user sees an error while the reply is still saved; retrying duplicates the message.
 - [ ] **B4. *Likely:* guests can't refine a selected outfit.** Guest replies have no `message_id`; the frontend sends `assistant-<timestamp>`, which the backend never matches (`backend/ai/src/app.py:98-103`).
 - [ ] **B5. Prompts call item IDs UUIDs** (`query_handler.py:375,380,586,591`), but real IDs are integers or `w12`. An invented UUID makes REMOVE or REPLACE silently do nothing (`ai/src/app.py:327`).
@@ -56,13 +56,19 @@ Findings from the codebase audit of 2026-10-13. Tick an item (`[x]`) when its fi
 - [ ] **C4.** Wardrobe pieces get the offensive-content check; avatars don't.
 - [ ] **C5.** Error messages and docstrings mix Italian and English.
 - [ ] **C6.** Outdated docs:
-  - [ ] `frontend/.env.example` (Supabase and OpenAI options that aren't used)
+  - [x] `frontend/.env.example` (Supabase and OpenAI options that aren't used) *(rewritten with the migration)*
   - [ ] `frontend/.github/copilot-instructions.md` (says React 18, Router v6)
   - [ ] `frontend/docs/StyleFinder_Frontend_Manual.tex`
 - [ ] **C7.** The README says to run migrations in filename order, which runs `wardrobe_from_chat` before `wardrobe_outfits`, the opposite of what its own header says it needs.
 - [ ] **C8.** Deployment: the CORS origins are hardcoded to localhost and the app runs on Flask's development server.
 - [ ] **C9.** Leftover code: the unused `chat_history`/`history` passing, the "legacy single outfit" fallbacks, and `DEBUG` prints.
 - [ ] **C10.** ESLint: 44 errors and 8 warnings (mostly `no-explicit-any` and unused variables).
+
+## Before production
+
+- [ ] Supabase: custom SMTP with the production domain (see S2b)
+- [ ] Supabase: Site URL and Redirect URLs set to the production domain; the same domain on the Google OAuth client
+- [ ] Supabase: paid plan, or something keeping the free project from pausing after a week idle
 
 ## Unblocked by the catalogue (3,649 products imported)
 

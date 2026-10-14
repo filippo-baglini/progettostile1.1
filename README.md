@@ -5,7 +5,7 @@ wedding, under €200") or upload a photo, and the app replies with up to three 
 from real shop listings, or from the clothes in your own digital wardrobe.
 
 - **Frontend:** React 19 + TypeScript + Vite + Tailwind (`frontend/`)
-- **Backend:** Flask + Flask-Login (`backend/`)
+- **Backend:** Flask (`backend/`); logins through Supabase Auth
 - **AI:** Mistral (Ministral 14B / 8B) for dialogue and outfit planning, FashionCLIP for image/text embeddings
 - **Data:** PostgreSQL with pgvector, Supabase Storage for photos
 
@@ -65,8 +65,10 @@ user message / photo
   - switch on **Only my clothes** to build outfits only from your wardrobe (no budget),
   - add a piece you photographed in chat to your wardrobe with one tap.
 - **Explanations.** "Explain this outfit" asks the model to explain the choices (`/api/outfit/explain`).
-- **Accounts.** Email/password or Google sign-in, profile with username and avatar, preferences,
-  conversation history (rename/delete).
+- **Accounts.** Email/password (with email confirmation and password reset) or Google sign-in, through
+  Supabase Auth. The frontend sends the Supabase access token with each API call and the backend verifies
+  it (`backend/auth.py`); our `users` row holds the profile (username, avatar, preferences) and is created
+  on the account's first request. Conversation history (rename/delete).
 - **Progress.** The frontend polls `/api/messages/progress/<id>` so it can say when the questions are over
   and the outfit is being built.
 
@@ -87,7 +89,8 @@ backend/
   schema.sql              base database schema
   migrations/             later schema changes, one dated file each
   ai/src/                 the outfit pipeline (see above)
-  ai/test_*.py            backend checks
+  auth.py                 verifies Supabase Auth tokens
+  ai/test_*.py, test_auth.py   backend checks
 frontend/
   src/pages/              Landing, Login, SignUp, Chat, Profile, HowToUse
   src/components/         chat, profile (wardrobe), layout, ui
@@ -100,8 +103,8 @@ frontend/
 ### Requirements
 
 - Python 3.12, Node.js 18+
-- A PostgreSQL database with the `vector` extension, and Supabase Storage (a Supabase project provides
-  both)
+- A PostgreSQL database with the `vector` extension, Supabase Storage and Supabase Auth (a Supabase
+  project provides all three)
 - A [Mistral API key](https://console.mistral.ai/) (the free plan is enough: it allows the Ministral
   models)
 - Optional: a Google OAuth client ID (Google sign-in) and an eBay production keyset (catalogue import)
@@ -112,6 +115,17 @@ frontend/
    and the preference names.
 2. Run the files in `backend/migrations/` in filename order.
 3. In Supabase Storage create three **public** buckets: `images` (chat photos), `wardrobe` and `avatars`.
+4. In Supabase Authentication:
+   - **Sign In / Providers**: turn on **Confirm email**. In the Email provider set the minimum password
+     length to 8 with lowercase, uppercase, digits and symbols (the frontend mirrors this rule in
+     `frontend/src/utils/password.ts`), and turn on *Secure password change* and *Require current
+     password when updating*.
+   - **URL Configuration**: Site URL `http://localhost:5173`, and add `http://localhost:5173/**` to the
+     Redirect URLs.
+   - **Google** (optional): enable it with a Google OAuth client ID and secret. In Google Cloud, the client
+     needs the redirect URI shown on that page (`https://<project>.supabase.co/auth/v1/callback`).
+   - The built-in email sender only delivers to the project's team members and a few emails an hour:
+     production needs custom SMTP.
 
 ### Backend
 
@@ -134,11 +148,10 @@ DB_PASSWORD=...
 
 SUPABASE_URL=https://<project>.supabase.co
 SUPABASE_KEY=...                         # used by the outfit pipeline (vector search RPCs)
-SUPABASE_RLS_KEY=...                     # used for Storage uploads/downloads
+SUPABASE_RLS_KEY=...                     # used for Storage and for deleting Supabase Auth accounts
 
 MISTRAL_API_KEY=...
 
-GOOGLE_CLIENT_ID=...                     # optional: Google sign-in
 EBAY_CLIENT_ID=...                       # optional: import_ebay.py
 EBAY_CLIENT_SECRET=...
 ```
@@ -170,11 +183,12 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
-Optional `frontend/.env`:
+`frontend/.env` (restart `npm run dev` after changing it):
 
 ```env
-VITE_API_BASE_URL=http://localhost:5000/api   # default
-VITE_GOOGLE_CLIENT_ID=...                     # same client ID as the backend, for Google sign-in
+VITE_SUPABASE_URL=https://<project>.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...   # Project Settings -> API Keys
+VITE_API_BASE_URL=http://localhost:5000/api        # optional, this is the default
 ```
 
 ## Tests
@@ -184,6 +198,7 @@ VITE_GOOGLE_CLIENT_ID=...                     # same client ID as the backend, f
 venv/bin/python -m ai.test_wardrobe_picks
 venv/bin/python -m ai.test_clean_constraints
 venv/bin/python -m ai.test_drop_owned_categories
+venv/bin/python test_auth.py
 
 # frontend (from frontend/)
 npm test

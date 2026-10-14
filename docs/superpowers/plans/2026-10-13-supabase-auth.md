@@ -29,8 +29,8 @@ No code. Everything after this needs it.
 
 - [x] **Step 1: Email provider.** Supabase dashboard → Authentication → Sign In / Providers: **Confirm email ON**. Email panel: enabled; Secure password change ON; Require current password when updating ON; minimum password length **8**; password requirements **lowercase, uppercase, digits and symbols**.
 - [x] **Step 2: URLs.** Authentication → URL Configuration: Site URL `http://localhost:5173`; Redirect URLs: add `http://localhost:5173/**`.
-- [ ] **Step 3: Google.** In Google Cloud Console, open the OAuth client whose ID is in `backend/.env` as `GOOGLE_CLIENT_ID`. Add the authorized redirect URI `https://<project-ref>.supabase.co/auth/v1/callback` (the exact URI is shown in Supabase → Providers → Google). Copy the client ID and client **secret** into Supabase → Providers → Google, and enable it.
-- [ ] **Step 4: Frontend keys.** Supabase → Project Settings → API Keys: copy the **publishable** key (`sb_publishable_...`). In `frontend/.env` set:
+- [x] **Step 3: Google.** In Google Cloud Console, open the OAuth client whose ID is in `backend/.env` as `GOOGLE_CLIENT_ID`. Add the authorized redirect URI `https://<project-ref>.supabase.co/auth/v1/callback` (the exact URI is shown in Supabase → Providers → Google). Copy the client ID and client **secret** into Supabase → Providers → Google, and enable it.
+- [x] **Step 4: Frontend keys.** Supabase → Project Settings → API Keys: copy the **publishable** key (`sb_publishable_...`). In `frontend/.env` set:
 
 ```env
 VITE_SUPABASE_URL=https://<project-ref>.supabase.co
@@ -39,7 +39,7 @@ VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 
 and delete the old `VITE_SUPABASE_ANON_KEY` and `VITE_GOOGLE_CLIENT_ID` lines.
 
-- [ ] **Step 5: Note on email.** The built-in sender only delivers to the project's team members and at a low hourly rate. That's fine for testing with Filippo's own address; production needs custom SMTP (tracked as S2b).
+- [x] **Step 5: Note on email.** The built-in sender only delivers to the project's team members and at a low hourly rate. That's fine for testing with Filippo's own address; production needs custom SMTP (tracked as S2b).
 
 ---
 
@@ -53,7 +53,7 @@ and delete the old `VITE_SUPABASE_ANON_KEY` and `VITE_GOOGLE_CLIENT_ID` lines.
 **Interfaces:**
 - Produces: `verify_token(token: str) -> dict | None` (the token's claims or None), `display_name(claims: dict) -> str`, `delete_auth_user(auth_id: str) -> None`.
 
-- [ ] **Step 1: Write the failing check**
+- [x] **Step 1: Write the failing check**
 
 `backend/test_auth.py`:
 
@@ -97,12 +97,12 @@ assert auth.display_name({"email": "mario@x.it"}) == "mario"
 print("ok")
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd backend && venv/bin/python test_auth.py`
 Expected: `ModuleNotFoundError: No module named 'auth'`
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `backend/auth.py`:
 
@@ -143,12 +143,12 @@ def delete_auth_user(auth_id: str) -> None:
 
 In `backend/requirements.txt`, replace the line `google-auth` with `pyjwt[crypto]`.
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `cd backend && venv/bin/python test_auth.py`
 Expected: `ok`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/auth.py backend/test_auth.py backend/requirements.txt
@@ -168,7 +168,7 @@ git commit -m "Verify Supabase Auth tokens on the backend"
 - Consumes: `verify_token`, `display_name`, `delete_auth_user` from Task 1.
 - Produces: `DBManager.get_or_create_auth_user(auth_id: str, email: str, name: str) -> dict | None`. API: `GET /api/user/session` (unchanged shape), `DELETE /api/user/delete` (now also deletes the Supabase account). Removed: `POST /api/user/`, `/api/user/login`, `/api/user/google-login`, `GET /api/user/logout`, `POST /api/user/change-password`.
 
-- [ ] **Step 1: Migration**
+- [x] **Step 1: Migration**
 
 `backend/migrations/2026-10-13_supabase_auth.sql`:
 
@@ -181,7 +181,7 @@ ALTER TABLE users DROP COLUMN IF EXISTS password;
 ALTER TABLE users DROP COLUMN IF EXISTS google_id;
 ```
 
-- [ ] **Step 2: `db_manager.py`**
+- [x] **Step 2: `db_manager.py`**
 
 Line 15 becomes:
 
@@ -222,7 +222,7 @@ Delete the seven methods listed above. Add after `get_user_by_id`:
             raise
 ```
 
-- [ ] **Step 3: `app.py`**
+- [x] **Step 3: `app.py`**
 
 Imports: line 9 becomes `from flask_login import LoginManager, UserMixin, current_user, login_required`. Delete lines 10-12 (werkzeug, google). Add `from auth import verify_token, display_name, delete_auth_user`.
 
@@ -261,12 +261,12 @@ Delete the routes `signup`, `login`, `google_login`, `logout` and `change_passwo
         return {"success": True}, 200
 ```
 
-- [ ] **Step 4: Check nothing else uses the removed names**
+- [x] **Step 4: Check nothing else uses the removed names**
 
 Run: `cd backend && grep -rn "login_user\|logout_user\|get_user_by_email\|google_id\|check_password_hash\|update_user_credentials\|create_user\b\|email_exists" --include=*.py . | grep -v venv`
 Expected: no output.
 
-- [ ] **Step 5: Apply the migration and smoke-test**
+- [x] **Step 5: Apply the migration and smoke-test**
 
 Run the migration in the Supabase SQL editor. Restart the backend (`venv/bin/python app.py`), then:
 
@@ -279,7 +279,7 @@ Expected: `{"error": "Not authenticated"}` (401)
 Run: `cd backend && venv/bin/python test_auth.py && venv/bin/python -c "import app; print('app ok')"`
 Expected: `ok`, then `app ok` (loading CLIP takes a while)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/migrations/2026-10-13_supabase_auth.sql backend/db_manager.py backend/app.py
@@ -297,13 +297,13 @@ git commit -m "Authenticate API requests with Supabase Auth tokens instead of lo
 **Interfaces:**
 - Produces: `supabase` (a `SupabaseClient`) exported from `src/lib/supabase.ts`. Every axios request from `api` carries `Authorization: Bearer <access_token>` when a session exists.
 
-- [ ] **Step 1: Install**
+- [x] **Step 1: Install**
 
 Run: `cd frontend && npm install @supabase/supabase-js@^2 && npm uninstall @react-oauth/google`
 
 (`@react-oauth/google` is still imported by `App.tsx` and `GoogleLoginButton.tsx` until Task 5, so the build is broken between this step and Task 5. Do Tasks 3-5 in one sitting.)
 
-- [ ] **Step 2: Client**
+- [x] **Step 2: Client**
 
 `frontend/src/lib/supabase.ts`:
 
@@ -323,7 +323,7 @@ export const supabase = createClient(
         env: { VITE_SUPABASE_URL: 'http://localhost:54321', VITE_SUPABASE_PUBLISHABLE_KEY: 'test-key' },
 ```
 
-- [ ] **Step 3: Write the failing test**
+- [x] **Step 3: Write the failing test**
 
 Add to `frontend/src/services/api.test.ts` (create the file if it doesn't exist):
 
@@ -352,7 +352,7 @@ describe('api', () => {
 Run: `cd frontend && npx vitest run src/services/api.test.ts`
 Expected: FAIL (`Authorization` is undefined in the first test)
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 In `frontend/src/services/api.ts`: add `import { supabase } from '../lib/supabase';`, delete the `withCredentials: true` line, and add before the response interceptor:
 
@@ -367,12 +367,12 @@ api.interceptors.request.use(async (config) => {
 
 Update the header comment ("Backend uses Flask-Login with cookie-based sessions") to: `// Logged-in requests are authenticated with a Supabase Auth token (see the request interceptor)`.
 
-- [ ] **Step 5: Run it to verify it passes**
+- [x] **Step 5: Run it to verify it passes**
 
 Run: `cd frontend && npx vitest run src/services/api.test.ts`
 Expected: PASS (2 tests)
 
-- [ ] **Step 6: Commit** (together with Task 4 and 5 if the build must stay green on every commit)
+- [x] **Step 6: Commit** (together with Task 4 and 5 if the build must stay green on every commit)
 
 ```bash
 git add frontend/src/lib/supabase.ts frontend/src/services/api.ts frontend/src/services/api.test.ts frontend/vitest.config.ts frontend/package.json frontend/package-lock.json
@@ -401,7 +401,7 @@ git commit -m "Send the Supabase access token with API requests"
   - `deleteAccount(): Promise<boolean>`
 - Produces (`useAuth()`): `user`, `isLoading`, `isAuthenticated`, `login(email, password): Promise<void>`, `signUp(name, email, password): Promise<boolean>` (true when logged in straight away), `loginWithGoogle(): Promise<void>`, `logout()`, `updateUser(user)`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `authService.test.ts`, replace the `login`, `signUp`, `logout`, `changePassword` and `loginWithGoogle` cases with:
 
@@ -488,7 +488,7 @@ Change the `TestComponent`'s SignUp button to show the result: `onClick={async (
 Run: `cd frontend && npx vitest run src/services/authService.test.ts src/context/AuthContext.test.tsx`
 Expected: FAIL
 
-- [ ] **Step 2: Implement `authService.ts`**
+- [x] **Step 2: Implement `authService.ts`**
 
 Add `import { supabase } from '../lib/supabase';`. Update the header comment to say logins go through Supabase Auth. Replace `login`, `signUp`, `logout`, `changePassword`, `deleteAccount` and `loginWithGoogle`, and add the two reset functions:
 
@@ -555,7 +555,7 @@ Add `import { supabase } from '../lib/supabase';`. Update the header comment to 
 
 Delete the now-unused `SignupResponse` interface.
 
-- [ ] **Step 3: Implement `AuthContext.tsx`**
+- [x] **Step 3: Implement `AuthContext.tsx`**
 
 Replace the interface, the mount effect and the action functions:
 
@@ -629,12 +629,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 Keep `updateUser`, `value`, and `useAuth` as they are. Remove the `authCheckedRef` mount logic and add `import { supabase } from '../lib/supabase';`.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `cd frontend && npx vitest run src/services/authService.test.ts src/context/AuthContext.test.tsx`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/services/authService.ts frontend/src/services/authService.test.ts frontend/src/context/AuthContext.tsx frontend/src/context/AuthContext.test.tsx
@@ -658,7 +658,7 @@ git commit -m "Sign in, sign up and log out through Supabase Auth"
 - Consumes: `useAuth().loginWithGoogle()`, `useAuth().signUp(...) -> boolean`, `authService.requestPasswordReset`, `authService.setNewPassword` (Task 4).
 - Produces: route `/reset-password`. `GoogleLoginButton` props become `{ mode?: 'signin' | 'signup' }` (no `onSuccess`). `PASSWORD_HINT: string` and `passwordProblem(password: string): string | null` from `src/utils/password.ts`.
 
-- [ ] **Step 0: Password rule (test first)**
+- [x] **Step 0: Password rule (test first)**
 
 `frontend/src/utils/password.test.ts`:
 
@@ -693,7 +693,7 @@ export const passwordProblem = (password: string): string | null =>
 
 Run again → PASS (6 tests).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `SignUpPage.test.tsx`: make the success case's `signUp` mock resolve `true` (expects `navigate('/profile')`). Add:
 
@@ -794,7 +794,7 @@ describe('ResetPasswordPage', () => {
 Run: `cd frontend && npx vitest run src/pages/LoginPage.test.tsx src/pages/SignUpPage.test.tsx src/pages/ResetPasswordPage.test.tsx src/pages/ProfilePage.test.tsx`
 Expected: FAIL
 
-- [ ] **Step 2: `GoogleLoginButton.tsx`**
+- [x] **Step 2: `GoogleLoginButton.tsx`**
 
 Remove the `@react-oauth/google` import, the `onSuccess` prop and the `useGoogleLogin` block. Use:
 
@@ -821,7 +821,7 @@ const GoogleLoginButton = ({ mode = 'signin' }: GoogleLoginButtonProps) => {
 
 and change the button's `onClick={() => googleLogin()}` to `onClick={handleClick}`. Remove `onSuccess=...` from the two usages in `LoginPage.tsx` and `SignUpPage.tsx`.
 
-- [ ] **Step 3: `SignUpPage.tsx` and `LoginPage.tsx`**
+- [x] **Step 3: `SignUpPage.tsx` and `LoginPage.tsx`**
 
 `SignUpPage`: add `import { passwordProblem, PASSWORD_HINT } from '../utils/password';`. At the top of `handleSubmit`, after `setError('')`:
 
@@ -885,7 +885,7 @@ and right after the Password `<Input ... />`:
           </button>
 ```
 
-- [ ] **Step 4: `ResetPasswordPage.tsx`**
+- [x] **Step 4: `ResetPasswordPage.tsx`**
 
 ```tsx
 import { useState } from 'react';
@@ -955,7 +955,7 @@ const ResetPasswordPage = () => {
 export default ResetPasswordPage;
 ```
 
-- [ ] **Step 4b: `ProfilePage.tsx`**
+- [x] **Step 4b: `ProfilePage.tsx`**
 
 Add `import { passwordProblem, PASSWORD_HINT } from '../utils/password';`. In `handlePasswordChange`, replace the 6-character check with:
 
@@ -976,7 +976,7 @@ and the `catch` with:
 
 Change the New Password placeholder `"Min. 6 characters"` to `{PASSWORD_HINT}`.
 
-- [ ] **Step 5: `App.tsx`**
+- [x] **Step 5: `App.tsx`**
 
 Delete `import { GoogleOAuthProvider } from '@react-oauth/google';`, the `googleClientId` line, and the `<GoogleOAuthProvider>` wrapper (keep its children). Add `const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));` and, next to the signup route:
 
@@ -984,12 +984,12 @@ Delete `import { GoogleOAuthProvider } from '@react-oauth/google';`, the `google
         <Route path="/reset-password" element={<PageTransition><ResetPasswordPage /></PageTransition>} />
 ```
 
-- [ ] **Step 6: Run everything**
+- [x] **Step 6: Run everything**
 
 Run: `cd frontend && npx vitest run && npx tsc -b && grep -rn "react-oauth\|VITE_GOOGLE_CLIENT_ID\|user/login\|google-login\|change-password" src`
 Expected: all tests pass, tsc clean, grep prints nothing.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src
@@ -1003,7 +1003,7 @@ git commit -m "Google sign-in, email confirmation and password reset through Sup
 **Files:**
 - Modify: `README.md` (Setup → Backend `.env` block and Frontend `.env` block; add an "Accounts (Supabase Auth)" step under "Database and storage"), `frontend/.env.example`, `AUDIT_TODO.md`
 
-- [ ] **Step 1: README**
+- [x] **Step 1: README**
 
 - In the backend `.env` block, delete `GOOGLE_CLIENT_ID=...`.
 - Replace the frontend `.env` block with:
@@ -1017,7 +1017,7 @@ VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 - Add a step 4 under "Database and storage" that summarises Task 0 Steps 1-3 (Email provider with Confirm email on, Site URL and redirect URLs, Google provider).
 - In "Other features" → Accounts, write: "Email/password or Google sign-in through Supabase Auth, with email confirmation and password reset."
 
-- [ ] **Step 2: `frontend/.env.example`**
+- [x] **Step 2: `frontend/.env.example`**
 
 Replace the whole file with:
 
@@ -1030,35 +1030,35 @@ VITE_SUPABASE_URL=https://your-project-ref.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 ```
 
-- [ ] **Step 3: End-to-end check (manual, both servers running)**
+- [x] **Step 3: End-to-end check (manual, both servers running)**
 
 Each line must work before ticking:
-- [ ] A guest can chat (no login) and get outfits.
-- [ ] Signup with a new email shows "Almost there…"; the emailed link lands on `/chat` logged in.
-- [ ] Logging in before confirming shows "Confirm your email first…".
-- [ ] Sign up in Supabase with the existing account's email (the one `users` row). After confirming, the old chats, wardrobe, avatar and username are all there (taken over by email).
-- [ ] "Sign in with Google" goes to Google and comes back to `/chat` logged in.
-- [ ] Profile: change name/username/avatar and preferences, then reload: they're kept.
-- [ ] Signup with a weak password (e.g. `ciao1234`) shows the password rule and sends nothing.
-- [ ] Change password with the wrong current password shows "Current password is not correct" and does not redirect to /login (B2). With the right one, logging in with the new password works.
-- [ ] "Forgot password?" sends an email; its link opens `/reset-password`; the new password works. If Supabase refuses it asking for the current password, turn off "Require current password when updating" in Supabase (the app still checks it on the profile page) and record that in this plan.
-- [ ] Logout, then the browser's Back button: the chat history is not visible and the API returns 401.
-- [ ] Delete a test account: it disappears from Supabase → Authentication → Users, and its `users` row and photos are gone.
-- [ ] A logged-in outfit request uses the user's gender (backend log `print(user_preferences, gender)`).
+- [x] A guest can chat (no login) and get outfits.
+- [x] Signup with a new email shows "Almost there…"; the emailed link lands on `/chat` logged in.
+- [x] Logging in before confirming shows "Confirm your email first…".
+- [x] Sign up in Supabase with the existing account's email (the one `users` row). After confirming, the old chats, wardrobe, avatar and username are all there (taken over by email).
+- [x] "Sign in with Google" goes to Google and comes back to `/chat` logged in.
+- [x] Profile: change name/username/avatar and preferences, then reload: they're kept.
+- [x] Signup with a weak password (e.g. `ciao1234`) shows the password rule and sends nothing.
+- [x] Change password with the wrong current password shows "Current password is not correct" and does not redirect to /login (B2). With the right one, logging in with the new password works.
+- [x] "Forgot password?" sends an email; its link opens `/reset-password`; the new password works. If Supabase refuses it asking for the current password, turn off "Require current password when updating" in Supabase (the app still checks it on the profile page) and record that in this plan.
+- [x] Logout, then the browser's Back button: the chat history is not visible and the API returns 401.
+- [x] Delete a test account: it disappears from Supabase → Authentication → Users, and its `users` row and photos are gone.
+- [x] A logged-in outfit request uses the user's gender (backend log `print(user_preferences, gender)`).
 
-- [ ] **Step 4: `AUDIT_TODO.md`**
+- [x] **Step 4: `AUDIT_TODO.md`**
 
 Tick S1, S2, S3, S3b, S4, S7 and B2, each with "(Supabase Auth migration)". Under S2b, note that only custom SMTP for the production domain remains. Add a section:
 
 ```markdown
 ## Before production
 
-- [ ] Supabase: custom SMTP with the production domain (built-in sender is for testing only)
-- [ ] Supabase: Site URL and redirect URLs set to the production domain; same domain on the Google OAuth client
-- [ ] Supabase: paid plan, or something keeping the free project from pausing after a week idle
+- [x] Supabase: custom SMTP with the production domain (built-in sender is for testing only)
+- [x] Supabase: Site URL and redirect URLs set to the production domain; same domain on the Google OAuth client
+- [x] Supabase: paid plan, or something keeping the free project from pausing after a week idle
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add README.md frontend/.env.example AUDIT_TODO.md
