@@ -3,6 +3,7 @@ import type { ChatMessage, OutfitFilters, OutfitItem, PickedPiece } from '../typ
 import { chatService } from '../services/chatService';
 import { toWardrobeSuggestion } from '../services/wardrobeService';
 import { showToast } from '../utils/toast';
+import { apiErrorMessage } from '../services/api';
 import axios from 'axios';
 
 // Error message helper
@@ -483,7 +484,7 @@ export const useChatMessages = () => {
 
     } catch (error) {
       console.error('Failed to generate explanation:', error);
-      showToast.error('Failed to generate explanation');
+      showToast.error(apiErrorMessage(error, 'Failed to generate explanation')); // e.g. too many requests
     } finally {
       setLoadingExplanationId(null);
     }

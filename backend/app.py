@@ -22,6 +22,7 @@ from ai.src import progress
 from storage_manager import upload_image, compress_image, download_image, get_image_url, delete_images
 import psycopg2.errors
 from cachetools import LRUCache
+from rate_limit import rate_limit
 
 app = Flask(__name__)
 # Signs Flask's session cookie. Logins no longer use it (Supabase tokens, see auth.py), but a guessable
@@ -59,6 +60,7 @@ def unauthorized():
 # ponytail: in-memory guest chats (with image bytes), capped so guests can't grow it forever;
 # oldest conversations are evicted first and everything is lost on restart.
 not_auth_convs = LRUCache(maxsize=200)
+
 
 
 def server_error(e):
@@ -458,6 +460,7 @@ def message_progress(request_id):
     return {"generating": progress.is_generating(request_id)}, 200
 
 @app.route('/api/messages/send', methods=['POST', 'PUT'])
+@rate_limit(per_minute=10)
 def send_message():
     is_authenticated = current_user.is_authenticated
     user_id = int(current_user.get_id()) if is_authenticated else None
@@ -487,7 +490,10 @@ def send_message():
             only_wardrobe = request.form.get('only_wardrobe') == 'true'
             image_uploaded = request.files.get('image')
             if image_uploaded:
-                image = compress_image(image_uploaded.read())
+                try:
+                    image = compress_image(image_uploaded.read(), max_size=(1024, 1024))
+                except Exception:
+                    return {"error": "Not a valid image"}, 400
 
         # Convert selected_outfit_index to int if present
         if selected_outfit_index is not None:
@@ -647,6 +653,7 @@ def send_message():
         return server_error(e)
 
 @app.route('/api/outfit/explain', methods=['POST'])
+@rate_limit(per_minute=20)
 def explain_outfit():
     """
     Endpoint to generate an explanation for a specific outfit on demand.
@@ -658,9 +665,16 @@ def explain_outfit():
         user_prompt = data.get('user_prompt')
         outfit_data = data.get('outfit_data')
         
-        if not user_prompt or not outfit_data:
-             return {"error": "Missing user_prompt or outfit_data"}, 400
-             
+        if not isinstance(user_prompt, str) or not user_prompt or not isinstance(outfit_data, list) or not outfit_data:
+            return {"error": "Missing user_prompt or outfit_data"}, 400
+
+        # Only what an outfit card has, capped, so this can't be used as a general-purpose LLM.
+        # ponytail: the prompt is still the client's; the full fix looks the outfit up by message id (needs B4 for guests)
+        user_prompt = user_prompt[-8000:]  # the chat so far: the latest part matters most
+        outfit_data = [
+            {field: str(item.get(field) or '')[:200] for field in ('category', 'description', 'brand', 'price')}
+            for item in outfit_data[:10] if isinstance(item, dict)
+        ]
         explanation = generate_explanation_only(user_prompt, outfit_data)
         
         return {"success": True, "explanation": explanation}, 200

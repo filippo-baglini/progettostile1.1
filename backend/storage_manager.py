@@ -1,5 +1,9 @@
 from dotenv import load_dotenv
 from PIL import Image, ImageOps
+
+# A small, highly compressed upload can decode to a huge image (the 10 MB cap doesn't stop that).
+# Pillow warns above this and refuses above twice this: 60 MP, ~180 MB decoded; phone photos are up to ~50 MP.
+Image.MAX_IMAGE_PIXELS = 30_000_000
 import io
 import os
 

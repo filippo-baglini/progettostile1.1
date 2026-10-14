@@ -17,11 +17,13 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 - [x] **S3b. Logout is a GET** (`app.py:265`), so any `<img>` tag on another page can log users out. Fix: make it POST. *(fixed by the Supabase Auth migration, 2026-10-14)*
 - [x] **S4. Sessions can't be revoked.** Flask's signed-cookie sessions stay valid after logout and after a password change; `SESSION_COOKIE_SECURE` isn't set for production. *(fixed by the Supabase Auth migration, 2026-10-14: logout and password changes revoke the session; an access token already issued stays valid until it expires, 1 hour by default)*
 - [ ] **S5. No rate or size limits on paid/heavy endpoints.**
-  - [ ] `/api/messages/send` and `/api/outfit/explain` work without login and have no rate limit; each call can trigger several Mistral calls plus CLIP inference. Guests can also flood the 200-slot `not_auth_convs` cache and evict other guests' chats. Add a per-IP limit (e.g. Flask-Limiter).
-  - [ ] `/explain` takes any `user_prompt` and `outfit_data`, so it works as an open LLM proxy.
+  - [x] `/api/messages/send` and `/api/outfit/explain` have no rate limit; each call can trigger several Mistral calls plus CLIP inference, and guests can flood the 200-slot `not_auth_convs` cache. *(fixed 2026-10-14: per-IP limit, 10/min on send and 20/min on explain, `backend/rate_limit.py`. Guest access stays on by choice; the freemium quota is under "Before production")*
+  - [x] `/explain` takes any `user_prompt` and `outfit_data`, so it works as an open LLM proxy. *(mitigated 2026-10-14: rate limited, prompt capped to 8,000 characters, outfit data reduced to 10 items with 4 short fields)*
+  - [ ] Full fix for the above: the server looks the outfit and chat up by message id instead of trusting the client (needs B4 for guests).
   - [x] No `MAX_CONTENT_LENGTH`: uploads can be any size. *(fixed in d0e78b6: 10 MB cap, 413)*
-  - [ ] Pillow still decodes images up to ~179 MP (~0.5 GB RAM each): a small, highly compressed file can pass the 10 MB cap. Lower `Image.MAX_IMAGE_PIXELS`.
-  - [ ] Chat photos are kept at full resolution (`app.py:664`, no `max_size`); guest chats hold them in RAM (200 conversations, no per-conversation image limit).
+  - [x] Pillow still decodes images up to ~179 MP (~0.5 GB RAM each): a small, highly compressed file can pass the 10 MB cap. *(fixed 2026-10-14: refused above 60 MP)*
+  - [x] Chat photos are kept at full resolution (`app.py:664`, no `max_size`). *(fixed 2026-10-14: resized to 1024 px)*
+  - [ ] Guest chats hold their photos in RAM (200 conversations, no per-conversation image limit).
 - [ ] **S6. Vulnerable dependencies.** `npm audit`: axios (high), form-data (high), react-router / react-router-dom (high, partly SSR-only), follow-redirects (moderate). Fix: `npm audit fix`. Also pin versions in `backend/requirements.txt`.
 
 ### Low
@@ -46,7 +48,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 - [ ] **B10. Small ones:**
   - [ ] A request with no `message` crashes with a 500 (`query_handler.py:731`, `ai/src/app.py:220`).
   - [ ] Deleting a conversation without `conv_id` raises on `int(None)` and returns 500 (`app.py:941`).
-  - [ ] A non-image file sent to `/api/messages/send` crashes `compress_image` with a 500 instead of a 400.
+  - [x] A non-image file sent to `/api/messages/send` crashes `compress_image` with a 500 instead of a 400. *(fixed 2026-10-14)*
   - [ ] `/api/chat` accepts `GET` but reads a JSON body, and its docstring is copied from `get_conversations`. Make it `POST` only (the frontend already uses POST).
   - [ ] `query_embedder.py`'s `__main__` calls `get_text_embedding_vector(test_text)` with one argument instead of four.
   - [ ] The DB status on `/` is checked once, at startup, not on each request.
@@ -67,7 +69,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 
 - [ ] **C1.** Two ways of reading preferences: Supabase REST in `ai/src/preferences_management.py` and psycopg2 in `db_manager.py` (the REST path has B1). Keep one.
 - [ ] **C2.** Two Supabase clients; `SUPABASE_RLS_KEY` is a secret key that bypasses RLS, so the name is misleading. With psycopg2 that makes three ways into the same DB: the search RPCs could be plain SQL through `DBManager`.
-- [ ] **C3.** Image size caps differ: avatars 512 px, wardrobe 1024 px, chat photos none.
+- [x] **C3.** Image size caps differ: avatars 512 px, wardrobe 1024 px, chat photos none. *(fixed 2026-10-14: chat photos 1024 px like the wardrobe)*
 - [ ] **C4.** Wardrobe pieces get the offensive-content check; avatars don't.
 - [ ] **C5.** Error messages and docstrings mix Italian and English.
 - [ ] **C6.** Outdated docs:
@@ -89,6 +91,9 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 - [ ] **M2. Backend tests** for the knapsack (`assemble_outfit.py`) and for ownership checks (user A can't read or edit user B's chats or wardrobe pieces).
 
 ## Before production
+
+- [ ] Freemium quota: a few outfit generations a day for guests and free users, many more (or unlimited) for paid ones. Count per user and day in the DB; guests can only be counted per IP or browser, so keep their allowance small. Separate from the per-IP rate limit, which stays for everyone.
+- [ ] Behind a reverse proxy, add werkzeug's `ProxyFix`, or the rate limit sees every request as coming from the proxy.
 
 - [ ] Supabase: custom SMTP with the production domain (see S2b)
 - [ ] Supabase: Site URL and Redirect URLs set to the production domain; the same domain on the Google OAuth client
