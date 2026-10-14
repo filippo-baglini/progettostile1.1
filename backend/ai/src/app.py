@@ -62,6 +62,27 @@ except Exception as e:
     logging.critical(f"❌ Error initializing CLIP model: {e}", exc_info=True)
     raise RuntimeError("Failed to load the CLIP model and processor.") from e
 
+def drop_targets(active_items: dict, modifications: list) -> None:
+    """Remove the items that REMOVE and REPLACE target from active_items ({id: item}).
+    A REPLACE whose ID isn't in the outfit (the model got it wrong) falls back to the outfit's only item in its category,
+    or the old item would stay next to its replacement."""
+    for mod in modifications:
+        action = mod.get('action')
+        if action not in ('REMOVE', 'REPLACE'):
+            continue
+        target_id = str(mod.get('item_id', ''))
+        if target_id not in active_items and action == 'REPLACE':
+            same_category = [k for k, it in active_items.items() if it.get('main_category') == mod.get('category')]
+            if len(same_category) == 1:
+                logging.info(f"Action REPLACE: ID {target_id} not in the outfit, replacing its {mod.get('category')} instead.")
+                target_id = same_category[0]
+        if target_id in active_items:
+            logging.info(f"Action {action}: Removing item ID {target_id} from active set.")
+            del active_items[target_id]
+        else:
+            logging.warning(f"Action {action}: Target ID {target_id} not found in previous outfit.")
+
+
 def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str, Any]], user_id_key: int | None, image_data:tuple[str, bytes] | None, past_images:dict[str, bytes] | None, selected_outfit_index: int | None = None, selected_message_id: str | None = None, guest_gender: str | None = None, picked_items: List[Dict[str, Any]] | None = None, only_wardrobe: bool = False) -> Dict[str, Any]:
     # picked_items: wardrobe pieces the user picked (rows + 'image_bytes'), always part of the outfit.
     # only_wardrobe: the rest of the outfit comes from the user's wardrobe instead of the catalogue, no budget.
@@ -312,16 +333,7 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
     
             if refinement_type == 'REFINE_CURRENT' and last_outfit:
                 # 1. Process REMOVE and REPLACE to update active_previous_items
-                for mod in modifications:
-                    action = mod.get('action')
-                    target_id = str(mod.get('item_id', ''))
-                    
-                    if action in ['REMOVE', 'REPLACE']:
-                        if target_id in active_previous_items:
-                            logging.info(f"Action {action}: Removing item ID {target_id} from active set.")
-                            del active_previous_items[target_id]
-                        else:
-                            logging.warning(f"Action {action}: Target ID {target_id} not found in previous outfit.")
+                drop_targets(active_previous_items, modifications)
                 
                 logging.info(f"Active Previous Items After Mod: {list(active_previous_items.keys())}")
 

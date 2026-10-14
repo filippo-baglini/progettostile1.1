@@ -113,7 +113,7 @@ modification_schema = types.Schema(
     description="A specific modification action to apply to the current outfit context.",
     properties={
         "action": types.Schema(type=types.Type.STRING, enum=["ADD", "REMOVE", "REPLACE"], description=" The type of modification."),
-        "item_id": types.Schema(type=types.Type.STRING, description="The UUID string of the item in the current outfit to target (Required for REMOVE and REPLACE)."),
+        "item_id": types.Schema(type=types.Type.STRING, description="The ID of the item in the current outfit to target, exactly as listed in the history (Required for REMOVE and REPLACE)."),
         "category": types.Schema(type=types.Type.STRING, description="The category of the item (Required for ADD and REPLACE)."),
         "new_item": item_schema, # Reuse item_schema for the new item definition
         "new_color_palette": types.Schema(type=types.Type.STRING, description="Color palette for the new item (Required for ADD/REPLACE)"),
@@ -372,15 +372,15 @@ The 'modifications' list must contain ONLY the changes asked for in the user's L
 
 Types of Modifications:
 1.  **REMOVE an Item:**
-    - item_id: The exact UUID string of the item to remove as seen in the history (e.g., "8021af5d-9279-49a5-911c-0b4a02b05d57"). DO NOT use integer indices like 1 or 2.
-    - Example: `{"action": "REMOVE", "item_id": "8021af5d-9279-49a5-911c-0b4a02b05d57"}`
+    - item_id: The item's ID exactly as listed in the history (after "ID:"). Never its position in the outfit, never an invented ID.
+    - Example: `{"action": "REMOVE", "item_id": "<ID from the history>"}`
 
 2.  **REPLACE/CHANGE an Item:**
     - Action: "REPLACE"
-    - item_id: The exact UUID string of the item being replaced (e.g., "60708682-8f89-4bd5-9585-b1085bfc16ae").
+    - item_id: The ID of the item being replaced, exactly as listed in the history (after "ID:").
     - category: The category of the new item.
     - new_item: The description of the new item.
-    - Example: `{"action": "REPLACE", "item_id": "60708682-8f89-4bd5-9585-b1085bfc16ae", "category": "shoes", "new_item": {"tag": "red boots", "fit": "comfortable"}, "new_color_palette": "red", "new_pattern": "solid"}`
+    - Example: `{"action": "REPLACE", "item_id": "<ID from the history>", "category": "shoes", "new_item": {"tag": "red boots", "fit": "comfortable"}, "new_color_palette": "red", "new_pattern": "solid"}`
 
 3.  **ADD an Item:**
     - Action: "ADD"
@@ -583,15 +583,15 @@ The 'modifications' list must contain ONLY the changes asked for in the user's L
 
 Types of Modifications:
 1.  **REMOVE an Item:**
-    - item_id: The exact UUID string of the item to remove as seen in the history (e.g., "8021af5d-9279-49a5-911c-0b4a02b05d57"). DO NOT use integer indices like 1 or 2.
-    - Example: `{"action": "REMOVE", "item_id": "8021af5d-9279-49a5-911c-0b4a02b05d57"}`
+    - item_id: The item's ID exactly as listed in the history (after "ID:"). Never its position in the outfit, never an invented ID.
+    - Example: `{"action": "REMOVE", "item_id": "<ID from the history>"}`
 
 2.  **REPLACE/CHANGE an Item:**
     - Action: "REPLACE"
-    - item_id: The exact UUID string of the item being replaced (e.g., "60708682-8f89-4bd5-9585-b1085bfc16ae").
+    - item_id: The ID of the item being replaced, exactly as listed in the history (after "ID:").
     - category: The category of the new item.
     - new_item: The description of the new item.
-    - Example: `{"action": "REPLACE", "item_id": "60708682-8f89-4bd5-9585-b1085bfc16ae", "category": "shoes", "new_item": {"tag": "red boots", "fit": "comfortable"}, "new_color_palette": "red", "new_pattern": "solid"}`
+    - Example: `{"action": "REPLACE", "item_id": "<ID from the history>", "category": "shoes", "new_item": {"tag": "red boots", "fit": "comfortable"}, "new_color_palette": "red", "new_pattern": "solid"}`
 
 3.  **ADD an Item:**
     - Action: "ADD"
@@ -689,7 +689,7 @@ def generate_outfit_plan(
 
             # ONLY inject the system note for the target message
             if is_target:
-                outfit_context = "\n\n[SYSTEM NOTE: The user was shown the following specific items with these IDs in this turn. Use these exact UUIDs for any 'item_id' in your refinement plan (REMOVE/REPLACE).]\n"
+                outfit_context = "\n\n[SYSTEM NOTE: The user was shown the following specific items with these IDs in this turn. Use these exact IDs for any 'item_id' in your refinement plan (REMOVE/REPLACE).]\n"
                 
                 # Filter outfit options based on focus_outfit_index
                 for i, outfit_opt in enumerate(msg["outfits"]):
