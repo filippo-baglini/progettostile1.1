@@ -800,7 +800,9 @@ def generate_outfit_plan(
             'status': 'READY_TO_GENERATE',
             'outfits': data.get('outfits'),
             'budget': data.get('max_budget'),
-            'hard_constraints': clean_constraints(data.get('hard_constraints')),
+            'hard_constraints': drop_preference_constraints(
+                clean_constraints(data.get('hard_constraints')), user_preferences,
+                [new_user_query] + [m.get('text') or '' for m in chat_history if m.get('role') == 'user']),
             'refinement_type': data.get('refinement_type') or 'NEW_OUTFIT',
             'modifications': data.get('modifications') or [],
             'results_message': data.get('results_message'),
@@ -818,6 +820,17 @@ def clean_constraints(constraints: dict | None) -> dict:
     allowed = constraint_item_schema.properties.keys()
     return {category: kept for category, fields in (constraints or {}).items() if isinstance(fields, dict)
             if (kept := {k: v for k, v in fields.items() if k in allowed and v})}
+
+
+def drop_preference_constraints(constraints: dict, user_preferences: dict | None, user_texts: list[str]) -> dict:
+    """Removes hard constraints the model copied from the saved preferences: they're SQL filters, so a favourite
+    brand would leave a slot a handful of products (3 Nike shoes of 300). Kept when the user wrote the word.
+    ponytail: matched on the word itself, so "cotone" written in Italian doesn't keep "cotton"; it stays a soft suggestion."""
+    said = ' '.join(user_texts).lower()
+    preferred = {value.strip().lower() for value in (user_preferences or {}).values() if isinstance(value, str)
+                 for value in value.split(',') if value.strip()}
+    return {category: kept for category, fields in constraints.items()
+            if (kept := {k: v for k, v in fields.items() if str(v).lower() not in preferred or str(v).lower() in said})}
 
 
 def drop_owned_categories(plan: dict) -> None:
@@ -881,6 +894,7 @@ def create_text_prompt(gender: str, new_user_query: str, user_preferences: dict 
                     gender_block +
                     "\n*** USER PREFERENCES (SOFT SUGGESTIONS) ***\n"
                     f"When selecting the outfit plan, keep the following user preferences in mind: {', '.join(preferences)}."
+                    " They are NEVER hard constraints: put a color, material or brand in 'hard_constraints' only if the user wrote it in the conversation."
                     "\n*** CRITICAL INSTRUCTION: STYLISH INTEGRATION ***\n"
                     "Treat all provided user preferences (color, material, brand) as strong suggestions to be **integrated tastefully** into the final ensemble, not as mandatory rules for every single item. Style and outfit cohesion are paramount."
                     "Specifically:\n"
