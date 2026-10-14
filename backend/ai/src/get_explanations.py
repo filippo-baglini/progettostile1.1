@@ -1,5 +1,3 @@
-import logging
-
 from google.genai import types
 
 from ai.src.model_fallback import generate_content_with_fallback
@@ -16,31 +14,16 @@ Explain briefly why this outfit fits what the user asked for.
 
 def explain_selected_outfit(user_prompt: str, retrieved_outfit) -> str:
     """A short explanation of why `retrieved_outfit` fits the conversation so far."""
-    try:
-        
-        user_request_block = (
-            "*** USER REQUEST ***\n"
-            f"{user_prompt}"
-            "\n**************************\n"
-        )
-                
-        retrieved_outfit_block = (
-            "*** OUTFIT RETRIEVED ***\n"
-            f"{retrieved_outfit}"
-            "\n**************************\n"
-        )
-
-        full_prompt = user_request_block + retrieved_outfit_block
-    
-        config = types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT
-        )
-        
-        response = generate_content_with_fallback(
-            contents=[full_prompt],
-            config=config
-        )
-        return response.text
-    except Exception:
-        logging.exception("Error generating outfit explanation")
-        return "Sorry, I couldn't generate an explanation at this time."
+    full_prompt = (
+        "*** USER REQUEST ***\n"
+        f"{user_prompt}"
+        "\n**************************\n"
+        "*** OUTFIT RETRIEVED ***\n"
+        f"{retrieved_outfit}"
+        "\n**************************\n"
+    )
+    response = generate_content_with_fallback(
+        contents=[full_prompt],
+        config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT)
+    )
+    return response.text

@@ -304,10 +304,11 @@ describe('ChatMessage', () => {
             />
         );
 
-        // First click to toggle visibility
-        fireEvent.click(screen.getByText('Why this outfit?'));
+        // Already generated (e.g. a reopened chat): the button says so, and shows it without asking again
+        fireEvent.click(screen.getByText('Show Explanation'));
 
         expect(screen.getByTestId('outfit-explanation')).toHaveTextContent('This looks great because...');
+        expect(mockOnExplainOutfit).not.toHaveBeenCalled();
     });
 
     it('displays total price and handles Shop All click', () => {

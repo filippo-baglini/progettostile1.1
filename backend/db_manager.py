@@ -318,7 +318,8 @@ class DBManager:
                                             'outfit', items,
                                             'cost', cost,
                                             'budget', budget, -- Retrieve stored budget
-                                            'explanation', NULL -- Explanation is currently per-message in DB, not per outfit
+                                            'explanation', (SELECT oe.explanation FROM outfit_explanations oe
+                                                            WHERE oe.ai_response_id = ar.id AND oe.outfit_index = grouped_outfits.outfit_index)
                                         ) ORDER BY outfit_index
                                     )
                                     FROM (
@@ -559,6 +560,20 @@ class DBManager:
             print(f"Errore Database: {e}")
             raise e
 
+
+    @staticmethod
+    def save_outfit_explanation(ai_response_id: int, outfit_index: int, explanation: str) -> None:
+        conn = DBManager.get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO outfit_explanations (ai_response_id, outfit_index, explanation) VALUES (%s, %s, %s)"
+                    " ON CONFLICT DO NOTHING",  # two clicks at once: the first one is kept
+                    (ai_response_id, outfit_index, explanation))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
     @staticmethod
     def conversation_belongs_to(user_id: int, conversation_id) -> bool:

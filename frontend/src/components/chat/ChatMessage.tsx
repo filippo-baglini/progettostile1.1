@@ -426,7 +426,7 @@ const ChatMessage = ({ message, onExplainOutfit, isLoadingExplanation, onRetry, 
                       : 'text-primary dark:text-primary-light border-primary/50 hover:bg-primary/10 dark:hover:bg-primary/20'
                     }
                   `}
-                  aria-label={showExplanation ? "Hide explanation" : "Explain this outfit"}
+                  aria-label={showExplanation ? "Hide explanation" : activeOutfit.explanation ? "Show explanation" : "Explain this outfit"}
                 >
                   {isLoadingExplanation && !activeOutfit.explanation ? (
                     <>
@@ -438,7 +438,7 @@ const ChatMessage = ({ message, onExplainOutfit, isLoadingExplanation, onRetry, 
                       </div>
                     </>
                   ) : (
-                    <span>{showExplanation ? 'Hide Explanation' : 'Why this outfit?'}</span>
+                    <span>{showExplanation ? 'Hide Explanation' : activeOutfit.explanation ? 'Show Explanation' : 'Why this outfit?'}</span>
                   )}
                 </Button>
 

@@ -504,14 +504,11 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
     logging.info(f"Successfully assembled {len(final_outfits_results)} outfits.")
     return final_response 
 
-def generate_explanation_only(user_prompt: str, outfit_data: List[Dict[str, Any]]) -> str:
-    """
-    Helper function to generate explanations on demand.
-    """
+def generate_explanation_only(user_prompt: str, outfit_data: List[Dict[str, Any]]) -> str | None:
+    """An explanation of the outfit, or None when the model call fails (logged; never sent to the client)."""
     logging.info("Generating outfit explanation (On-Demand)...")
     try:
-        explanations = explain_selected_outfit(user_prompt, outfit_data)
-        return explanations
-    except Exception as e:
-        logging.error(f"Error generating explanation: {e}")
-        return "Sorry, I couldn't generate an explanation at this time."
+        return explain_selected_outfit(user_prompt, outfit_data)
+    except Exception:
+        logging.exception("Error generating outfit explanation")
+        return None

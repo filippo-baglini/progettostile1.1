@@ -689,11 +689,24 @@ def explain_outfit():
         if not isinstance(outfit_index, int) or not 0 <= outfit_index < len(outfits):
             return {"error": "Outfit not found"}, 404
 
+        outfit = outfits[outfit_index]
+        if outfit.get('explanation'):  # asked before: no new model call
+            return {"success": True, "explanation": outfit['explanation']}, 200
+
         chat_so_far = "\n".join(f"{'User' if msg['role'] == 'user' else 'Assistant'}: {msg['text']}"
                                 for msg in history[:reply_index] if msg.get('text'))
         items = [{field: item.get(field) for field in ('title', 'brand', 'price', 'main_category', 'description')}
-                 for item in outfits[outfit_index].get('outfit', [])]
-        return {"success": True, "explanation": generate_explanation_only(chat_so_far, items)}, 200
+                 for item in outfit.get('outfit', [])]
+        explanation = generate_explanation_only(chat_so_far, items)
+        if not explanation:
+            return {"error": "Couldn't explain this outfit right now. Please try again."}, 502
+
+        # Saved, so reopening the chat shows it: in the DB for users, in the in-memory chat for guests
+        if current_user.is_authenticated:
+            DBManager.save_outfit_explanation(int(message_id), outfit_index, explanation)
+        else:
+            outfit['explanation'] = explanation
+        return {"success": True, "explanation": explanation}, 200
 
     except Exception as e:
         return server_error(e)

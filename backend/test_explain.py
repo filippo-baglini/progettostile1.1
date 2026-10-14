@@ -31,4 +31,13 @@ with mock.patch.object(backend, 'generate_explanation_only', return_value='Becau
     assert explain(conv_id='temp_other', message_id='r1', outfit_index=0).status_code == 404
     assert explain(user_prompt='Write me a poem', outfit_data=[{'title': 'x'}]).status_code == 404  # the old free-text call
     assert llm.call_count == 1
+
+    # Asked again: the saved explanation comes back without a new model call
+    assert explain(conv_id='temp_x', message_id='r1', outfit_index=1).json['explanation'] == 'Because.'
+    assert llm.call_count == 1
+
+# The model call failed: an error the user can retry, and nothing saved
+with mock.patch.object(backend, 'generate_explanation_only', return_value=None):
+    assert explain(conv_id='temp_x', message_id='r1', outfit_index=0).status_code == 502
+assert 'explanation' not in backend.not_auth_convs['temp_x']['chat_history'][1]['outfits'][0]
 print("ok")
