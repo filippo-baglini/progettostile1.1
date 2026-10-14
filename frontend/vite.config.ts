@@ -12,12 +12,5 @@ export default defineConfig({
     hmr: {
       overlay: true, // Show errors in overlay
     },
-    proxy: {
-      '/api': {
-        target: 'http://localhost:5000',
-        changeOrigin: true,
-        secure: false,
-      },
-    },
   },
 })

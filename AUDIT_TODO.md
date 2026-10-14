@@ -74,11 +74,11 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 - [x] **C3.** Image size caps differ: avatars 512 px, wardrobe 1024 px, chat photos none. *(fixed 2026-10-14: chat photos 1024 px like the wardrobe)*
 - [x] **C4.** Wardrobe pieces get the offensive-content check; avatars don't. *(fixed 2026-10-14: avatars before upload, and name/username when they change, through the same check as wardrobe pieces (`ai/src/moderation.py`). Names set at signup aren't checked yet: add it with the social features)*
 - [x] **C5.** Error messages and docstrings mix Italian and English. *(fixed 2026-10-14: all English in the backend and in the frontend's comments; the DB keeps the preference name `Genere`, which the frontend relies on)*
-- [ ] **C6.** Outdated docs:
+- [x] **C6.** Outdated docs:
   - [x] `frontend/.env.example` (Supabase and OpenAI options that aren't used) *(rewritten with the migration)*
-  - [ ] `frontend/.github/copilot-instructions.md` (says React 18, Router v6)
-  - [ ] `frontend/docs/StyleFinder_Frontend_Manual.tex` (mentions a missing `mockData.ts`)
-  - [ ] `frontend/.env.local.example` (duplicate of `.env.example`), the unused Vite `/api` proxy, the unused vitest `@` alias
+  - [x] `frontend/.github/copilot-instructions.md` (says React 18, Router v6) *(deleted 2026-10-14)*
+  - [x] `frontend/docs/StyleFinder_Frontend_Manual.tex` (mentions a missing `mockData.ts`) *(deleted 2026-10-14)*
+  - [x] `frontend/.env.local.example` (duplicate of `.env.example`), the unused Vite `/api` proxy, the unused vitest `@` alias *(deleted 2026-10-14)*
 - [ ] **C7.** The README says to run migrations in filename order, which runs `wardrobe_from_chat` before `wardrobe_outfits`, the opposite of what its own header says it needs.
 - [ ] **C8.** Deployment: the CORS origins are hardcoded to localhost and the app runs on Flask's development server. Use gunicorn with **1** worker (the progress store and the rate-limit counts live in process memory; guest chats moved to the DB), not `app.run(use_reloader=True)`, which loads CLIP twice.
 - [ ] **C9.** Leftover code: the unused `chat_history`/`history` passing, the "legacy single outfit" fallbacks, and `DEBUG` prints. Replace `print()` with `logging` (see S9).
