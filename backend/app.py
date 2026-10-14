@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from flask import Flask, request
 from flask_cors import CORS
 from flask_login import LoginManager, UserMixin, current_user, login_required
+from werkzeug.exceptions import HTTPException
 
 from auth import verify_token, display_name, delete_auth_user
 from db_manager import DBManager
@@ -28,6 +29,8 @@ app = Flask(__name__)
 if not os.getenv('SECRET_KEY'):
     raise RuntimeError("SECRET_KEY is missing from the environment / .env file.")
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
+# Uploads bigger than this get a 413 before they reach PIL
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
 
 # CORS configuration for frontend
 CORS(app, 
@@ -60,6 +63,8 @@ not_auth_convs = LRUCache(maxsize=200)
 
 def server_error(e):
     """Log the full error server-side; never send internal details to the client."""
+    if isinstance(e, HTTPException):  # e.g. 413 from MAX_CONTENT_LENGTH: keep its status, not a 500
+        return {"error": e.description}, e.code
     logging.exception(e)
     return {"error": "Internal server error"}, 500
 

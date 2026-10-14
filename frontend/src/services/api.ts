@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 // Logged-in requests are authenticated with a Supabase Auth token (see the request interceptor)
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api',
-  timeout: 60000, // 1 minute - AI outfit generation can take time
+  timeout: 300000, // 5 minutes: one message can need several Mistral calls (60 s each, with retries and fallback)
   headers: {
     'Content-Type': 'application/json',
   },
