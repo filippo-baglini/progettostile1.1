@@ -26,7 +26,8 @@ def format_results(outfit_list):
 
 def _run_optimized_knapsack_with_skip(
     processed_candidates: List[List[Dict]], 
-    max_budget_cents: int
+    max_budget_cents: int,
+    allow_skip: bool = True
 ) -> Tuple[List[Dict], int]:
     """
     Optimized DP for finding best outfit allowing category skips.
@@ -45,7 +46,7 @@ def _run_optimized_knapsack_with_skip(
         
         for current_cost, (current_similarity, current_path) in dp.items():
             # Option 1: Skip this category
-            if current_cost not in new_dp or new_dp[current_cost][0] < current_similarity:
+            if allow_skip and (current_cost not in new_dp or new_dp[current_cost][0] < current_similarity):
                 new_dp[current_cost] = (current_similarity, current_path + [None])
             
             # Option 2: Select an item from this category
@@ -139,12 +140,17 @@ def get_outfit(all_candidates: List[List[Dict]], budget: float|None) -> Tuple[Li
     max_budget_cents = int(round(budget * 100))
 
     # --- SCENARIO 1: BEST FEASIBLE (PARTIAL OR FULL) OUTFIT ---
-    # Items the user kept while refining are always in: they're paid for first, and the DP (which may skip
-    # slots) only spends what's left on the rest. Kept items over the budget give an over-budget outfit (B9).
+    # Items the user kept while refining are always in: they're paid for first, and the DP only spends what's
+    # left on the rest. A new outfit may skip a slot to fit the budget; while refining, every new slot is a
+    # piece the user asked for, so it's filled, with its cheapest candidate if nothing fits: over budget (B9).
     kept = [slot[0] for slot in processed_candidates if len(slot) == 1 and slot[0]['data'].get('locked')]
     kept_cost_cents = sum(item['price_in_cents'] for item in kept)
-    free_slots = [slot for slot in processed_candidates if not (len(slot) == 1 and slot[0]['data'].get('locked'))]
-    new_items, new_cost_cents = _run_optimized_knapsack_with_skip(free_slots, max(0, max_budget_cents - kept_cost_cents))
+    free_slots = [slot for slot in processed_candidates if slot and not (len(slot) == 1 and slot[0]['data'].get('locked'))]
+    left_cents = max(0, max_budget_cents - kept_cost_cents)
+    new_items, new_cost_cents = _run_optimized_knapsack_with_skip(free_slots, left_cents, allow_skip=not kept)
+    if kept and len(new_items) < len(free_slots):
+        cheapest = [min(slot, key=lambda x: x['price_in_cents']) for slot in free_slots]
+        new_items, new_cost_cents = [x['data'] for x in cheapest], sum(x['price_in_cents'] for x in cheapest)
     feasible_outfit = [item['data'] for item in kept] + new_items
     feasible_cost_cents = kept_cost_cents + new_cost_cents
 

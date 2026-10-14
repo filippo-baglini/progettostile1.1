@@ -230,7 +230,6 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
     logging.info(f"LLM is READY_TO_GENERATE. Global Budget: {budget}. Generating {len(outfits_list)} outfits.")
 
     final_outfits_results = []
-    budget_notes = []  # why an outfit is over budget, when the user's kept items caused it
 
     # --- SAFEGUARD: Enforce single outfit for refinement unless explicitly requested ---
     if refinement_type == 'REFINE_CURRENT' and len(outfits_list) > 1:
@@ -372,7 +371,8 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
                                 'items': [new_item_def], # The schema has 'items' list inside category
                                 'color_palette': mod.get('new_color_palette', ''),
                                 'pattern': mod.get('new_pattern', ''),
-                                'description': item_description(new_item_def.get('tag'), new_item_def.get('fit'), mod.get('new_color_palette'), mod.get('new_pattern'))
+                                'description': item_description(new_item_def.get('tag'), new_item_def.get('fit'), mod.get('new_color_palette'), mod.get('new_pattern')),
+                                'hard_constraints': (user_constraints or {}).get(category) or {},  # e.g. the brand the user named
                             }
                             
                             logging.info(f"Action {action}: Adding new search for {search_item['description']}")
@@ -473,10 +473,6 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
                  continue
             
             logging.info(f"Outfit {i+1} result: Cost={final_result_single.get('cost')}, Budget={current_outfit_budget}, Remaining={final_result_single.get('remaining_budget')}")
-            kept_cost = sum(slot[0].get('price') or 0 for slot in all_candidates if len(slot) == 1 and slot[0].get('locked'))
-            if current_outfit_budget and kept_cost > current_outfit_budget:
-                budget_notes.append(f"The items you kept cost €{kept_cost:.2f}, so this outfit is €{-final_result_single['remaining_budget']:.2f} "
-                                    f"over your €{current_outfit_budget:.2f} budget.")
             final_outfits_results.append(final_result_single)
 
             # Update Global Diversity Tracker
@@ -507,7 +503,7 @@ def outfit_recommendation_handler(user_prompt: str, chat_history: List[Dict[str,
 
     final_response = {
         'status': 'COMPLETED',
-        'message': ' '.join([response.get('results_message') or "Here are your outfit options.", *budget_notes]),
+        'message': response.get('results_message') or "Here are your outfit options.",
         'status_code': 200,
         'chat_history': response.get('history', chat_history),
         'conversation_title': response.get('conversation_title'),

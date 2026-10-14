@@ -339,7 +339,8 @@ describe('ChatMessage', () => {
 
         // Check total price (50 + 80 + 10 = 140)
         expect(screen.getByText('€140.00')).toBeInTheDocument();
-        expect(screen.getByText('−€40.00')).toBeInTheDocument();  // over budget
+        expect(screen.getByText('Over Budget')).toBeInTheDocument();  // what was kept and asked for doesn't fit
+        expect(screen.getByText('€40.00')).toBeInTheDocument();
         expect(screen.getByText('Estimated Total')).toBeInTheDocument();
 
         // Click Shop All

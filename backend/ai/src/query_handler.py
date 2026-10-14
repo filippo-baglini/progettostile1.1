@@ -187,7 +187,7 @@ outfit_schema = types.Schema(
             description="A message for non-fashion related inquiries. MUST ONLY be present for guardrail messages."
         ),
         # The search runs after this call, so both outcomes are worded up front in the user's language
-        "results_message": types.Schema(type=types.Type.STRING, description="One short sentence presenting the outfit options found, written in the same language as the user's messages."),
+        "results_message": types.Schema(type=types.Type.STRING, description="One short sentence presenting the outfit options found, written in the same language as the user's messages. Never say whether they fit the budget: prices are only known after the search."),
         "no_results_message": types.Schema(type=types.Type.STRING, description="One short sentence saying the catalog has nothing that suits the request and asking if they want to look for something else, written in the same language as the user's messages.")
     },
     required=["outfits", "max_budget", "refinement_type", "results_message", "no_results_message"]
@@ -216,7 +216,9 @@ _combined_properties['status'] = types.Schema(
     type=types.Type.STRING, enum=["AWAITING_INPUT", "READY_TO_GENERATE", "Guardrail"],
     description="'AWAITING_INPUT' to ask the user for missing information (fill only the question fields), "
                 "'READY_TO_GENERATE' when everything is known (fill the outfit plan fields in this same response).")
-response_schema = types.Schema(type=types.Type.OBJECT, properties=_combined_properties, required=["status"])
+# Mistral often skips optional fields, and the reply needs these two in the user's language (no strict mode: only a hint)
+response_schema = types.Schema(type=types.Type.OBJECT, properties=_combined_properties,
+                               required=["status", "results_message", "no_results_message"])
 
 # Appended to the latest user turn: the model follows rules there more reliably than in the system prompt
 PLAN_RULES = (
@@ -368,7 +370,7 @@ If the user asks to change, remove, or add items to the PREVIOUS OUTFIT, you mus
 **EXCEPTION**: If the user asks for **MULTIPLE OPTIONS** or **VARIATIONS** (e.g. "show me 3 versions", "give me choices", "3 types of shoes"), you MUST use `refinement_type: 'NEW_OUTFIT'` and generate distinct full outfit objects. DO NOT use `REFINE_CURRENT`.
 
 The 'outfits' field should be left EMPTY [] when using REFINE_CURRENT, because the backend will reconstruct the outfit based on your modifications.
-The 'modifications' list must contain ONLY the changes asked for in the user's LATEST message. Changes asked for in earlier messages are already part of the current outfit: never repeat them.
+The 'modifications' list must contain ONLY the changes asked for in the user's LATEST message. Changes asked for in earlier messages are already part of the current outfit: never repeat them on their own. If the latest message asks to change an item again, that is a new change: include it.
 
 Types of Modifications:
 1.  **REMOVE an Item:**
@@ -579,7 +581,7 @@ If the user asks to change, remove, or add items to the PREVIOUS OUTFIT, you mus
 **EXCEPTION**: If the user asks for **MULTIPLE OPTIONS** or **VARIATIONS** (e.g. "show me 3 versions", "give me choices", "3 types of shoes"), you MUST use `refinement_type: 'NEW_OUTFIT'` and generate distinct full outfit objects. DO NOT use `REFINE_CURRENT`.
 
 The 'outfits' field should be left EMPTY [] when using REFINE_CURRENT, because the backend will reconstruct the outfit based on your modifications.
-The 'modifications' list must contain ONLY the changes asked for in the user's LATEST message. Changes asked for in earlier messages are already part of the current outfit: never repeat them.
+The 'modifications' list must contain ONLY the changes asked for in the user's LATEST message. Changes asked for in earlier messages are already part of the current outfit: never repeat them on their own. If the latest message asks to change an item again, that is a new change: include it.
 
 Types of Modifications:
 1.  **REMOVE an Item:**

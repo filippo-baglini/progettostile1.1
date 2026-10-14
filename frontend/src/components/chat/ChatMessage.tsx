@@ -386,9 +386,11 @@ const ChatMessage = ({ message, onExplainOutfit, isLoadingExplanation, onRetry, 
                   </div>
                   {typeof activeOutfit.remainingBudget === 'number' && (
                     <div className="flex flex-col border-l border-gray-200 dark:border-gray-600 pl-6">
-                      <span className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider mb-0.5">Remaining Budget</span>
+                      <span className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider mb-0.5">
+                        {activeOutfit.remainingBudget >= 0 ? 'Remaining Budget' : 'Over Budget'}
+                      </span>
                       <span className={`text-xl font-bold ${activeOutfit.remainingBudget >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {activeOutfit.remainingBudget < 0 && '−'}€{Math.abs(activeOutfit.remainingBudget).toFixed(2)}
+                        €{Math.abs(activeOutfit.remainingBudget).toFixed(2)}
                       </span>
                     </div>
                   )}
