@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { StrictMode } from 'react';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import ChatPage from './ChatPage';
 import { ThemeProvider } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -293,5 +294,28 @@ describe('ChatPage', () => {
 
         fireEvent.click(screen.getByTestId('scroll-button'));
         expect(scrollToBottomMock).toHaveBeenCalled();
+    });
+
+    it('opens a new chat when arriving on /chat with a chat left over (header link to home)', () => {
+        const clearMessages = vi.fn();
+        (useChat as any).mockReturnValue({ ...defaultChatMessages, currentChatId: 'chat-1', clearMessages });
+        const Path = () => <div data-testid="path">{useLocation().pathname}</div>;
+
+        // StrictMode runs the mount effects twice, which used to redirect back to the old chat
+        render(
+            <StrictMode>
+                <ThemeProvider>
+                    <MemoryRouter initialEntries={['/chat']}>
+                        <Routes>
+                            <Route path="/chat" element={<><ChatPage /><Path /></>} />
+                            <Route path="/chat/:chatId" element={<Path />} />
+                        </Routes>
+                    </MemoryRouter>
+                </ThemeProvider>
+            </StrictMode>
+        );
+
+        expect(clearMessages).toHaveBeenCalled();
+        expect(screen.getByTestId('path')).toHaveTextContent(/^\/chat$/);
     });
 });

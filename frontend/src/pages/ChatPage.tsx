@@ -148,7 +148,11 @@ const ChatPage = () => {
   }, [loadChatHistory]);
 
   // Track the previous chatId from URL to detect actual navigation changes
-  const prevChatIdRef = useRef<string | undefined>(chatId);
+  // Seeded with the context's chat so mounting on bare /chat (e.g. via the header link
+  // to /) with a chat left over counts as leaving it, not as a new chat to redirect to
+  const prevChatIdRef = useRef<string | undefined>(chatId ?? currentChatId);
+  // Only a chat ID that just appeared means a new chat started (survives StrictMode's double effect run)
+  const prevCurrentChatIdRef = useRef<string | undefined>(currentChatId);
 
   // Track if we're in a guest session with an active conversation
   const guestSessionActiveRef = useRef(false);
@@ -157,6 +161,8 @@ const ChatPage = () => {
   useEffect(() => {
     const prevChatId = prevChatIdRef.current;
     prevChatIdRef.current = chatId;
+    const chatIdAppeared = currentChatId !== prevCurrentChatIdRef.current;
+    prevCurrentChatIdRef.current = currentChatId;
 
     // If there's a chatId in the URL and it's different from current
     if (chatId && chatId !== currentChatId) {
@@ -191,7 +197,7 @@ const ChatPage = () => {
       }
       // Case 2: We were already here (prevChatId was undefined), and currentChatId appeared (New Chat started)
       // Update URL to include the new chat ID
-      else if (isAuthenticated) {
+      else if (isAuthenticated && chatIdAppeared) {
         navigate(`/chat/${currentChatId}`, { replace: true });
       }
     }
