@@ -16,14 +16,14 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 - [x] **S3. CSRF on multipart endpoints.** `/api/messages/send` (form branch), `POST /api/wardrobe` and `/api/user/avatar` have no CSRF token and `SameSite` isn't set; Firefox and Safari send the cookie cross-site. Fix: `SESSION_COOKIE_SAMESITE='Lax'`. *(fixed by the Supabase Auth migration, 2026-10-14)*
 - [x] **S3b. Logout is a GET** (`app.py:265`), so any `<img>` tag on another page can log users out. Fix: make it POST. *(fixed by the Supabase Auth migration, 2026-10-14)*
 - [x] **S4. Sessions can't be revoked.** Flask's signed-cookie sessions stay valid after logout and after a password change; `SESSION_COOKIE_SECURE` isn't set for production. *(fixed by the Supabase Auth migration, 2026-10-14: logout and password changes revoke the session; an access token already issued stays valid until it expires, 1 hour by default)*
-- [ ] **S5. No rate or size limits on paid/heavy endpoints.**
+- [x] **S5. No rate or size limits on paid/heavy endpoints.**
   - [x] `/api/messages/send` and `/api/outfit/explain` have no rate limit; each call can trigger several Mistral calls plus CLIP inference, and guests can flood the 200-slot `not_auth_convs` cache. *(fixed 2026-10-14: per-IP limit, 10/min on send and 20/min on explain, `backend/rate_limit.py`. Guest access stays on by choice; the freemium quota is under "Before production")*
   - [x] `/explain` takes any `user_prompt` and `outfit_data`, so it works as an open LLM proxy. *(fixed 2026-10-14, see below)*
   - [x] Full fix for the above: the server looks the outfit and chat up by message id instead of trusting the client (needs B4 for guests). *(fixed 2026-10-14: `/explain` takes conv_id, message_id and outfit_index; `backend/test_explain.py`)*
   - [x] No `MAX_CONTENT_LENGTH`: uploads can be any size. *(fixed in d0e78b6: 10 MB cap, 413)*
   - [x] Pillow still decodes images up to ~179 MP (~0.5 GB RAM each): a small, highly compressed file can pass the 10 MB cap. *(fixed 2026-10-14: refused above 60 MP)*
   - [x] Chat photos are kept at full resolution (`app.py:664`, no `max_size`). *(fixed 2026-10-14: resized to 1024 px)*
-  - [ ] Guest chats hold their photos in RAM (200 conversations, no per-conversation image limit).
+  - [x] Guest chats hold their photos in RAM (200 conversations, no per-conversation image limit). *(fixed 2026-10-14: guest chats are stored in the DB and their photos in storage like users' ones, deleted after 24 h idle; migration `2026-10-14_guest_chats.sql`, `backend/test_guest_chats.py`)*
 - [ ] **S6. Vulnerable dependencies.** `npm audit`: axios (high), form-data (high), react-router / react-router-dom (high, partly SSR-only), follow-redirects (moderate). Fix: `npm audit fix`. Also pin versions in `backend/requirements.txt`.
 
 ### Low
@@ -43,7 +43,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 - [ ] **B5. Prompts call item IDs UUIDs** (`query_handler.py:375,380,586,591`), but real IDs are integers or `w12`. An invented UUID makes REMOVE or REPLACE silently do nothing (`ai/src/app.py:327`).
 - [ ] **B6. No gender defaults to "male"** (`query_handler.py:654`): the planner plans men's outfits while the catalogue search applies no gender filter.
 - [ ] **B7. Database errors are swallowed.** `get_chat_messages` returns `[]` on error (`db_manager.py:523`), so the AI answers without history. `update_user_preferences` returns False on any error, which the API reports as 404 "Utente non trovato".
-- [ ] **B8. Every message re-downloads and re-sends all past chat photos** (`app.py:854-895`): slow and expensive, and *likely* hits Mistral's per-request image limit.
+- [x] **B8. Every message re-downloads and re-sends all past chat photos** (`app.py:854-895`): slow and expensive, and *likely* hits Mistral's per-request image limit. *(fixed 2026-10-14: only the chat's last 3 photos are downloaded and sent; they are still re-downloaded on every message, cache them if that shows up as slow)*
 - [ ] **B9. Lowering the budget while refining can drop kept items:** the budget optimizer may skip any slot, including locked ones.
 - [ ] **B10. Small ones:**
   - [ ] A request with no `message` crashes with a 500 (`query_handler.py:731`, `ai/src/app.py:220`).
@@ -78,7 +78,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
   - [ ] `frontend/docs/StyleFinder_Frontend_Manual.tex` (mentions a missing `mockData.ts`)
   - [ ] `frontend/.env.local.example` (duplicate of `.env.example`), the unused Vite `/api` proxy, the unused vitest `@` alias
 - [ ] **C7.** The README says to run migrations in filename order, which runs `wardrobe_from_chat` before `wardrobe_outfits`, the opposite of what its own header says it needs.
-- [ ] **C8.** Deployment: the CORS origins are hardcoded to localhost and the app runs on Flask's development server. Use gunicorn with **1** worker (the progress store and guest chats live in process memory), not `app.run(use_reloader=True)`, which loads CLIP twice.
+- [ ] **C8.** Deployment: the CORS origins are hardcoded to localhost and the app runs on Flask's development server. Use gunicorn with **1** worker (the progress store and the rate-limit counts live in process memory; guest chats moved to the DB), not `app.run(use_reloader=True)`, which loads CLIP twice.
 - [ ] **C9.** Leftover code: the unused `chat_history`/`history` passing, the "legacy single outfit" fallbacks, and `DEBUG` prints. Replace `print()` with `logging` (see S9).
 - [ ] **C10.** ESLint: 44 errors and 8 warnings (mostly `no-explicit-any` and unused variables).
 - [ ] **C11.** Remove `pandas`: it does one group-by in `outfit_retrieval_logic.py`, which a dict can do.
@@ -93,6 +93,7 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 ## Before production
 
 - [ ] Freemium quota: a few outfit generations a day for guests and free users, many more (or unlimited) for paid ones. Count per user and day in the DB; guests can only be counted per IP or browser, so keep their allowance small. Separate from the per-IP rate limit, which stays for everyone.
+- [ ] Several server workers: move the rate-limit counts to Redis (Flask-Limiter supports it); the progress store too (only the "putting your outfit together" text depends on it).
 - [ ] Behind a reverse proxy, add werkzeug's `ProxyFix`, or the rate limit sees every request as coming from the proxy.
 
 - [ ] Supabase: custom SMTP with the production domain (see S2b)

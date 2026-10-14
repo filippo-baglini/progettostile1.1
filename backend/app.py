@@ -1,6 +1,6 @@
-import base64
 import logging
 import re
+import time
 import uuid
 from urllib.parse import urlparse
 
@@ -21,7 +21,6 @@ from ai.src.query_handler import SINGLE_ITEM_CATEGORIES
 from ai.src import progress
 from storage_manager import upload_image, compress_image, download_image, get_image_url, delete_images
 import psycopg2.errors
-from cachetools import LRUCache
 from rate_limit import rate_limit
 
 app = Flask(__name__)
@@ -59,7 +58,41 @@ def unauthorized():
 
 # ponytail: in-memory guest chats (with image bytes), capped so guests can't grow it forever;
 # oldest conversations are evicted first and everything is lost on restart.
-not_auth_convs = LRUCache(maxsize=200)
+# Guest chats are deleted after this long without a message, with their photos
+GUEST_CHAT_IDLE_HOURS = 24
+_last_guest_cleanup = 0.0
+
+
+def cleanup_guest_chats():
+    """Deletes idle guest chats. Called from guest requests and runs at most hourly: no guests, nothing to clean.
+    ponytail: per process, so each worker runs it; harmless (idempotent). Move to a scheduled job if it ever slows a request."""
+    global _last_guest_cleanup
+    if time.monotonic() - _last_guest_cleanup < 3600:
+        return
+    _last_guest_cleanup = time.monotonic()
+    try:
+        image_ids = DBManager.delete_idle_guest_conversations(GUEST_CHAT_IDLE_HOURS)
+        if image_ids:
+            delete_images(image_ids)
+    except Exception:
+        logging.exception("Guest chat cleanup failed")  # retried in an hour; the request goes on
+
+
+def find_conversation(conv_id):
+    """(DB id, guest gender) of the chat conv_id names, if the caller owns it; else None.
+    Users name their chats by DB id, guests by temp_<guest_token>, which only their browser knows."""
+    if current_user.is_authenticated:
+        try:
+            db_id = int(conv_id)
+        except (TypeError, ValueError):
+            return None
+        return (db_id, None) if DBManager.conversation_belongs_to(int(current_user.get_id()), db_id) else None
+    token = str(conv_id or '').removeprefix('temp_')
+    try:
+        uuid.UUID(token)
+    except ValueError:
+        return None
+    return DBManager.guest_conversation(token)
 
 
 
@@ -506,15 +539,8 @@ def send_message():
         image_url = None
         if image:
             image_id = str(uuid.uuid4())
-            if is_authenticated:
-                image_url = upload_image(image_id, image)
-            else:
-                # Per utenti non autenticati, creiamo un URL base64 temporaneo
-                image_url = f"data:image/jpeg;base64,{base64.b64encode(image).decode('utf-8')}"
-
-        image_data = None
-        if image_id:
-            image_data = (image_id, image)
+            image_url = upload_image(image_id, image)
+        image_data = (image_id, image) if image_id else None
 
         # Wardrobe pieces the user picked (only their own) and the "only my clothes" toggle: logged-in users only
         picked_items = []
@@ -526,79 +552,48 @@ def send_message():
         only_wardrobe = is_authenticated and only_wardrobe
         picked_ids = [piece['id'] for piece in picked_items]  # saved with this message
 
-        # === UTENTE NON AUTENTICATO ===
-        if not is_authenticated:
-            if not conv_id:
-                # Prima chat: genera un ID temporaneo
-                conv_id = f"temp_{uuid.uuid4()}"
-                chat_history = []
-                past_images = {}
-                
-                output = outfit_recommendation_handler(msg_text, chat_history, user_id, image_data=image_data, past_images=past_images, selected_outfit_index=selected_outfit_index, guest_gender=guest_gender)
-                
-                conv_title = chat_title(output, msg_text)
-                
-                # Salva in memoria (non nel DB)
-                not_auth_convs[conv_id] = {
-                    'chat_history': chat_history,
-                    'past_images': past_images,
-                    'title': conv_title,
-                    'gender': guest_gender  # Save gender for the conversation
-                }
-            else:
-                # Conversazione esistente in memoria
-                conv_title = None
-                if conv_id not in not_auth_convs:
-                    return {"error": "Conversation not found"}, 404
-                
-                conv_data = not_auth_convs[conv_id]
-                chat_history = conv_data['chat_history']
-                past_images = conv_data['past_images']
-                # Use saved gender from conversation if not provided in request
-                saved_gender = conv_data.get('gender') or guest_gender
-                
-                output = outfit_recommendation_handler(msg_text, chat_history, user_id, image_data=image_data, past_images=past_images, selected_outfit_index=selected_outfit_index, selected_message_id=selected_message_id, guest_gender=saved_gender)
-            
-            # Aggiorna la history in memoria
-            if image_id and image:
-                past_images[image_id] = image
-
-        # === UTENTE AUTENTICATO ===
+        if is_authenticated:
+            guest_gender = None  # the planner uses the user's own
         else:
-            if not conv_id:
-                # First chat: Call AI first to get title and response
-                chat_history = []
-                past_images = {}
-                
-                output = outfit_recommendation_handler(msg_text, chat_history, user_id, image_data=image_data, past_images=past_images, selected_outfit_index=selected_outfit_index, picked_items=picked_items, only_wardrobe=only_wardrobe)
-                
-                conv_title = chat_title(output, msg_text)
+            cleanup_guest_chats()
 
-                conv_id = DBManager.create_conversation_with_message(user_id, conv_title, msg_text, image_id=image_id, wardrobe_item_ids=picked_ids)
-                if conv_id is None:
-                    return {"error": "Error while creating a new conversation"}, 500
+        if not conv_id:
+            # First message: the AI answers first, so a failure leaves no empty conversation behind
+            chat_history = []
+            past_images = {}
+            output = outfit_recommendation_handler(msg_text, chat_history, user_id, image_data=image_data, past_images=past_images, selected_outfit_index=selected_outfit_index, guest_gender=guest_gender, picked_items=picked_items, only_wardrobe=only_wardrobe)
 
-            else:
-                conv_title = None
-                if not DBManager.conversation_belongs_to(user_id, conv_id):
-                    return {"error": "Conversation not found"}, 404
+            conv_title = chat_title(output, msg_text)
+            guest_token = None if is_authenticated else str(uuid.uuid4())
+            db_conv_id = DBManager.create_conversation_with_message(user_id, conv_title, msg_text, image_id=image_id, wardrobe_item_ids=picked_ids,
+                                                                    guest_token=guest_token, guest_gender=guest_gender)
+            if db_conv_id is None:
+                return {"error": "Error while creating a new conversation"}, 500
+            conv_id = db_conv_id if is_authenticated else f"temp_{guest_token}"
 
-                chat_history, past_images = load_messages(conv_id, user_id)
+        else:
+            conv_title = None
+            owned = find_conversation(conv_id)
+            if not owned:
+                return {"error": "Conversation not found"}, 404
+            db_conv_id, saved_gender = owned
 
-                # Pieces picked before the AI's follow-up questions still count until it builds an outfit
-                if not picked_items:
-                    for msg in reversed(chat_history):
-                        if msg.get('outfits'):
-                            break
-                        if msg.get('wardrobe_item_ids'):
-                            picked_items = load_picked_items(user_id, msg['wardrobe_item_ids'])
-                            break
+            chat_history, past_images = load_messages(db_conv_id, user_id)
 
-                output = outfit_recommendation_handler(msg_text, chat_history, user_id, image_data=image_data, past_images=past_images, selected_outfit_index=selected_outfit_index, selected_message_id=selected_message_id, picked_items=picked_items, only_wardrobe=only_wardrobe)
+            # Pieces picked before the AI's follow-up questions still count until it builds an outfit
+            if is_authenticated and not picked_items:
+                for msg in reversed(chat_history):
+                    if msg.get('outfits'):
+                        break
+                    if msg.get('wardrobe_item_ids'):
+                        picked_items = load_picked_items(user_id, msg['wardrobe_item_ids'])
+                        break
 
-                # Saved only after the AI call: a failure no longer leaves a prompt without a reply
-                if not DBManager.add_message_to_conversation(conv_id, msg_text, image_id=image_id, wardrobe_item_ids=picked_ids):
-                    return {"error": "Unable to save the message"}, 500
+            output = outfit_recommendation_handler(msg_text, chat_history, user_id, image_data=image_data, past_images=past_images, selected_outfit_index=selected_outfit_index, selected_message_id=selected_message_id, guest_gender=saved_gender or guest_gender, picked_items=picked_items, only_wardrobe=only_wardrobe)
+
+            # Saved only after the AI call: a failure no longer leaves a prompt without a reply
+            if not DBManager.add_message_to_conversation(db_conv_id, msg_text, image_id=image_id, wardrobe_item_ids=picked_ids):
+                return {"error": "Unable to save the message"}, 500
 
         status = output.get('status')
         if not status:
@@ -607,30 +602,15 @@ def send_message():
         # A piece the user owns in this message's photo: the reply offers to add it to their wardrobe
         wardrobe_suggestion = output.get('owned_piece') if is_authenticated and image_id else None
 
-        new_ai_response_id = None
         if status == "COMPLETED" or status == "READY_TO_GENERATE":
             text = output.get("message")
-            if is_authenticated:
-                new_ai_response_id = DBManager.add_ai_response(conv_id, output, wardrobe_suggestion)
+            new_ai_response_id = DBManager.add_ai_response(db_conv_id, output, wardrobe_suggestion)
         else:
             # AWAITING_INPUT, Guardrail and Error: every saved prompt gets a saved reply
             text = output.get("prompt_to_user", output.get("message"))
-            if is_authenticated:
-                new_ai_response_id = DBManager.add_simple_ai_response(
-                    conv_id, text, status, output.get("budget_options"), output.get("outfit_generation_options"),
-                    wardrobe_suggestion)
-        if not is_authenticated:
-            # Guest replies live only in memory; the id lets refinements and explanations find them
-            new_ai_response_id = str(uuid.uuid4())
-
-        # Update chat history
-        chat_history.append({'role': 'user', 'text': msg_text, 'image_id': image_id})
-        
-        ai_msg = {'role': 'model', 'text': text, 'outfits': output.get('outfits', []), 'outfit_plan': output.get('outfit_plan')}
-        if new_ai_response_id:
-            ai_msg['message_id'] = new_ai_response_id
-            
-        chat_history.append(ai_msg)
+            new_ai_response_id = DBManager.add_simple_ai_response(
+                db_conv_id, text, status, output.get("budget_options"), output.get("outfit_generation_options"),
+                wardrobe_suggestion)
 
         response = {
             "status" : status,
@@ -668,20 +648,11 @@ def explain_outfit():
         data = request.get_json() or {}
         conv_id, message_id, outfit_index = data.get('conv_id'), data.get('message_id'), data.get('outfit_index', 0)
 
-        if current_user.is_authenticated:
-            user_id = int(current_user.get_id())
-            try:
-                conv_id = int(conv_id)
-            except (TypeError, ValueError):
-                return {"error": "Conversation not found"}, 404
-            if not DBManager.conversation_belongs_to(user_id, conv_id):
-                return {"error": "Conversation not found"}, 404
-            history = DBManager.get_chat_messages(user_id, conv_id)
-        else:
-            conv = not_auth_convs.get(str(conv_id))  # temp_<uuid>: only the guest who started it knows it
-            if not conv:
-                return {"error": "Conversation not found"}, 404
-            history = conv['chat_history']
+        owned = find_conversation(conv_id)
+        if not owned:
+            return {"error": "Conversation not found"}, 404
+        user_id = int(current_user.get_id()) if current_user.is_authenticated else None
+        history = DBManager.get_chat_messages(user_id, owned[0])
 
         reply_index = next((i for i, msg in enumerate(history)
                             if msg.get('role') == 'model' and str(msg.get('message_id')) == str(message_id)), None)
@@ -701,11 +672,8 @@ def explain_outfit():
         if not explanation:
             return {"error": "Couldn't explain this outfit right now. Please try again."}, 502
 
-        # Saved, so reopening the chat shows it: in the DB for users, in the in-memory chat for guests
-        if current_user.is_authenticated:
-            DBManager.save_outfit_explanation(int(message_id), outfit_index, explanation)
-        else:
-            outfit['explanation'] = explanation
+        # Saved, so reopening the chat shows it
+        DBManager.save_outfit_explanation(int(message_id), outfit_index, explanation)
         return {"success": True, "explanation": explanation}, 200
 
     except Exception as e:
@@ -720,8 +688,17 @@ def load_picked_items(user_id, item_ids):
     return pieces
 
 
+# Only the chat's latest photos go back to the AI with each message: the rest would make every request
+# slower and costlier (and hit the model's image limit), and users refer to their latest photos
+PAST_PHOTOS_SENT = 3
+
+
 def load_messages(conv_id, user_id):
+    """The chat as the outfit planner reads it, and the bytes of its last PAST_PHOTOS_SENT photos.
+    user_id None: a guest chat the caller has checked."""
     messages = DBManager.get_chat_messages(user_id, conv_id)
+    with_photo = [m for m in messages if m.get("role") == "user" and m.get("image_id")]
+    recent_photos = {id(m) for m in with_photo[-PAST_PHOTOS_SENT:]}
 
     chat_history = []
     past_images = dict()
@@ -744,7 +721,7 @@ def load_messages(conv_id, user_id):
 
         raw_url = message.get("image_id")
 
-        if message.get("role") == "user" and raw_url:
+        if id(message) in recent_photos:
             try:
                 parsed_path = urlparse(raw_url).path
                 filename = os.path.basename(parsed_path)

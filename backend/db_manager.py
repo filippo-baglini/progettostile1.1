@@ -3,7 +3,6 @@ import psycopg2
 from dotenv import load_dotenv
 from flask import g
 from psycopg2 import extras
-from flask_login import current_user
 from psycopg2.extras import RealDictCursor
 
 from storage_manager import delete_images, get_image_url
@@ -300,7 +299,7 @@ class DBManager:
                              WHERE wi.id = ANY(p.wardrobe_item_ids) AND wi.user_id = c.user_id) AS wardrobe_items
                         FROM prompts p
                                  JOIN conversations c ON p.conversation_id = c.id
-                        WHERE p.conversation_id = %s AND c.user_id = %s
+                        WHERE p.conversation_id = %s AND c.user_id IS NOT DISTINCT FROM %s
 
                         UNION ALL
 
@@ -370,7 +369,7 @@ class DBManager:
                             NULL::json AS wardrobe_items
                         FROM ai_responses ar
                                  JOIN conversations c ON ar.conversation_id = c.id
-                        WHERE ar.conversation_id = %s AND c.user_id = %s
+                        WHERE ar.conversation_id = %s AND c.user_id IS NOT DISTINCT FROM %s
                     )
 
                     -- 3. ORDINAMENTO FINALE
@@ -412,9 +411,10 @@ class DBManager:
             return []
 
     @staticmethod
-    def create_conversation_with_message(user_id: int, title: str, message_text: str, image_id = None, wardrobe_item_ids=None):
+    def create_conversation_with_message(user_id: int | None, title: str, message_text: str, image_id = None, wardrobe_item_ids=None,
+                                         guest_token: str | None = None, guest_gender: str | None = None):
         """
-        Crea una nuova conversazione per un utente e inserisce il primo messaggio.
+        Crea una nuova conversazione (di un utente, o di un ospite con guest_token) e inserisce il primo messaggio.
 
         Ritorna l'id della conversazione creata.
         """
@@ -424,8 +424,8 @@ class DBManager:
             cursor = conn.cursor()
 
             cursor.execute(
-                "INSERT INTO conversations (user_id, title) VALUES (%s, %s) RETURNING id",
-                (user_id, title)
+                "INSERT INTO conversations (user_id, title, guest_token, guest_gender) VALUES (%s, %s, %s, %s) RETURNING id",
+                (user_id, title, guest_token, guest_gender)
             )
             conversation_id = cursor.fetchone()[0]
 
@@ -576,6 +576,37 @@ class DBManager:
             raise
 
     @staticmethod
+    def guest_conversation(guest_token: str):
+        """(conversation id, guest gender) of a guest's chat, or None."""
+        conn = DBManager.get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT id, guest_gender FROM conversations WHERE guest_token = %s", (guest_token,))
+            return cursor.fetchone()
+
+    @staticmethod
+    def delete_idle_guest_conversations(idle_hours: int) -> list[str]:
+        """Deletes guest chats with no message for idle_hours. Returns their photos' ids, to delete from storage."""
+        conn = DBManager.get_db_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """WITH idle AS (
+                           SELECT c.id FROM conversations c
+                           WHERE c.guest_token IS NOT NULL
+                             AND COALESCE((SELECT MAX(p.created_at) FROM prompts p WHERE p.conversation_id = c.id), c.created_at)
+                                 < now() - make_interval(hours => %s)),
+                       photos AS (SELECT p.image_id FROM prompts p JOIN idle ON p.conversation_id = idle.id WHERE p.image_id IS NOT NULL),
+                       gone AS (DELETE FROM conversations WHERE id IN (SELECT id FROM idle))
+                       SELECT image_id FROM photos""",
+                    (idle_hours,))
+                image_ids = [row[0] for row in cursor.fetchall()]
+            conn.commit()
+            return image_ids
+        except Exception:
+            conn.rollback()
+            raise
+
+    @staticmethod
     def conversation_belongs_to(user_id: int, conversation_id) -> bool:
         conn = DBManager.get_db_connection()
         with conn.cursor() as cursor:
@@ -584,31 +615,13 @@ class DBManager:
 
     @staticmethod
     def add_message_to_conversation(conversation_id: int, text: str, image_id=None, wardrobe_item_ids=None):
-        """
-        Aggiunge un messaggio a una conversazione esistente, ma solo se
-        la conversazione appartiene all'utente corrente.
-
-        Ritorna True se l'operazione ha successo, False altrimenti (o se non autorizzato).
-        """
+        """Aggiunge un messaggio a una conversazione: il chiamante ha già verificato che sia del richiedente.
+        Ritorna True se l'operazione ha successo, False altrimenti."""
         conn = None
         try:
             conn = DBManager.get_db_connection()
             cursor = conn.cursor()
 
-            # Cerchiamo se esiste una conversazione con questo ID E questo user_id
-            cursor.execute(
-                "SELECT id FROM conversations WHERE id = %s AND user_id = %s",
-                (conversation_id, current_user.id)
-            )
-
-            # Se l utente vuole mandare un messaggio in una conversazione inesistente o non sua --> errore
-            if cursor.fetchone() is None:
-                print(f"Tentativo non autorizzato: L'utente {current_user.id} ha provato a scrivere nella chat {conversation_id}")
-                # Non facciamo rollback perché non abbiamo scritto nulla, chiudiamo solo.
-                cursor.close()
-                return False
-
-            # Altrimenti tutto bene!!
             cursor.execute(
                 "INSERT INTO prompts (conversation_id, prompt, image_id, wardrobe_item_ids) VALUES (%s, %s, %s, %s)",
                 (conversation_id, text, image_id, wardrobe_item_ids or None)
