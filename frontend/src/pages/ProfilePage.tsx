@@ -32,13 +32,14 @@ const ProfilePage = () => {
     const [username, setUsername] = useState(user?.username || '');
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
-    // Update local state when user data loads
+    // Fill the form when the user loads; not on later updates (e.g. a new avatar), which would wipe unsaved edits
     useEffect(() => {
         if (user) {
             setName(user.name);
             setUsername(user.username);
         }
-    }, [user]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user?.id]);
 
     const handleAvatarChange = async (file: File) => {
         setIsUploadingAvatar(true);

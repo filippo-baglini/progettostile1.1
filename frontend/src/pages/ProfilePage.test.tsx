@@ -232,6 +232,21 @@ describe('ProfilePage', () => {
         });
     });
 
+    it('keeps unsaved edits when the user changes for another reason (e.g. a new avatar)', () => {
+        const { rerender } = renderWithAuth(<ProfilePage />);
+        fireEvent.change(screen.getByDisplayValue('test-1'), { target: { value: 'mario' } });
+
+        (useAuth as any).mockReturnValue({
+            user: { ...mockUser, avatarUrl: 'https://x/a.jpg' },
+            isLoading: false,
+            updateUser: mockUpdateUser,
+            logout: mockLogout,
+        });
+        rerender(<BrowserRouter><ProfilePage /></BrowserRouter>);
+
+        expect(screen.getByDisplayValue('mario')).toBeInTheDocument();
+    });
+
     it('logs out', async () => {
         renderWithAuth(<ProfilePage />);
 
