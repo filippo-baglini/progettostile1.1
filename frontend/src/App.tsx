@@ -21,17 +21,17 @@ const HowToUsePage = lazy(() => import('./pages/HowToUsePage'));
 // Loading Fallback
 const LoadingFallback = () => (
   <div className="flex items-center justify-center w-full h-full min-h-[50vh]">
-    <Loader2 className="w-8 h-8 text-primary animate-spin" />
+    <Loader2 className="w-7 h-7 text-accent animate-spin" />
   </div>
 );
 
 // Wrapper for page transitions
 const PageTransition = ({ children }: { children: React.ReactNode }) => (
   <motion.div
-    initial={{ opacity: 0, y: 10 }}
-    animate={{ opacity: 1, y: 0 }}
-    exit={{ opacity: 0, y: -10 }}
-    transition={{ duration: 0.3, ease: "easeOut" }}
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    transition={{ duration: 0.18, ease: "easeOut" }}
     className="w-full h-full"
   >
     <Suspense fallback={<LoadingFallback />}>
@@ -96,10 +96,10 @@ function App() {
         <AuthProvider>
           <BrowserRouter>
             <Toaster
-              position="top-right"
+              position="bottom-center"
               reverseOrder={false}
               containerStyle={{
-                top: 80, // Avoid overlap with header
+                bottom: 120, // above the chat composer, clear of the sticky bars
               }}
             />
             <AnimatedRoutes />

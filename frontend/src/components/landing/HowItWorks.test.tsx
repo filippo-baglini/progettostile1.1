@@ -3,34 +3,13 @@ import { render, screen } from '../../utils/test-utils';
 import HowItWorks from './HowItWorks';
 
 describe('HowItWorks', () => {
-    it('renders section heading', () => {
+    it('renders the three steps in order', () => {
         render(<HowItWorks />);
-
-        expect(screen.getByText('How It Works')).toBeInTheDocument();
-        expect(screen.getByText('Three Steps')).toBeInTheDocument();
-    });
-
-    it('renders all three steps', () => {
-        render(<HowItWorks />);
-
-        expect(screen.getByText('Describe')).toBeInTheDocument();
-        expect(screen.getByText('Discover')).toBeInTheDocument();
-        expect(screen.getByText('Shop')).toBeInTheDocument();
-    });
-
-    it('renders step numbers', () => {
-        render(<HowItWorks />);
-
-        expect(screen.getByText('01')).toBeInTheDocument();
-        expect(screen.getByText('02')).toBeInTheDocument();
-        expect(screen.getByText('03')).toBeInTheDocument();
-    });
-
-    it('renders step descriptions', () => {
-        render(<HowItWorks />);
-
-        expect(screen.getByText(/Tell the AI about your event/)).toBeInTheDocument();
-        expect(screen.getByText(/Review curated outfits/)).toBeInTheDocument();
-        expect(screen.getByText(/Select your favorite pieces/)).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'How it works' })).toBeInTheDocument();
+        const steps = screen.getAllByRole('listitem');
+        expect(steps).toHaveLength(3);
+        expect(steps[0]).toHaveTextContent('1You describe');
+        expect(steps[1]).toHaveTextContent('2The stylist asks');
+        expect(steps[2]).toHaveTextContent('3You get the looks');
     });
 });

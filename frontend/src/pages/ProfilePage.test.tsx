@@ -5,9 +5,15 @@ import { BrowserRouter } from 'react-router-dom';
 import ProfilePage from './ProfilePage';
 import { authService } from '../services/authService';
 import { showToast } from '../utils/toast';
-import { PASSWORD_HINT } from '../utils/password';
+import { t } from '../i18n';
+
+const PASSWORD_HINT = t().auth.passwordHint;
 
 // Mock framer-motion
+vi.mock('../context/ThemeContext', () => ({
+    useTheme: () => ({ theme: 'dark', setTheme: vi.fn(), toggleTheme: vi.fn() }),
+}));
+
 vi.mock('framer-motion', () => ({
     motion: {
         div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
@@ -142,6 +148,8 @@ vi.mock('../context/AuthContext', () => ({
 
 import { useAuth } from '../context/AuthContext';
 
+const openAccount = () => fireEvent.click(screen.getByRole('tab', { name: 'Account' }));
+
 describe('ProfilePage', () => {
     const mockUpdateUser = vi.fn();
     const mockLogout = vi.fn();
@@ -181,16 +189,23 @@ describe('ProfilePage', () => {
     it('renders user profile', () => {
         renderWithAuth(<ProfilePage />);
 
-        expect(screen.getByText('Profile Settings')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 1, name: 'Test User' })).toBeInTheDocument();
+        // The wardrobe comes first
+        expect(screen.getByRole('tab', { name: 'Wardrobe' })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByTestId('wardrobe-section')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Style' }));
+        expect(screen.getByTestId('preferences-section')).toBeInTheDocument();
+
+        openAccount();
         expect(screen.getByDisplayValue('Test User')).toBeInTheDocument();
         expect(screen.getByDisplayValue('test@example.com')).toBeInTheDocument();
         expect(screen.getByDisplayValue('test-1')).toBeInTheDocument();
-        expect(screen.getByTestId('preferences-section')).toBeInTheDocument();
-        expect(screen.getByTestId('wardrobe-section')).toBeInTheDocument();
     });
 
     it('updates username', async () => {
         renderWithAuth(<ProfilePage />);
+        openAccount();
 
         fireEvent.change(screen.getByDisplayValue('test-1'), { target: { value: 'Mario.Rossi' } });
         fireEvent.click(screen.getByText('Update Profile').closest('button')!);
@@ -205,6 +220,7 @@ describe('ProfilePage', () => {
             Object.assign(new Error('409'), { isAxiosError: true, response: { data: { error: 'Username already taken' } } })
         );
         renderWithAuth(<ProfilePage />);
+        openAccount();
 
         fireEvent.change(screen.getByDisplayValue('test-1'), { target: { value: 'taken' } });
         fireEvent.click(screen.getByText('Update Profile').closest('button')!);
@@ -218,6 +234,7 @@ describe('ProfilePage', () => {
         const updated = { ...mockUser, avatarUrl: 'https://x/a.jpg' };
         (authService.uploadAvatar as any).mockResolvedValue(updated);
         renderWithAuth(<ProfilePage />);
+        openAccount();
 
         const camera = screen.getByText('Take photo').querySelector('input')!;
         expect(camera).toHaveAttribute('capture', 'user');
@@ -234,6 +251,7 @@ describe('ProfilePage', () => {
 
     it('keeps unsaved edits when the user changes for another reason (e.g. a new avatar)', () => {
         const { rerender } = renderWithAuth(<ProfilePage />);
+        openAccount();
         fireEvent.change(screen.getByDisplayValue('test-1'), { target: { value: 'mario' } });
 
         (useAuth as any).mockReturnValue({
@@ -250,13 +268,14 @@ describe('ProfilePage', () => {
     it('logs out', async () => {
         renderWithAuth(<ProfilePage />);
 
-        fireEvent.click(screen.getByText('Log out'));
+        fireEvent.click(screen.getByRole('button', { name: 'Log out' }));
 
         await waitFor(() => expect(mockLogout).toHaveBeenCalled());
     });
 
     it('updates profile name', async () => {
         renderWithAuth(<ProfilePage />);
+        openAccount();
 
         const nameInput = screen.getByDisplayValue('Test User');
         fireEvent.change(nameInput, { target: { value: 'New Name' } });
@@ -274,6 +293,7 @@ describe('ProfilePage', () => {
         (authService.updateProfile as any).mockRejectedValue(new Error('Failed'));
 
         renderWithAuth(<ProfilePage />);
+        openAccount();
 
         const nameInput = screen.getByDisplayValue('Test User');
         fireEvent.change(nameInput, { target: { value: 'New Name' } });
@@ -288,6 +308,7 @@ describe('ProfilePage', () => {
 
     it('validates password change', async () => {
         renderWithAuth(<ProfilePage />);
+        openAccount();
 
         const currentPassInput = screen.getByPlaceholderText('Enter current password');
         const newPassInput = screen.getByPlaceholderText('Min. 8 characters');
@@ -306,6 +327,7 @@ describe('ProfilePage', () => {
 
     it('changes password successfully', async () => {
         renderWithAuth(<ProfilePage />);
+        openAccount();
 
         const currentPassInput = screen.getByPlaceholderText('Enter current password');
         const newPassInput = screen.getByPlaceholderText('Min. 8 characters');
@@ -336,6 +358,7 @@ describe('ProfilePage', () => {
 
     it('explains a new password that breaks the rule', () => {
         renderWithAuth(<ProfilePage />);
+        openAccount();
         submitPasswords('oldpass', 'newpass1');
 
         expect(showToast.error).toHaveBeenCalledWith(PASSWORD_HINT);
@@ -345,6 +368,7 @@ describe('ProfilePage', () => {
     it('shows why the password change failed', async () => {
         vi.mocked(authService.changePassword).mockRejectedValue(new Error('Current password is not correct'));
         renderWithAuth(<ProfilePage />);
+        openAccount();
         submitPasswords('wrong', 'Newpass1!');
 
         await waitFor(() => expect(showToast.error).toHaveBeenCalledWith('Current password is not correct'));
@@ -352,6 +376,7 @@ describe('ProfilePage', () => {
 
     it('opens delete account modal', () => {
         renderWithAuth(<ProfilePage />);
+        openAccount();
 
         const deleteButton = screen.getByText('Delete Account', { selector: 'button' });
         fireEvent.click(deleteButton);
@@ -368,6 +393,7 @@ describe('ProfilePage', () => {
         });
 
         renderWithAuth(<ProfilePage />);
+        openAccount();
 
         // Open modal
         const deleteButton = screen.getByText('Delete Account', { selector: 'button' });

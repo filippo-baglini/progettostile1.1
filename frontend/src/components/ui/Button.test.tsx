@@ -20,6 +20,6 @@ describe('Button Component', () => {
     it('applies variant classes', () => {
         render(<Button variant="outline">Outline Button</Button>);
         const button = screen.getByRole('button');
-        expect(button.className).toContain('border-2');
+        expect(button.className).toContain('bg-raised');
     });
 });

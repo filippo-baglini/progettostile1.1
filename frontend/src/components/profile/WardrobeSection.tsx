@@ -8,7 +8,8 @@ import { wardrobeService } from '../../services/wardrobeService';
 import { apiErrorMessage } from '../../services/api';
 import { showToast } from '../../utils/toast';
 import type { WardrobeItem } from '../../types';
-import { WARDROBE_SECTIONS, sectionLabel } from './wardrobeSections';
+import { WARDROBE_SECTION_KEYS, sectionLabel } from './wardrobeSections';
+import { t as dict, useT } from '../../i18n';
 
 
 // The item being added (has `file`) or edited (has `item`)
@@ -23,16 +24,17 @@ interface Draft {
 }
 
 const WardrobeSection = () => {
+    const t = useT();
     const [items, setItems] = useState<WardrobeItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [section, setSection] = useState(WARDROBE_SECTIONS[0][0]);
+    const [section, setSection] = useState(WARDROBE_SECTION_KEYS[0]);
     const [draft, setDraft] = useState<Draft | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
         wardrobeService.list()
             .then(setItems)
-            .catch(() => showToast.error('Failed to load your wardrobe'))
+            .catch(() => showToast.error(dict().wardrobe.loadFailed))
             .finally(() => setIsLoading(false));
     }, []);
 
@@ -63,12 +65,12 @@ const WardrobeSection = () => {
             } else {
                 const added = await wardrobeService.add(draft.file!, draft.section, details);
                 setItems((prev) => [added, ...prev]);
-                showToast.success('Added to your wardrobe');
+                showToast.success(t.wardrobe.added);
             }
             setSection(draft.section);
             closeDraft();
         } catch (error) {
-            showToast.error(apiErrorMessage(error, 'Failed to save item'));
+            showToast.error(apiErrorMessage(error, t.wardrobe.saveFailed));
         } finally {
             setIsSaving(false);
         }
@@ -82,7 +84,7 @@ const WardrobeSection = () => {
             setItems((prev) => prev.filter((i) => i.id !== draft.item!.id));
             closeDraft();
         } catch (error) {
-            showToast.error(apiErrorMessage(error, 'Failed to delete item'));
+            showToast.error(apiErrorMessage(error, t.wardrobe.deleteFailed));
         } finally {
             setIsSaving(false);
         }
@@ -91,7 +93,7 @@ const WardrobeSection = () => {
     if (isLoading) {
         return (
             <div className="flex justify-center py-8">
-                <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                <Loader2 className="w-6 h-6 text-accent animate-spin" />
             </div>
         );
     }
@@ -102,99 +104,84 @@ const WardrobeSection = () => {
     return (
         <div>
             {/* Section chips: scroll sideways on small screens */}
-            <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 mb-4">
-                {WARDROBE_SECTIONS.map(([key, label]) => {
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-1 px-1 mb-4">
+                {WARDROBE_SECTION_KEYS.map((key) => {
                     const count = items.filter((i) => i.section === key).length;
-                    const isSelected = key === section;
                     return (
-                        <button
-                            key={key}
-                            type="button"
-                            onClick={() => setSection(key)}
-                            aria-pressed={isSelected}
-                            className={`shrink-0 px-4 py-2 min-h-[40px] rounded-full text-sm font-medium border-2 transition-colors ${isSelected
-                                ? 'bg-primary/10 border-primary text-primary dark:text-primary-light'
-                                : 'bg-cream-100 dark:bg-surface-darker border-cream-300 dark:border-surface-muted text-gray-600 dark:text-stone-400 hover:border-primary/50'
-                                }`}
-                        >
-                            {label}
-                            {count > 0 && <span className="ml-1.5 opacity-70">{count}</span>}
+                        <button key={key} type="button" onClick={() => setSection(key)} aria-pressed={key === section} className="ps-chip shrink-0">
+                            {sectionLabel(key)}
+                            {count > 0 && <span className="tabular text-muted font-semibold">{count}</span>}
                         </button>
                     );
                 })}
             </div>
 
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                <p className="text-sm text-gray-500 dark:text-stone-400 text-center sm:text-left">
-                    {sectionItems.length === 0
-                        ? `No ${currentLabel.toLowerCase()} yet. Add a photo of one.`
-                        : `${sectionItems.length} item${sectionItems.length !== 1 ? 's' : ''}`}
+                <p className="text-[14px] text-muted text-center sm:text-left">
+                    {sectionItems.length === 0 ? t.wardrobe.emptySection(currentLabel) : t.wardrobe.count(sectionItems.length)}
                 </p>
                 <PhotoPicker onPick={openNew} camera="environment" />
             </div>
 
             {sectionItems.length > 0 && (
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
                     {sectionItems.map((item) => (
                         <button
                             key={item.id}
                             type="button"
                             onClick={() => openExisting(item)}
-                            className="group text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl"
+                            className="press group text-left rounded-btn"
                         >
                             <img
                                 src={item.imageUrl}
                                 alt={item.name || currentLabel}
                                 loading="lazy"
-                                className="w-full aspect-square object-cover rounded-xl border border-cream-300 dark:border-surface-muted group-hover:opacity-90 transition-opacity"
+                                className="w-full aspect-square object-cover rounded-btn ring-1 ring-line group-hover:ring-accent/60 transition-shadow"
                             />
-                            {item.name && (
-                                <p className="mt-1 text-xs text-gray-600 dark:text-stone-400 truncate">{item.name}</p>
-                            )}
+                            {item.name && <p className="mt-1.5 text-[12.5px] text-muted truncate">{item.name}</p>}
                         </button>
                     ))}
                 </div>
             )}
 
-            <Modal isOpen={!!draft} onClose={closeDraft} className="w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <Modal isOpen={!!draft} onClose={closeDraft} label={draft?.item ? t.wardrobe.editItem : t.wardrobe.add} className="w-full sm:max-w-md max-h-[90dvh] overflow-y-auto">
                 {draft && (
-                    <form onSubmit={handleSave} className="p-6 space-y-4">
-                        <h3 className="text-lg font-bold text-text-dark dark:text-white pr-10">
-                            {draft.item ? 'Edit item' : 'Add to wardrobe'}
+                    <form onSubmit={handleSave} className="p-5 sm:p-6 space-y-4">
+                        <h3 className="text-[20px] font-extrabold tracking-[-0.02em] pr-10">
+                            {draft.item ? t.wardrobe.editItem : t.wardrobe.add}
                         </h3>
-                        <img src={draft.preview} alt="" className="w-full max-h-72 object-contain rounded-xl bg-cream-200 dark:bg-surface-darker" />
+                        <img src={draft.preview} alt="" className="w-full max-h-72 object-contain rounded-btn bg-raised" />
 
                         <label className="block">
-                            <span className="block text-[13px] md:text-[14px] font-roboto font-bold text-text-medium mb-1.5 dark:text-stone-300">Section</span>
+                            <span className="ps-label">{t.wardrobe.section}</span>
                             <select
                                 value={draft.section}
                                 onChange={(e) => setDraft({ ...draft, section: e.target.value })}
-                                className="w-full px-4 py-3 min-h-[44px] text-sm border rounded-[20px] bg-cream-50 dark:bg-surface-darker border-cream-400 dark:border-surface-muted dark:text-white"
+                                className="ps-field"
                             >
-                                {WARDROBE_SECTIONS.map(([key, label]) => (
-                                    <option key={key} value={key}>{label}</option>
+                                {WARDROBE_SECTION_KEYS.map((key) => (
+                                    <option key={key} value={key}>{sectionLabel(key)}</option>
                                 ))}
                             </select>
                         </label>
-                        <Input label="Name (optional)" placeholder="e.g. White linen shirt" maxLength={255}
+                        <Input label={`${t.wardrobe.name} (${t.common.optional})`} placeholder={t.wardrobe.namePlaceholder} maxLength={255}
                             value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
                         <div className="grid grid-cols-2 gap-3">
-                            <Input label="Color (optional)" placeholder="Color" maxLength={100}
+                            <Input label={`${t.wardrobe.color} (${t.common.optional})`} placeholder={t.wardrobe.color} maxLength={100}
                                 value={draft.color} onChange={(e) => setDraft({ ...draft, color: e.target.value })} />
-                            <Input label="Brand (optional)" placeholder="Brand" maxLength={255}
+                            <Input label={`${t.wardrobe.brand} (${t.common.optional})`} placeholder={t.wardrobe.brand} maxLength={255}
                                 value={draft.brand} onChange={(e) => setDraft({ ...draft, brand: e.target.value })} />
                         </div>
 
-                        <div className="flex gap-3 pt-2">
+                        <div className="flex gap-2.5 pt-2">
                             {draft.item && (
-                                <Button type="button" variant="outline" onClick={handleDelete} disabled={isSaving}
-                                    className="text-red-600 border-red-200 hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/20">
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    Delete
+                                <Button type="button" variant="danger" onClick={handleDelete} disabled={isSaving}>
+                                    <Trash2 className="w-4 h-4" />
+                                    {t.common.delete}
                                 </Button>
                             )}
                             <Button type="submit" className="flex-1" isLoading={isSaving}>
-                                {draft.item ? 'Save' : 'Add item'}
+                                {draft.item ? t.common.save : t.wardrobe.addItem}
                             </Button>
                         </div>
                     </form>

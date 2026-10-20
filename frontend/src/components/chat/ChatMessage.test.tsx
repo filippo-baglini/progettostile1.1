@@ -206,7 +206,7 @@ describe('ChatMessage', () => {
             />
         );
 
-        fireEvent.click(screen.getByText('View Gallery'));
+        fireEvent.click(screen.getByRole('button', { name: 'Gallery' }));
         expect(screen.getByTestId('product-carousel')).toBeInTheDocument();
     });
 
@@ -279,8 +279,7 @@ describe('ChatMessage', () => {
             />
         );
 
-        expect(screen.getByText('Generating')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Explain this outfit' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Generating…' })).toBeDisabled();
     });
 
     it('shows explanation when present', () => {
@@ -339,9 +338,9 @@ describe('ChatMessage', () => {
 
         // Check total price (50 + 80 + 10 = 140)
         expect(screen.getByText('€140.00')).toBeInTheDocument();
-        expect(screen.getByText('Over Budget')).toBeInTheDocument();  // what was kept and asked for doesn't fit
+        expect(screen.getByText('Over budget')).toBeInTheDocument();  // what was kept and asked for doesn't fit
         expect(screen.getByText('€40.00')).toBeInTheDocument();
-        expect(screen.getByText('Estimated Total')).toBeInTheDocument();
+        expect(screen.getByText('Total')).toBeInTheDocument();
 
         // Click Shop All
         fireEvent.click(screen.getByText('Shop All Items'));

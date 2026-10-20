@@ -1,64 +1,68 @@
 import { Link } from 'react-router-dom';
+import { ArrowLeft, Menu } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import Button from '../ui/Button';
+import { useT } from '../../i18n';
+import Wordmark from '../brand/Wordmark';
 import ThemeToggle from '../ui/ThemeToggle';
-
-function beautifyUsername(name: string) {
-  const lower = name.trim().toLowerCase();
-  return lower.charAt(0).toUpperCase() + lower.slice(1);
-}
+import LanguageSwitch from '../ui/LanguageSwitch';
+import Avatar from '../ui/Avatar';
 
 interface HeaderProps {
   chatTitle?: string;
+  onMenuClick?: () => void;
+  backTo?: string;
+  backLabel?: string;
 }
 
-const Header = ({ chatTitle }: HeaderProps) => {
+// Palestra's top bar: sticky and translucent, the wordmark in the centre, the account on the right
+const Header = ({ chatTitle, onMenuClick, backTo, backLabel }: HeaderProps) => {
   const { isAuthenticated, user } = useAuth();
-  const userName = beautifyUsername(user?.name || '');
+  const t = useT();
 
   return (
-    <header className="relative bg-cream-100 dark:bg-surface-dark dark:border-surface-muted border-b border-cream-300 pl-14 lg:pl-4 pr-4 md:px-6 lg:px-8 py-3 md:py-4 flex justify-between items-center">
-      <Link to="/">
-        <h1 className="text-lg md:text-xl lg:text-[22px] font-roboto font-bold text-text-dark dark:text-white hover:text-primary transition-colors">
-          StyleFinder AI
-        </h1>
-      </Link>
-
-      {/* Centered Chat Title */}
-      {chatTitle && (
-        <div className="hidden md:block absolute left-1/2 transform -translate-x-1/2">
-          <div className="px-4 py-1.5 bg-cream-200/60 dark:bg-surface-muted/60 backdrop-blur-sm rounded-full border border-cream-300 dark:border-surface-muted">
-            <span className="text-sm font-medium text-text-dark dark:text-stone-200">
-              {chatTitle}
-            </span>
-          </div>
-        </div>
-      )}
-
-      <div className="flex items-center gap-2 md:gap-4">
-        <ThemeToggle size="sm" />
-
-        {isAuthenticated ? (
-          <Link
-            to="/profile"
-            aria-label="Your profile"
-            className="w-9 h-9 md:w-10 md:h-10 bg-primary rounded-full flex items-center justify-center overflow-hidden text-white font-semibold font-inter hover:bg-primary-hover hover:opacity-80 transition"
+    <header className="ps-topbar sticky top-0 z-30 h-[60px] px-2 sm:px-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+      <div className="flex items-center gap-1 min-w-0">
+        {onMenuClick && (
+          <button
+            type="button"
+            onClick={onMenuClick}
+            aria-label={t.header.openMenu}
+            className="lg:hidden press w-10 h-10 inline-flex items-center justify-center rounded-field text-ink hover:bg-raised transition-colors"
           >
-            {user?.avatarUrl ? (
-              <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
-            ) : (
-              userName.charAt(0).toUpperCase()
-            )}
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
+        {backTo && (
+          <Link to={backTo} className="inline-flex items-center gap-1.5 min-h-[40px] px-2.5 rounded-field text-[14px] font-medium text-muted hover:text-ink hover:bg-raised transition-colors">
+            <ArrowLeft className="w-[18px] h-[18px]" />
+            <span className="hidden sm:inline">{backLabel ?? t.common.back}</span>
+          </Link>
+        )}
+        {chatTitle && (
+          <span className="hidden md:block truncate text-[14px] font-semibold text-muted pl-2" title={chatTitle}>
+            {chatTitle}
+          </span>
+        )}
+      </div>
+
+      <Wordmark />
+
+      <div className="flex items-center justify-end gap-1 sm:gap-2">
+        <LanguageSwitch className="hidden sm:inline-flex" />
+        <ThemeToggle className="hidden sm:inline-flex" />
+        {isAuthenticated ? (
+          <Link to="/profile" aria-label={t.header.profile} className="press rounded-full ml-1">
+            <Avatar name={user?.name || ''} url={user?.avatarUrl} size={36} />
           </Link>
         ) : (
-          <div className="flex items-center gap-2 md:gap-3">
-            <Link to="/login">
-              <Button variant="ghost" size="sm" className="text-xs md:text-sm px-3 md:px-4 border border-stone-200 dark:border-surface-muted">Log In</Button>
+          <>
+            <Link to="/login" className="hidden sm:inline-flex min-h-[38px] items-center px-3 rounded-chip text-[13.5px] font-semibold text-muted hover:text-ink hover:bg-raised transition-colors">
+              {t.header.login}
             </Link>
-            <Link to="/signup">
-              <Button variant="primary" size="sm" className="text-xs md:text-sm px-3 md:px-4">Sign Up</Button>
+            <Link to="/signup" className="press inline-flex min-h-[38px] items-center px-3 rounded-chip text-[13.5px] font-semibold bg-accent text-on-accent hover:bg-accent-strong transition-colors">
+              {t.header.signup}
             </Link>
-          </div>
+          </>
         )}
       </div>
     </header>

@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Loader2, Sparkles } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import Button from '../ui/Button';
 import SearchableMultiSelect from '../ui/SearchableMultiSelect';
 import { preferencesService } from '../../services/preferencesService';
 import type { AllPreferencesResponse } from '../../services/preferencesService';
 import { showToast } from '../../utils/toast';
 import { useAuth } from '../../context/AuthContext';
-import { triggerSuccessConfetti } from '../../utils/confetti';
+import { useT } from '../../i18n';
 
 // Above this many values, a searchable dropdown instead of buttons
 const DROPDOWN_THRESHOLD = 10;
@@ -15,6 +15,7 @@ const DROPDOWN_THRESHOLD = 10;
 const SINGLE_SELECT_PREFERENCES = ['Genere', 'gender', 'Gender'];
 
 const PreferencesSection = () => {
+  const t = useT();
   const { user, updateUser } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingPrefs, setIsLoadingPrefs] = useState(true);
@@ -97,7 +98,7 @@ const PreferencesSection = () => {
   const handleSave = async () => {
     // The AI needs it to pick men's or women's clothes
     if (!(preferences['Genere'] || preferences['gender'])) {
-      showToast.error('Choose a gender before saving');
+      showToast.error(t.prefs.needGender);
       return;
     }
     setIsLoading(true);
@@ -132,114 +133,71 @@ const PreferencesSection = () => {
       const success = await preferencesService.updatePreferences(completePreferences);
       if (success) {
         if (user) updateUser({ ...user, preferences: completePreferences });
-        triggerSuccessConfetti();
-        showToast.success('Preferences saved!');
+        showToast.success(t.prefs.saved);
       } else {
-        showToast.error('Failed to save preferences');
+        showToast.error(t.prefs.saveFailed);
       }
     } catch (error) {
       console.error('Error saving preferences:', error);
-      showToast.error('Failed to save preferences');
+      showToast.error(t.prefs.saveFailed);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Show loading while fetching existing preferences
   if (isLoadingPrefs) {
     return (
       <div className="flex justify-center py-8">
-        <Loader2 className="w-6 h-6 text-primary animate-spin" />
+        <Loader2 className="w-6 h-6 text-accent animate-spin" />
       </div>
     );
   }
 
   // Preferences in id order
   const sortedPreferences = Object.entries(allPreferences).sort(([idA], [idB]) => Number(idA) - Number(idB));
+  const displayName = (name: string) => t.prefs.names[name] ?? name;
 
   return (
     <div>
-      {!isLoadingPrefs && sortedPreferences.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-gray-500 dark:text-stone-400">
-            Unable to load preferences options. Please try again later.
-          </p>
-          <Button
-            variant="outline"
-            className="mt-4"
-            onClick={() => window.location.reload()}
-          >
-            Retry
+      {sortedPreferences.length === 0 && (
+        <div className="text-center py-8">
+          <p className="text-[15px] text-muted">{t.prefs.loadFailed}</p>
+          <Button variant="secondary" className="mt-4" onClick={() => window.location.reload()}>
+            {t.common.retry}
           </Button>
         </div>
       )}
 
-      {/* Preferences Summary Card */}
-      {selectedCount > 0 && (
-        <div className="mb-6 p-4 bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-xl">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-primary dark:text-primary-light" />
-            <p className="text-sm font-medium text-primary dark:text-primary-light">
-              {selectedCount} preference{selectedCount !== 1 ? 's' : ''} selected
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Render each preference section */}
       {sortedPreferences.map(([prefId, pref]) => {
         const selectedValues = preferencesService.parseMultiValue(preferences[pref.name]);
         const isSingleSelect = SINGLE_SELECT_PREFERENCES.includes(pref.name);
+        const label = displayName(pref.name);
 
         return (
-          <div key={prefId} className="mb-8">
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-stone-200 mb-4 capitalize">
-              {pref.name}
-            </h3>
+          <div key={prefId} className="pb-6 mb-6 border-b border-line last-of-type:border-0">
+            <h3 className="text-[15px] font-bold mb-3 first-letter:uppercase">{label}</h3>
 
             {pref.values && pref.values.length > 0 ? (
-              // Many values: a searchable dropdown; otherwise buttons
               pref.values.length > DROPDOWN_THRESHOLD ? (
                 <SearchableMultiSelect
                   values={pref.values}
                   selectedValues={selectedValues}
                   onToggle={(value: string) => handleToggleValue(pref.name, value)}
-                  placeholder={`Select ${pref.name.toLowerCase()}...`}
+                  placeholder={t.prefs.select(label)}
                 />
-              ) : isSingleSelect ? (
-                // Selezione singola (es. Genere)
-                <div className="flex flex-wrap gap-2">
-                  {pref.values.map((value) => {
-                    const isSelected = preferences[pref.name] === value;
-                    return (
-                      <button
-                        key={value}
-                        onClick={() => handleSingleSelect(pref.name, value)}
-                        className={`px-4 py-2 min-h-[44px] rounded-full text-sm md:text-base font-medium transition-all duration-200 border-2 ${isSelected
-                          ? 'bg-primary/10 border-primary text-primary dark:text-primary-light'
-                          : 'bg-cream-100 dark:bg-surface-darker border-cream-300 dark:border-surface-muted text-gray-600 dark:text-stone-400 hover:border-primary/50 hover:bg-cream-200 dark:hover:bg-surface-muted'
-                          }`}
-                      >
-                        <span className="capitalize">{value}</span>
-                      </button>
-                    );
-                  })}
-                </div>
               ) : (
-                // Selezione multipla (es. Brand)
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2" role={isSingleSelect ? 'radiogroup' : 'group'} aria-label={label}>
                   {pref.values.map((value) => {
-                    const isSelected = selectedValues.includes(value);
+                    const isSelected = isSingleSelect ? preferences[pref.name] === value : selectedValues.includes(value);
                     return (
                       <button
                         key={value}
-                        onClick={() => handleToggleValue(pref.name, value)}
-                        className={`px-4 py-2 min-h-[44px] rounded-full text-sm md:text-base font-medium transition-all duration-200 border-2 ${isSelected
-                          ? 'bg-primary/10 border-primary text-primary dark:text-primary-light'
-                          : 'bg-cream-100 dark:bg-surface-darker border-cream-300 dark:border-surface-muted text-gray-600 dark:text-stone-400 hover:border-primary/50 hover:bg-cream-200 dark:hover:bg-surface-muted'
-                          }`}
+                        type="button"
+                        onClick={() => (isSingleSelect ? handleSingleSelect(pref.name, value) : handleToggleValue(pref.name, value))}
+                        aria-pressed={isSelected}
+                        className="ps-chip"
                       >
-                        <span className="capitalize">{value}</span>
+                        <span className="first-letter:uppercase">{value}</span>
                       </button>
                     );
                   })}
@@ -251,8 +209,9 @@ const PreferencesSection = () => {
                 type="text"
                 value={preferences[pref.name] || ''}
                 onChange={(e) => handleTextChange(pref.name, e.target.value)}
-                placeholder={`Enter your preferred ${pref.name.toLowerCase()}`}
-                className="border border-cream-400 dark:border-surface-border rounded-xl px-4 py-3 w-full bg-cream-100 dark:bg-surface-muted text-gray-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 outline-none"
+                placeholder={t.prefs.enter(label)}
+                aria-label={label}
+                className="ps-field"
               />
             )}
           </div>
@@ -260,14 +219,10 @@ const PreferencesSection = () => {
       })}
 
       {sortedPreferences.length > 0 && (
-        <div className="flex justify-end">
-          <Button
-            variant="primary"
-            className="w-full md:w-auto min-w-[140px]"
-            onClick={handleSave}
-            isLoading={isLoading}
-          >
-            Save Preferences
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3">
+          <p className="text-[13.5px] text-muted tabular">{selectedCount > 0 ? t.prefs.selected(selectedCount) : ''}</p>
+          <Button className="w-full sm:w-auto" onClick={handleSave} isLoading={isLoading}>
+            {t.prefs.save}
           </Button>
         </div>
       )}

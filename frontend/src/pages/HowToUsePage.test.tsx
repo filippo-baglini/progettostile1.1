@@ -1,43 +1,29 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import HowToUsePage from './HowToUsePage';
 import { BrowserRouter } from 'react-router-dom';
 
-// Mock useNavigate
-const mockNavigate = vi.fn();
-vi.mock('react-router-dom', async () => {
-    const actual = await vi.importActual('react-router-dom');
-    return {
-        ...actual,
-        useNavigate: () => mockNavigate,
-    };
-});
+vi.mock('../context/ThemeContext', () => ({
+    useTheme: () => ({ theme: 'dark', setTheme: vi.fn(), toggleTheme: vi.fn() }),
+}));
+vi.mock('../context/AuthContext', () => ({
+    useAuth: () => ({ isAuthenticated: false, user: null }),
+}));
 
 describe('HowToUsePage', () => {
-    it('renders correctly', () => {
-        render(
-            <BrowserRouter>
-                <HowToUsePage />
-            </BrowserRouter>
-        );
+    it('renders the guide', () => {
+        render(<BrowserRouter><HowToUsePage /></BrowserRouter>);
 
-        expect(screen.getByText('How to Use StyleFinder')).toBeInTheDocument();
-        expect(screen.getByText('Chat with AI')).toBeInTheDocument();
-        expect(screen.getByText('Create Your Profile')).toBeInTheDocument();
-        expect(screen.getByText('Set Preferences')).toBeInTheDocument();
-        expect(screen.getByText('Get Recommendations')).toBeInTheDocument();
-        expect(screen.getByText('Pro Tips')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 1, name: 'How it works' })).toBeInTheDocument();
+        for (const title of ['Talk to the stylist', 'Answer its questions', 'Change a look', 'Use your wardrobe', 'Set your preferences', 'Create an account', 'Keyboard shortcuts']) {
+            expect(screen.getByRole('heading', { name: title })).toBeInTheDocument();
+        }
     });
 
-    it('navigates back on button click', () => {
-        render(
-            <BrowserRouter>
-                <HowToUsePage />
-            </BrowserRouter>
-        );
+    it('links back to the chat', () => {
+        render(<BrowserRouter><HowToUsePage /></BrowserRouter>);
 
-        const backButton = screen.getByRole('button');
-        fireEvent.click(backButton);
-        expect(mockNavigate).toHaveBeenCalledWith(-1);
+        expect(screen.getByRole('link', { name: 'Back' })).toHaveAttribute('href', '/chat');
+        expect(screen.getByRole('link', { name: /Start chatting/ })).toHaveAttribute('href', '/chat');
     });
 });

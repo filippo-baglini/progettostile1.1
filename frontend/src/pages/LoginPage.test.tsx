@@ -8,6 +8,10 @@ import { showToast } from '../utils/toast';
 import { authService } from '../services/authService';
 
 // Mock hooks
+vi.mock('../context/ThemeContext', () => ({
+    useTheme: () => ({ theme: 'dark', setTheme: vi.fn(), toggleTheme: vi.fn() }),
+}));
+
 vi.mock('../context/AuthContext', () => ({
     useAuth: vi.fn(),
 }));
@@ -90,10 +94,10 @@ describe('LoginPage', () => {
             </BrowserRouter>
         );
 
-        expect(screen.getByText('Log In to StyleFinder AI')).toBeInTheDocument();
+        expect(screen.getByText('Welcome back')).toBeInTheDocument();
         expect(screen.getByTestId('input-email')).toBeInTheDocument();
         expect(screen.getByTestId('input-password')).toBeInTheDocument();
-        expect(screen.getByText('Log In', { selector: 'button' })).toBeInTheDocument();
+        expect(screen.getByText('Log in', { selector: 'button' })).toBeInTheDocument();
     });
 
     it('handles input changes', () => {
@@ -125,7 +129,7 @@ describe('LoginPage', () => {
         fireEvent.change(screen.getByTestId('input-email'), { target: { value: 'test@example.com' } });
         fireEvent.change(screen.getByTestId('input-password'), { target: { value: 'password123' } });
 
-        fireEvent.click(screen.getByText('Log In', { selector: 'button' }));
+        fireEvent.click(screen.getByText('Log in', { selector: 'button' }));
 
         await waitFor(() => {
             expect(mockLogin).toHaveBeenCalledWith('test@example.com', 'password123');
@@ -146,7 +150,7 @@ describe('LoginPage', () => {
         fireEvent.change(screen.getByTestId('input-email'), { target: { value: 'test@example.com' } });
         fireEvent.change(screen.getByTestId('input-password'), { target: { value: 'wrong' } });
 
-        fireEvent.click(screen.getByText('Log In', { selector: 'button' }));
+        fireEvent.click(screen.getByText('Log in', { selector: 'button' }));
 
         await waitFor(() => {
             expect(mockLogin).toHaveBeenCalled();
@@ -166,7 +170,7 @@ describe('LoginPage', () => {
 
         fireEvent.change(screen.getByTestId('input-email'), { target: { value: 'test@example.com' } });
         fireEvent.change(screen.getByTestId('input-password'), { target: { value: 'right' } });
-        fireEvent.click(screen.getByText('Log In', { selector: 'button' }));
+        fireEvent.click(screen.getByText('Log in', { selector: 'button' }));
 
         await waitFor(() => {
             expect(showToast.error).toHaveBeenCalledWith('Could not log in. Please try again.');
@@ -179,7 +183,7 @@ describe('LoginPage', () => {
 
         fireEvent.change(screen.getByTestId('input-email'), { target: { value: 'test@example.com' } });
         fireEvent.change(screen.getByTestId('input-password'), { target: { value: 'Ciao123!' } });
-        fireEvent.click(screen.getByText('Log In', { selector: 'button' }));
+        fireEvent.click(screen.getByText('Log in', { selector: 'button' }));
 
         expect(await screen.findByText('Confirm your email first: check your inbox for the link')).toBeInTheDocument();
     });

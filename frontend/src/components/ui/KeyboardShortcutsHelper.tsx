@@ -1,30 +1,23 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Keyboard, X } from 'lucide-react';
+import { useT } from '../../i18n';
 
 interface Shortcut {
   keys: string[];
   description: string;
 }
 
-const SHORTCUTS: Shortcut[] = [
-  { keys: ['⌘', 'K'], description: 'New chat' },
-  { keys: ['⌘', 'I'], description: 'Focus input' },
-  { keys: ['Enter'], description: 'Send message' },
-  { keys: ['Shift', 'Enter'], description: 'New line' },
-  { keys: ['?'], description: 'Show shortcuts' },
-];
-
-// Windows/Linux shortcuts
-const SHORTCUTS_WIN: Shortcut[] = [
-  { keys: ['Ctrl', 'K'], description: 'New chat' },
-  { keys: ['Ctrl', 'I'], description: 'Focus input' },
-  { keys: ['Enter'], description: 'Send message' },
-  { keys: ['Shift', 'Enter'], description: 'New line' },
-  { keys: ['?'], description: 'Show shortcuts' },
+const shortcutList = (mod: string, d: { newChat: string; focus: string; send: string; newline: string; show: string }): Shortcut[] => [
+  { keys: [mod, 'K'], description: d.newChat },
+  { keys: [mod, 'I'], description: d.focus },
+  { keys: ['Enter'], description: d.send },
+  { keys: ['Shift', 'Enter'], description: d.newline },
+  { keys: ['?'], description: d.show },
 ];
 
 const KeyboardShortcutsHelper = () => {
+  const t = useT();
   const [isOpen, setIsOpen] = useState(false);
   const [isMac, setIsMac] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
@@ -68,7 +61,7 @@ const KeyboardShortcutsHelper = () => {
     };
   }, []);
 
-  const shortcuts = isMac ? SHORTCUTS : SHORTCUTS_WIN;
+  const shortcuts = shortcutList(isMac ? '⌘' : 'Ctrl', t.shortcuts);
 
   // Don't render on mobile devices - keyboards shortcuts are useless there
   if (isMobile) {
@@ -80,12 +73,13 @@ const KeyboardShortcutsHelper = () => {
       {/* Floating button to show shortcuts - hidden on small screens */}
       <motion.button
         onClick={() => setIsOpen(true)}
-        className="hidden md:block fixed bottom-20 right-4 z-40 p-2.5 bg-cream-100 dark:bg-surface-darker border border-cream-300 dark:border-surface-muted rounded-full shadow-lg hover:shadow-xl transition-shadow group"
+        className="hidden lg:inline-flex fixed bottom-5 right-5 z-30 w-10 h-10 items-center justify-center rounded-full bg-card border border-line text-muted hover:text-ink hover:border-line-strong transition-colors"
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        title="Keyboard shortcuts (?)"
+        title={t.shortcuts.open}
+        aria-label={t.shortcuts.open}
       >
-        <Keyboard className="w-5 h-5 text-gray-500 dark:text-stone-400 group-hover:text-primary dark:group-hover:text-primary-light transition-colors" />
+        <Keyboard className="w-[18px] h-[18px]" />
       </motion.button>
 
       {/* Shortcuts panel */}
@@ -98,7 +92,7 @@ const KeyboardShortcutsHelper = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsOpen(false)}
-              className="fixed inset-0 bg-black/20 dark:bg-black/40 z-50"
+              className="fixed inset-0 bg-black/40 z-50"
             />
 
             {/* Panel */}
@@ -107,21 +101,20 @@ const KeyboardShortcutsHelper = () => {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ duration: 0.15 }}
-              className="fixed bottom-24 right-4 z-50 bg-white dark:bg-surface-darker rounded-xl shadow-2xl border border-gray-200 dark:border-surface-muted p-4 min-w-[280px]"
+              role="dialog" aria-label={t.shortcuts.title} className="fixed bottom-16 right-5 z-50 ps-card !shadow-float p-4 min-w-[290px]"
             >
               {/* Header */}
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <Keyboard className="w-5 h-5 text-primary dark:text-primary-light" />
-                  <h3 className="font-roboto font-bold text-gray-900 dark:text-white">
-                    Keyboard Shortcuts
-                  </h3>
+                  <Keyboard className="w-[18px] h-[18px] text-accent" />
+                  <h3 className="text-[15px] font-bold">{t.shortcuts.title}</h3>
                 </div>
                 <button
                   onClick={() => setIsOpen(false)}
-                  className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-surface-muted transition-colors"
+                  aria-label={t.common.close}
+                  className="w-8 h-8 inline-flex items-center justify-center rounded-chip text-muted hover:text-ink hover:bg-raised"
                 >
-                  <X className="w-4 h-4 text-gray-500 dark:text-stone-400" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
@@ -132,17 +125,17 @@ const KeyboardShortcutsHelper = () => {
                     key={index}
                     className="flex items-center justify-between py-1.5"
                   >
-                    <span className="text-sm text-gray-600 dark:text-stone-300">
+                    <span className="text-[14px] text-muted">
                       {shortcut.description}
                     </span>
                     <div className="flex items-center gap-1">
                       {shortcut.keys.map((key, keyIndex) => (
                         <span key={keyIndex}>
-                          <kbd className="px-2 py-1 text-xs font-mono bg-gray-100 dark:bg-surface-muted text-gray-700 dark:text-stone-300 rounded border border-gray-200 dark:border-surface-border shadow-sm">
+                          <kbd className="inline-flex min-w-[26px] justify-center px-1.5 py-0.5 text-[12px] font-semibold bg-raised border border-line rounded-[6px]">
                             {key}
                           </kbd>
                           {keyIndex < shortcut.keys.length - 1 && (
-                            <span className="text-gray-400 mx-0.5">+</span>
+                            <span className="text-faint mx-0.5">+</span>
                           )}
                         </span>
                       ))}
@@ -152,10 +145,8 @@ const KeyboardShortcutsHelper = () => {
               </div>
 
               {/* Footer hint */}
-              <div className="mt-4 pt-3 border-t border-gray-100 dark:border-surface-muted">
-                <p className="text-[11px] text-gray-400 dark:text-stone-500 text-center">
-                  Press <kbd className="px-1.5 py-0.5 text-[10px] bg-gray-100 dark:bg-surface-muted rounded">?</kbd> to toggle this panel
-                </p>
+              <div className="mt-3 pt-3 border-t border-line">
+                <p className="text-[12px] text-muted text-center">{t.shortcuts.toggleHint}</p>
               </div>
             </motion.div>
           </>

@@ -3,35 +3,10 @@ import { render } from '../../utils/test-utils';
 import ChatMessageSkeleton from './ChatMessageSkeleton';
 
 describe('ChatMessageSkeleton', () => {
-    it('renders skeleton elements', () => {
-        render(<ChatMessageSkeleton />);
-
-        // Should render multiple skeleton elements for user and AI messages
-        const skeletons = document.querySelectorAll('[class*="animate"]');
-        expect(skeletons.length).toBeGreaterThan(0);
-    });
-
-    it('renders user message skeleton area', () => {
+    it('shows a user line on the right and a ticket with four pieces', () => {
         const { container } = render(<ChatMessageSkeleton />);
-
-        // User message area is on the right (justify-end)
-        const userMessageArea = container.querySelector('.justify-end');
-        expect(userMessageArea).toBeInTheDocument();
-    });
-
-    it('renders AI message skeleton area', () => {
-        const { container } = render(<ChatMessageSkeleton />);
-
-        // AI message area is on the left (justify-start)
-        const aiMessageArea = container.querySelector('.justify-start');
-        expect(aiMessageArea).toBeInTheDocument();
-    });
-
-    it('renders product card skeletons', () => {
-        const { container } = render(<ChatMessageSkeleton />);
-
-        // Should have 4 product card skeletons
-        const productCardSkeletons = container.querySelectorAll('[style*="width: 140px"]');
-        expect(productCardSkeletons).toHaveLength(4);
+        expect(container.querySelector('[aria-busy="true"]')).toBeInTheDocument();
+        expect(container.querySelector('.justify-end')).toBeInTheDocument();
+        expect(container.querySelectorAll('.aspect-\\[4\\/5\\]')).toHaveLength(4);
     });
 });

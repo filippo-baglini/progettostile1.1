@@ -3,18 +3,9 @@ import { render } from '../../utils/test-utils';
 import ProfileSkeleton from './ProfileSkeleton';
 
 describe('ProfileSkeleton', () => {
-    it('renders skeleton container', () => {
+    it('renders a busy page with placeholder blocks', () => {
         const { container } = render(<ProfileSkeleton />);
-
-        // Should have a container with min-h-screen
-        expect(container.querySelector('.min-h-screen')).toBeInTheDocument();
-    });
-
-    it('renders multiple skeleton sections', () => {
-        const { container } = render(<ProfileSkeleton />);
-
-        // Check for skeleton structure - rounded corners indicate skeleton cards
-        const roundedElements = container.querySelectorAll('.rounded-2xl');
-        expect(roundedElements.length).toBeGreaterThan(0);
+        expect(container.querySelector('[aria-busy="true"]')).toBeInTheDocument();
+        expect(container.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(5);
     });
 });

@@ -1,16 +1,9 @@
-// Keys match WARDROBE_SECTIONS in backend/app.py
-export const WARDROBE_SECTIONS: [key: string, label: string][] = [
-    ['t-shirts', 'T-shirts'],
-    ['shirts', 'Shirts'],
-    ['sweaters', 'Sweaters & hoodies'],
-    ['pants', 'Pants & jeans'],
-    ['shorts', 'Shorts'],
-    ['skirts', 'Skirts'],
-    ['dresses', 'Dresses'],
-    ['outerwear', 'Jackets & coats'],
-    ['swimwear', 'Swimwear'],
-    ['shoes', 'Shoes'],
-    ['accessories', 'Accessories'],
+import { t } from '../../i18n';
+
+// Keys match WARDROBE_SECTIONS in backend/app.py; labels come from the dictionaries (i18n/*.ts)
+export const WARDROBE_SECTION_KEYS = [
+    't-shirts', 'shirts', 'sweaters', 'pants', 'shorts', 'skirts',
+    'dresses', 'outerwear', 'swimwear', 'shoes', 'accessories',
 ];
 
-export const sectionLabel = (key: string) => WARDROBE_SECTIONS.find(([k]) => k === key)?.[1] ?? key;
+export const sectionLabel = (key: string) => t().wardrobe.sections[key] ?? key;

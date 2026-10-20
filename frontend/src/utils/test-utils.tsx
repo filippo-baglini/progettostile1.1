@@ -5,6 +5,10 @@ import { ThemeProvider } from '../context/ThemeContext';
 import { AuthProvider } from '../context/AuthContext';
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
+import { setLang } from '../i18n';
+
+// Tests read the English copy; the app defaults to Italian
+setLang('en');
 
 // Mock matchMedia
 Object.defineProperty(window, 'matchMedia', {

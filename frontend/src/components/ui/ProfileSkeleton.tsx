@@ -1,67 +1,29 @@
 import Skeleton from './Skeleton';
 
-const ProfileSkeleton = () => {
-    return (
-        <div className="min-h-screen bg-background dark:bg-surface-dark p-6 md:p-12">
-            <div className="max-w-2xl mx-auto">
-                {/* Header Skeleton */}
-                <div className="flex items-center gap-4 mb-8">
-                    <Skeleton variant="circular" className="w-10 h-10" />
-                    <Skeleton variant="text" className="w-48 h-8" />
+// The profile while the account loads: identity row, tabs, one card
+const ProfileSkeleton = () => (
+    <div className="min-h-dvh bg-ground" aria-busy="true">
+        <div className="h-[60px] border-b border-line" />
+        <div className="max-w-[720px] mx-auto px-4 pt-6">
+            <div className="flex items-center gap-4">
+                <Skeleton variant="circular" className="w-16 h-16" />
+                <div className="flex-1 space-y-2">
+                    <Skeleton className="w-48 h-7" />
+                    <Skeleton className="w-36 h-4" />
                 </div>
-
-                <div className="space-y-6">
-                    {/* User Info Card Skeleton */}
-                    <div className="bg-cream-100/95 dark:bg-surface-darker/90 backdrop-blur-xl rounded-2xl p-6 border border-cream-300 dark:border-surface-muted shadow-xl">
-                        <div className="flex items-center gap-3 mb-6">
-                            <Skeleton variant="rectangular" className="w-9 h-9 rounded-lg" />
-                            <Skeleton variant="text" className="w-40 h-6" />
-                        </div>
-                        <div className="grid gap-6 md:grid-cols-2 mb-6">
-                            <div className="space-y-2">
-                                <Skeleton variant="text" className="w-20 h-4" />
-                                <Skeleton variant="rectangular" className="w-full h-12 rounded-xl" />
-                            </div>
-                            <div className="space-y-2">
-                                <Skeleton variant="text" className="w-20 h-4" />
-                                <Skeleton variant="rectangular" className="w-full h-12 rounded-xl" />
-                            </div>
-                        </div>
-                        <div className="flex justify-end">
-                            <Skeleton variant="rectangular" className="w-32 h-10 rounded-xl" />
-                        </div>
-                    </div>
-
-                    {/* Password Card Skeleton */}
-                    <div className="bg-cream-100/95 dark:bg-surface-darker/90 backdrop-blur-xl rounded-2xl p-6 border border-cream-300 dark:border-surface-muted shadow-xl">
-                        <div className="flex items-center gap-3 mb-6">
-                            <Skeleton variant="rectangular" className="w-9 h-9 rounded-lg" />
-                            <Skeleton variant="text" className="w-40 h-6" />
-                        </div>
-                        <div className="space-y-4">
-                            <div className="space-y-2">
-                                <Skeleton variant="text" className="w-32 h-4" />
-                                <Skeleton variant="rectangular" className="w-full h-12 rounded-xl" />
-                            </div>
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Skeleton variant="text" className="w-32 h-4" />
-                                    <Skeleton variant="rectangular" className="w-full h-12 rounded-xl" />
-                                </div>
-                                <div className="space-y-2">
-                                    <Skeleton variant="text" className="w-32 h-4" />
-                                    <Skeleton variant="rectangular" className="w-full h-12 rounded-xl" />
-                                </div>
-                            </div>
-                            <div className="flex justify-end pt-4">
-                                <Skeleton variant="rectangular" className="w-32 h-10 rounded-xl" />
-                            </div>
-                        </div>
-                    </div>
+            </div>
+            <Skeleton variant="rectangular" className="w-full h-12 mt-6 !rounded-btn" />
+            <div className="ps-card p-6 mt-7 space-y-4">
+                <Skeleton className="w-40 h-5" />
+                <div className="flex gap-2">
+                    {[1, 2, 3, 4].map((i) => <Skeleton key={i} variant="rectangular" className="w-24 h-9" />)}
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+                    {[1, 2, 3, 4].map((i) => <Skeleton key={i} variant="rectangular" className="w-full aspect-square !rounded-btn" />)}
                 </div>
             </div>
         </div>
-    );
-};
+    </div>
+);
 
 export default ProfileSkeleton;

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect } from 'vitest';
+import { render, screen } from '@testing-library/react';
 import ProductCard from './ProductCard';
 import type { OutfitItem } from '../../types';
 
@@ -26,29 +26,30 @@ describe('ProductCard Component', () => {
     it('shows an owned piece as part of the wardrobe, with no price or shop button', () => {
         render(<ProductCard item={{ ...mockProduct, price: 0, link: undefined, owned: true }} />);
 
-        expect(screen.getByText('YOUR WARDROBE')).toBeInTheDocument();
+        expect(screen.getByText('Yours')).toBeInTheDocument();
         expect(screen.getByText('From your wardrobe')).toBeInTheDocument();
         expect(screen.queryByText('€0.00')).not.toBeInTheDocument();
         expect(screen.queryByText('IN STOCK')).not.toBeInTheDocument();
-        expect(screen.queryByText('N/A')).not.toBeInTheDocument();
+        expect(screen.queryByRole('link')).not.toBeInTheDocument();
     });
 
-    it('opens link when shop button is clicked', () => {
-        const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    it('links to the shop in a new tab', () => {
         render(<ProductCard item={mockProduct} />);
 
-        const shopButton = screen.getByText('Shop');
-        fireEvent.click(shopButton);
-
-        expect(openSpy).toHaveBeenCalledWith('https://example.com/shop/jacket', '_blank', 'noopener,noreferrer');
-        openSpy.mockRestore();
+        const shop = screen.getByRole('link', { name: 'Shop Test Product' });
+        expect(shop).toHaveAttribute('href', 'https://example.com/shop/jacket');
+        expect(shop).toHaveAttribute('target', '_blank');
+        expect(shop).toHaveAttribute('rel', 'noopener noreferrer');
     });
 
-    it('shows N/A when no link is provided', () => {
-        const itemWithoutLink = { ...mockProduct, link: undefined };
-        render(<ProductCard item={itemWithoutLink} />);
+    it('has no shop link when there is none', () => {
+        render(<ProductCard item={{ ...mockProduct, link: undefined }} />);
+        expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    });
 
-        expect(screen.getByText('N/A')).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /shop/i })).not.toBeInTheDocument();
+    it('marks a sold-out piece', () => {
+        render(<ProductCard item={{ ...mockProduct, available: false }} />);
+        expect(screen.getByText('Out of stock')).toBeInTheDocument();
+        expect(screen.queryByRole('link')).not.toBeInTheDocument();
     });
 });

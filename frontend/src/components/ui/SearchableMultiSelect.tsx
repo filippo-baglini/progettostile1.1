@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, ChevronDown, Search } from 'lucide-react';
+import { X, ChevronDown, Search, Check } from 'lucide-react';
+import { useT } from '../../i18n';
 
 interface SearchableMultiSelectProps {
     values: string[];
@@ -14,6 +15,7 @@ const SearchableMultiSelect = ({
     onToggle,
     placeholder,
 }: SearchableMultiSelectProps) => {
+    const t = useT();
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState('');
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -36,18 +38,16 @@ const SearchableMultiSelect = ({
 
     return (
         <div className="relative" ref={dropdownRef}>
-            {/* Selected tags */}
             {selectedValues.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-3">
                     {selectedValues.map(value => (
-                        <span
-                            key={value}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary/10 text-primary dark:text-primary-light rounded-full text-sm font-medium"
-                        >
-                            <span className="capitalize">{value}</span>
+                        <span key={value} className="inline-flex items-center gap-1 pl-3 pr-1 min-h-[34px] rounded-chip bg-accent/[0.14] border border-accent/60 text-[13.5px] font-semibold">
+                            <span className="first-letter:uppercase">{value}</span>
                             <button
+                                type="button"
                                 onClick={() => onToggle(value)}
-                                className="hover:bg-primary/20 rounded-full p-0.5 transition-colors"
+                                aria-label={t.prefs.remove(value)}
+                                className="w-7 h-7 inline-flex items-center justify-center rounded-[7px] hover:bg-accent/20"
                             >
                                 <X className="w-3.5 h-3.5" />
                             </button>
@@ -56,55 +56,49 @@ const SearchableMultiSelect = ({
                 </div>
             )}
 
-            {/* Dropdown trigger */}
             <button
+                type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center justify-between px-4 py-3 border border-cream-400 dark:border-surface-border rounded-xl bg-cream-100 dark:bg-surface-muted text-gray-900 dark:text-white hover:border-primary/50 transition-all duration-200"
+                aria-expanded={isOpen}
+                className="ps-field flex items-center justify-between text-left"
             >
-                <span className="text-gray-500 dark:text-stone-400">
-                    {placeholder}
-                </span>
-                <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                <span className="text-faint">{placeholder}</span>
+                <ChevronDown className={`w-5 h-5 text-muted transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 
-            {/* Dropdown menu */}
             {isOpen && (
-                <div className="absolute z-50 w-full mt-2 bg-cream-100 dark:bg-surface-darker border border-cream-300 dark:border-surface-muted rounded-xl shadow-lg max-h-72 overflow-hidden">
-                    {/* Search input */}
-                    <div className="p-2 border-b border-gray-200 dark:border-surface-muted">
+                <div className="absolute z-50 w-full mt-2 rounded-btn bg-card border border-line-strong shadow-float max-h-72 overflow-hidden">
+                    <div className="p-2 border-b border-line">
                         <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-faint" />
                             <input
                                 type="text"
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Search..."
-                                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 dark:border-surface-border rounded-lg bg-gray-50 dark:bg-surface-muted text-gray-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                                placeholder={t.prefs.search}
+                                aria-label={t.prefs.search}
+                                className="ps-field !min-h-[40px] !py-2 !pl-9"
                                 autoFocus
                             />
                         </div>
                     </div>
 
-                    {/* Options list */}
-                    <div className="overflow-y-auto max-h-52">
+                    <div className="overflow-y-auto max-h-52 p-1">
                         {filteredValues.length === 0 ? (
-                            <div className="p-3 text-center text-gray-500 dark:text-stone-400 text-sm">
-                                No results found
-                            </div>
+                            <div className="p-3 text-center text-[14px] text-muted">{t.prefs.noResults}</div>
                         ) : (
                             filteredValues.map(value => {
                                 const isSelected = selectedValues.includes(value);
                                 return (
                                     <button
                                         key={value}
+                                        type="button"
                                         onClick={() => onToggle(value)}
-                                        className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${isSelected
-                                                ? 'bg-primary/10 text-primary dark:text-primary-light'
-                                                : 'text-gray-700 dark:text-stone-300 hover:bg-gray-100 dark:hover:bg-surface-muted'
-                                            }`}
+                                        aria-pressed={isSelected}
+                                        className={`w-full flex items-center justify-between text-left px-3 min-h-[40px] rounded-chip text-[14px] transition-colors ${isSelected ? 'bg-accent/[0.14] font-semibold' : 'hover:bg-raised'}`}
                                     >
-                                        <span className="capitalize">{value}</span>
-                                        {isSelected && <span className="float-right">✓</span>}
+                                        <span className="first-letter:uppercase">{value}</span>
+                                        {isSelected && <Check className="w-4 h-4 text-accent" />}
                                     </button>
                                 );
                             })

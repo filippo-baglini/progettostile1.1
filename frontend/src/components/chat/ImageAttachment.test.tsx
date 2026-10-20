@@ -69,7 +69,7 @@ describe('ImageAttachment', () => {
         fireEvent.load(img); // Must load first to be clickable
 
         // Click the container (motion.div)
-        fireEvent.click(img.closest('div')!);
+        fireEvent.click(img.closest('button')!);
 
         expect(screen.getByTestId('lightbox')).toBeInTheDocument();
     });
@@ -79,7 +79,7 @@ describe('ImageAttachment', () => {
 
         const img = screen.getByRole('img');
         fireEvent.load(img);
-        fireEvent.click(img.closest('div')!);
+        fireEvent.click(img.closest('button')!);
 
         fireEvent.click(screen.getByText('Close'));
 

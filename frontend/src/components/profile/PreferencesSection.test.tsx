@@ -5,7 +5,6 @@ import { BrowserRouter } from 'react-router-dom';
 import PreferencesSection from './PreferencesSection';
 import { preferencesService } from '../../services/preferencesService';
 import { showToast } from '../../utils/toast';
-import { triggerSuccessConfetti } from '../../utils/confetti';
 
 // Mock services
 vi.mock('../../services/preferencesService', () => ({
@@ -30,9 +29,6 @@ vi.mock('../../context/AuthContext', () => ({
     useAuth: () => ({ user: { id: '1', name: 'Test' }, updateUser: mockUpdateUser }),
 }));
 
-vi.mock('../../utils/confetti', () => ({
-    triggerSuccessConfetti: vi.fn(),
-}));
 
 // Mock components
 vi.mock('../ui/Button', () => ({
@@ -113,10 +109,10 @@ describe('PreferencesSection', () => {
         );
 
         await waitFor(() => {
-            expect(screen.getByText('Genere')).toBeInTheDocument();
+            expect(screen.getByText('Clothes for')).toBeInTheDocument();
             expect(screen.getByText('Style')).toBeInTheDocument();
-            expect(screen.getByText('Color')).toBeInTheDocument();
-            expect(screen.getByText('Brand')).toBeInTheDocument();
+            expect(screen.getByText('Colour')).toBeInTheDocument();
+            expect(screen.getByText('Brands')).toBeInTheDocument();
             expect(screen.getByText('Other')).toBeInTheDocument();
         });
     });
@@ -191,7 +187,6 @@ describe('PreferencesSection', () => {
 
         await waitFor(() => {
             expect(preferencesService.updatePreferences).toHaveBeenCalled();
-            expect(triggerSuccessConfetti).toHaveBeenCalled();
             expect(showToast.success).toHaveBeenCalledWith('Preferences saved!');
             expect(mockUpdateUser).toHaveBeenCalledWith(expect.objectContaining({
                 preferences: expect.objectContaining({ gender: 'male', Style: 'Casual' }),

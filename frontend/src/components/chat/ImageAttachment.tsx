@@ -1,71 +1,48 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Maximize2, Image as ImageIcon } from 'lucide-react';
+import { ImageOff } from 'lucide-react';
 import ImageLightbox from '../ui/ImageLightbox';
+import { useT } from '../../i18n';
 
 interface ImageAttachmentProps {
     imageUrl: string;
     altText?: string;
 }
 
-const ImageAttachment = ({ imageUrl, altText = 'Attached image' }: ImageAttachmentProps) => {
+const ImageAttachment = ({ imageUrl, altText }: ImageAttachmentProps) => {
+    const t = useT();
     const [isLightboxOpen, setIsLightboxOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [hasError, setHasError] = useState(false);
+    const alt = altText ?? t.chat.attachedImage;
 
     return (
         <>
-            <motion.div
-                className="relative group cursor-pointer overflow-hidden rounded-xl border border-white/10 shadow-sm max-w-sm"
-                whileHover={{ scale: 1.02 }}
-                transition={{ duration: 0.2 }}
+            <button
+                type="button"
+                className="relative block overflow-hidden rounded-btn max-w-[280px] bg-card"
                 onClick={() => !hasError && setIsLightboxOpen(true)}
+                disabled={hasError}
+                aria-label={alt}
             >
-                {/* Loading State */}
-                {isLoading && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-surface-darker z-10">
-                        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                    </div>
+                {isLoading && <span className="absolute inset-0 animate-pulse bg-raised" />}
+                {hasError ? (
+                    <span className="w-56 h-40 flex flex-col items-center justify-center gap-2 text-muted p-4">
+                        <ImageOff className="w-6 h-6" />
+                        <span className="text-[12.5px] text-center">{t.chat.imageFailed}</span>
+                    </span>
+                ) : (
+                    <img
+                        src={imageUrl}
+                        alt={alt}
+                        referrerPolicy="no-referrer"
+                        className={`block w-full h-auto max-h-64 object-cover transition-opacity duration-300 ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+                        onLoad={() => setIsLoading(false)}
+                        onError={() => { setIsLoading(false); setHasError(true); }}
+                    />
                 )}
+            </button>
 
-                {/* Error State */}
-                {hasError && (
-                    <div className="w-full h-48 bg-gray-100 dark:bg-surface-darker flex flex-col items-center justify-center text-gray-400 gap-2 p-4">
-                        <ImageIcon className="w-8 h-8" />
-                        <span className="text-xs text-center">Failed to load image</span>
-                    </div>
-                )}
-
-                {/* Image */}
-                <img
-                    src={imageUrl}
-                    alt={altText}
-                    referrerPolicy="no-referrer"
-                    className={`w-full h-auto max-h-64 object-cover transition-opacity duration-300 ${isLoading ? 'opacity-0' : 'opacity-100'
-                        }`}
-                    onLoad={() => setIsLoading(false)}
-                    onError={() => {
-                        setIsLoading(false);
-                        setHasError(true);
-                    }}
-                />
-
-                {/* Overlay on Hover */}
-                {!isLoading && !hasError && (
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
-                        <div className="bg-black/50 text-white p-2 rounded-full backdrop-blur-sm">
-                            <Maximize2 className="w-5 h-5" />
-                        </div>
-                    </div>
-                )}
-            </motion.div>
-
-            <ImageLightbox
-                isOpen={isLightboxOpen}
-                imageUrl={imageUrl}
-                altText={altText}
-                onClose={() => setIsLightboxOpen(false)}
-            />
+            <ImageLightbox isOpen={isLightboxOpen} imageUrl={imageUrl} altText={alt} onClose={() => setIsLightboxOpen(false)} />
         </>
     );
 };

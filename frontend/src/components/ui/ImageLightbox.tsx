@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ZoomIn, ZoomOut, Download } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { useT } from '../../i18n';
 
 interface ImageLightboxProps {
     isOpen: boolean;
@@ -10,6 +11,7 @@ interface ImageLightboxProps {
 }
 
 const ImageLightbox = ({ isOpen, imageUrl, altText = 'Image', onClose }: ImageLightboxProps) => {
+    const t = useT();
     const [scale, setScale] = useState(1);
 
     // Reset scale when opening new image
@@ -44,7 +46,7 @@ const ImageLightbox = ({ isOpen, imageUrl, altText = 'Image', onClose }: ImageLi
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `stylefinder-image-${Date.now()}.jpg`;
+            link.download = `progetto-stile-${Date.now()}.jpg`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -61,40 +63,40 @@ const ImageLightbox = ({ isOpen, imageUrl, altText = 'Image', onClose }: ImageLi
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm"
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
                     onClick={onClose}
                 >
                     {/* Controls */}
                     <div className="absolute top-4 right-4 flex items-center gap-2 z-50">
                         <button
                             onClick={handleZoomOut}
-                            className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-full transition-colors"
-                            title="Zoom Out"
+                            className="w-10 h-10 inline-flex items-center justify-center bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors disabled:opacity-40"
+                            aria-label={t.chat.zoomOut}
                             disabled={scale <= 1}
                         >
                             <ZoomOut className="w-5 h-5" />
                         </button>
                         <button
                             onClick={handleZoomIn}
-                            className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-full transition-colors"
-                            title="Zoom In"
+                            className="w-10 h-10 inline-flex items-center justify-center bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors disabled:opacity-40"
+                            aria-label={t.chat.zoomIn}
                             disabled={scale >= 3}
                         >
                             <ZoomIn className="w-5 h-5" />
                         </button>
                         <button
                             onClick={handleDownload}
-                            className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-full transition-colors"
-                            title="Download"
+                            className="w-10 h-10 inline-flex items-center justify-center bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors disabled:opacity-40"
+                            aria-label={t.chat.download}
                         >
                             <Download className="w-5 h-5" />
                         </button>
                         <button
                             onClick={onClose}
-                            className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors ml-2"
-                            title="Close"
+                            className="w-10 h-10 inline-flex items-center justify-center bg-white/10 hover:bg-white/20 text-white rounded-full ml-2 transition-colors disabled:opacity-40"
+                            aria-label={t.common.close}
                         >
-                            <X className="w-6 h-6" />
+                            <X className="w-5 h-5" />
                         </button>
                     </div>
 
@@ -110,7 +112,7 @@ const ImageLightbox = ({ isOpen, imageUrl, altText = 'Image', onClose }: ImageLi
                             src={imageUrl}
                             alt={altText}
                             referrerPolicy="no-referrer"
-                            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                            className="max-w-full max-h-full object-contain rounded-btn"
                             animate={{ scale }}
                             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                             drag

@@ -23,7 +23,7 @@ describe('Input Component', () => {
         render(<Input error="Invalid email" />);
         expect(screen.getByText('Invalid email')).toBeInTheDocument();
         const input = screen.getByRole('textbox');
-        expect(input).toHaveClass('border-red-500');
+        expect(input).toHaveAttribute('aria-invalid', 'true');
     });
 
     it('toggles password visibility', async () => {

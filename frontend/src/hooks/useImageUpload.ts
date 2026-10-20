@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { showToast } from '../utils/toast';
+import { t } from '../i18n';
 
 export const useImageUpload = (fileReaderFactory = () => new FileReader()) => {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
@@ -10,13 +11,13 @@ export const useImageUpload = (fileReaderFactory = () => new FileReader()) => {
   const validateAndSetImage = (file: File) => {
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      showToast.error('Please select an image file (JPEG, PNG, WebP)');
+      showToast.error(t().status.imageType);
       return false;
     }
 
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      showToast.error('Image size must be less than 5MB');
+      showToast.error(t().status.imageSize);
       return false;
     }
 
@@ -26,7 +27,7 @@ export const useImageUpload = (fileReaderFactory = () => new FileReader()) => {
     const reader = fileReaderFactory();
     reader.onloadend = () => {
       setImagePreview(reader.result as string);
-      showToast.success('Image attached successfully');
+      showToast.success(t().status.imageAttached);
     };
     reader.readAsDataURL(file);
 

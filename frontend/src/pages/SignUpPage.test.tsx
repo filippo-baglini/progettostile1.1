@@ -5,9 +5,15 @@ import { BrowserRouter } from 'react-router-dom';
 import SignUpPage from './SignUpPage';
 import { useAuth } from '../context/AuthContext';
 import { showToast } from '../utils/toast';
-import { PASSWORD_HINT } from '../utils/password';
+import { t } from '../i18n';
+
+const PASSWORD_HINT = t().auth.passwordHint;
 
 // Mock hooks
+vi.mock('../context/ThemeContext', () => ({
+    useTheme: () => ({ theme: 'dark', setTheme: vi.fn(), toggleTheme: vi.fn() }),
+}));
+
 vi.mock('../context/AuthContext', () => ({
     useAuth: vi.fn(),
 }));
@@ -86,11 +92,11 @@ describe('SignUpPage', () => {
             </BrowserRouter>
         );
 
-        expect(screen.getByText('Create Your Account')).toBeInTheDocument();
+        expect(screen.getByText('Create your account')).toBeInTheDocument();
         expect(screen.getByTestId('input-name')).toBeInTheDocument();
         expect(screen.getByTestId('input-email')).toBeInTheDocument();
         expect(screen.getByTestId('input-password')).toBeInTheDocument();
-        expect(screen.getByText('Sign Up', { selector: 'button' })).toBeInTheDocument();
+        expect(screen.getByText('Create account', { selector: 'button' })).toBeInTheDocument();
     });
 
     it('handles input changes', () => {
@@ -126,7 +132,7 @@ describe('SignUpPage', () => {
         fireEvent.change(screen.getByTestId('input-email'), { target: { value: 'test@example.com' } });
         fireEvent.change(screen.getByTestId('input-password'), { target: { value: 'Ciao123!' } });
 
-        fireEvent.click(screen.getByText('Sign Up', { selector: 'button' }));
+        fireEvent.click(screen.getByText('Create account', { selector: 'button' }));
 
         await waitFor(() => {
             expect(mockSignUp).toHaveBeenCalledWith('John Doe', 'test@example.com', 'Ciao123!');
@@ -148,7 +154,7 @@ describe('SignUpPage', () => {
         fireEvent.change(screen.getByTestId('input-email'), { target: { value: 'test@example.com' } });
         fireEvent.change(screen.getByTestId('input-password'), { target: { value: 'Ciao123!' } });
 
-        fireEvent.click(screen.getByText('Sign Up', { selector: 'button' }));
+        fireEvent.click(screen.getByText('Create account', { selector: 'button' }));
 
         await waitFor(() => {
             expect(mockSignUp).toHaveBeenCalled();
@@ -164,7 +170,7 @@ describe('SignUpPage', () => {
         fireEvent.change(screen.getByTestId('input-name'), { target: { value: 'John Doe' } });
         fireEvent.change(screen.getByTestId('input-email'), { target: { value: 'test@example.com' } });
         fireEvent.change(screen.getByTestId('input-password'), { target: { value: 'Ciao123!' } });
-        fireEvent.click(screen.getByText('Sign Up', { selector: 'button' }));
+        fireEvent.click(screen.getByText('Create account', { selector: 'button' }));
 
         await waitFor(() => {
             expect(showToast.success).toHaveBeenCalledWith('Almost there! Confirm your email with the link we sent you, then log in.');
@@ -178,7 +184,7 @@ describe('SignUpPage', () => {
         fireEvent.change(screen.getByTestId('input-name'), { target: { value: 'John Doe' } });
         fireEvent.change(screen.getByTestId('input-email'), { target: { value: 'test@example.com' } });
         fireEvent.change(screen.getByTestId('input-password'), { target: { value: 'ciao1234' } });
-        fireEvent.click(screen.getByText('Sign Up', { selector: 'button' }));
+        fireEvent.click(screen.getByText('Create account', { selector: 'button' }));
 
         expect(await screen.findByText(PASSWORD_HINT, { selector: 'div' })).toBeInTheDocument();
         expect(mockSignUp).not.toHaveBeenCalled();

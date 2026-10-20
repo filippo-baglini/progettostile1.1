@@ -5,80 +5,31 @@ import { toWardrobeSuggestion } from '../services/wardrobeService';
 import { showToast } from '../utils/toast';
 import { apiErrorMessage } from '../services/api';
 import axios from 'axios';
+import { t } from '../i18n';
 
-// Error message helper
+// Error message helper: title and message in the current language
 const getErrorDetails = (error: unknown): { title: string; message: string } => {
+  const http = t().status.http;
+  const pick = (key: string, serverMessage?: string) => ({ title: http[key][0], message: serverMessage || http[key][1] });
+
   if (axios.isAxiosError(error)) {
     const status = error.response?.status;
     const serverMessage = error.response?.data?.message || error.response?.data?.error;
 
     switch (status) {
-      case 400:
-        return {
-          title: 'Invalid Request',
-          message: serverMessage || 'Please check your message and try again.',
-        };
-      case 401:
-        return {
-          title: 'Session Expired',
-          message: 'Please log in again to continue.',
-        };
-      case 403:
-        return {
-          title: 'Access Denied',
-          message: 'You don\'t have permission to perform this action.',
-        };
-      case 404:
-        return {
-          title: 'Not Found',
-          message: 'The requested resource was not found.',
-        };
-      case 408:
-        return {
-          title: 'Request Timeout',
-          message: 'The request took too long. Please try again.',
-        };
-      case 429:
-        return {
-          title: 'Too Many Requests',
-          message: 'Please wait a moment before trying again.',
-        };
-      case 500:
-        return {
-          title: 'Server Error',
-          message: 'Something went wrong on our end. Please try again later.',
-        };
-      case 502:
-      case 503:
-      case 504:
-        return {
-          title: 'Service Unavailable',
-          message: 'Our servers are temporarily unavailable. Please try again in a few minutes.',
-        };
+      case 400: return pick('400', serverMessage);
+      case 401: case 403: case 404: case 408: case 429: case 500:
+        return pick(String(status));
+      case 502: case 503: case 504:
+        return pick('503');
       default:
-        if (error.code === 'ECONNABORTED') {
-          return {
-            title: 'Connection Timeout',
-            message: 'The request timed out. Please check your connection and try again.',
-          };
-        }
-        if (error.code === 'ERR_NETWORK') {
-          return {
-            title: 'Network Error',
-            message: 'Unable to connect to the server. Please check your internet connection.',
-          };
-        }
-        return {
-          title: 'Something Went Wrong',
-          message: serverMessage || 'An unexpected error occurred. Please try again.',
-        };
+        if (error.code === 'ECONNABORTED') return pick('timeout');
+        if (error.code === 'ERR_NETWORK') return pick('network');
+        return pick('other', serverMessage);
     }
   }
 
-  return {
-    title: 'Unexpected Error',
-    message: 'Something went wrong. Please try again.',
-  };
+  return pick('unexpected');
 };
 
 export const useChatMessages = () => {
@@ -177,7 +128,7 @@ export const useChatMessages = () => {
       setMessages(fetchedMessages);
     } catch (error) {
       console.error('Failed to load chat messages:', error);
-      if (view === viewRef.current) showToast.error('Failed to load conversation');
+      if (view === viewRef.current) showToast.error(t().status.loadFailed);
     } finally {
       if (view === viewRef.current) setIsFetching(false);
     }
@@ -193,7 +144,7 @@ export const useChatMessages = () => {
     wardrobePieces: PickedPiece[] = [] // Wardrobe pieces the user picked for this message
   ) => {
     if (!message.trim() && !imageFile && wardrobePieces.length === 0) {
-      showToast.error('Please enter a message or attach an image');
+      showToast.error(t().status.empty);
       return;
     }
     // Picked pieces are enough on their own: the AI completes the outfit around them
@@ -220,7 +171,7 @@ export const useChatMessages = () => {
     // Show the user message immediately (optimistic)
     updateMessages(currentChatId, (prev) => [...prev, userMessage]);
     setIsLoading(true);
-    setLoadingStatus('Analyzing your request...');
+    setLoadingStatus(t().status.analyzing);
 
     // The backend answers in one go; poll it to tell when the questions are over and the outfit is being built
     const requestId = crypto.randomUUID();
@@ -228,7 +179,7 @@ export const useChatMessages = () => {
     const progressPoll = setInterval(async () => {
       try {
         if (await chatService.getProgress(requestId) && !answered && view === viewRef.current) {
-          setLoadingStatus("Got everything I need! Putting your outfit together...");
+          setLoadingStatus(t().status.building);
           clearInterval(progressPoll);
         }
       } catch {
@@ -318,9 +269,8 @@ export const useChatMessages = () => {
         onNewMessageRef.current?.();
       }, 100);
 
-      // Show appropriate toast based on response status
+      // No toast here: the outfit ticket arriving is the feedback (a toast would cover it)
       if (outfitData.status === 'COMPLETED' && outfitData.hasOutfit) {
-        showToast.success('Outfit recommendations ready!');
         // Haptic feedback on mobile devices
         if ('vibrate' in navigator) {
           navigator.vibrate(50);
@@ -459,11 +409,11 @@ export const useChatMessages = () => {
         onNewMessageRef.current?.();
       }, 100);
 
-      showToast.success('Explanation generated!');
+      showToast.success(t().status.explained);
 
     } catch (error) {
       console.error('Failed to generate explanation:', error);
-      showToast.error(apiErrorMessage(error, 'Failed to generate explanation')); // e.g. too many requests
+      showToast.error(apiErrorMessage(error, t().status.explainFailed)); // e.g. too many requests
     } finally {
       setLoadingExplanationId(null);
     }

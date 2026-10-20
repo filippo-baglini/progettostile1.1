@@ -59,11 +59,7 @@ vi.mock('../components/layout/Sidebar', () => ({
 }));
 
 vi.mock('../components/layout/Header', () => ({
-    default: () => <div data-testid="header" />,
-}));
-
-vi.mock('../components/ui/HamburgerMenu', () => ({
-    default: ({ onClick }: any) => <button data-testid="hamburger" onClick={onClick} />,
+    default: ({ onMenuClick }: any) => <div data-testid="header"><button data-testid="menu" onClick={onMenuClick} /></div>,
 }));
 
 vi.mock('../components/chat/ChatEmptyState', () => ({
@@ -285,9 +281,9 @@ describe('ChatPage', () => {
         expect(sendMessageMock).toHaveBeenCalled();
     });
 
-    it('toggles sidebar on hamburger click', () => {
+    it('toggles sidebar from the header menu button', () => {
         renderWithRouter(<ChatPage />);
-        fireEvent.click(screen.getByTestId('hamburger'));
+        fireEvent.click(screen.getByTestId('menu'));
         // Again, internal state, but we cover the line.
     });
 

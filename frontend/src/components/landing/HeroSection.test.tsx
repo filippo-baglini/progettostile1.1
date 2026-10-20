@@ -1,42 +1,30 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, screen } from '../../utils/test-utils';
 import HeroSection from './HeroSection';
 
-// Mock ThemeToggle to avoid useTheme dependency issues
-vi.mock('../ui/ThemeToggle', () => ({
-    default: () => <div data-testid="theme-toggle" />,
-}));
-
 describe('HeroSection', () => {
-    it('renders hero content', () => {
+    it('renders the promise', () => {
         render(<HeroSection />);
-
-        expect(screen.getByText('Curated Style,')).toBeInTheDocument();
-        expect(screen.getByText('Instantly.')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Describe the moment.Get the whole outfit.');
     });
 
-    it('renders navigation links', () => {
+    it('links to log in, sign up and the chat', () => {
         render(<HeroSection />);
-
-        expect(screen.getByRole('link', { name: /Log In/i })).toBeInTheDocument();
-        expect(screen.getByRole('link', { name: /Sign Up/i })).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Log in' })).toHaveAttribute('href', '/login');
+        expect(screen.getByRole('link', { name: 'Sign up' })).toHaveAttribute('href', '/signup');
+        expect(screen.getByRole('link', { name: /Start chatting/ })).toHaveAttribute('href', '/chat');
     });
 
-    it('renders get started button', () => {
+    it('shows the demo ticket, labelled as illustrative', () => {
         render(<HeroSection />);
-
-        expect(screen.getByRole('link', { name: /Get Started/i })).toBeInTheDocument();
+        expect(screen.getByText('Linen blazer')).toBeInTheDocument();
+        expect(screen.getByText('€184.90')).toBeInTheDocument();
+        expect(screen.getByText(/Illustrative example/)).toBeInTheDocument();
     });
 
-    it('renders StyleFinder logo', () => {
+    it('has the language and theme switches', () => {
         render(<HeroSection />);
-
-        expect(screen.getByText('StyleFinder')).toBeInTheDocument();
-    });
-
-    it('renders theme toggle', () => {
-        render(<HeroSection />);
-
-        expect(screen.getByTestId('theme-toggle')).toBeInTheDocument();
+        expect(screen.getByRole('group', { name: 'Language' })).toBeInTheDocument();
+        expect(screen.getByRole('switch')).toBeInTheDocument();
     });
 });

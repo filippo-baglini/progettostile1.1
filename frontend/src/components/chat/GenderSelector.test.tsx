@@ -27,28 +27,14 @@ describe('GenderSelector', () => {
         expect(screen.getByText('Non-Binary')).toBeInTheDocument();
     });
 
-    it('shows instruction text when not disabled', () => {
-        render(
-            <GenderSelector
-                selectedGender={null}
-                onSelectGender={() => {}}
-            />
-        );
-
-        expect(screen.getByText(/Select clothing preference/)).toBeInTheDocument();
+    it('labels the choice', () => {
+        render(<GenderSelector selectedGender={null} onSelectGender={() => {}} />);
+        expect(screen.getByRole('radiogroup', { name: 'Clothes for' })).toBeInTheDocument();
     });
 
-    it('shows different text when disabled', () => {
-        render(
-            <GenderSelector
-                selectedGender="male"
-                onSelectGender={() => {}}
-                disabled={true}
-            />
-        );
-
-        expect(screen.getByText(/Clothing preference:/)).toBeInTheDocument();
-        expect(screen.getByText(/start a new chat to change/)).toBeInTheDocument();
+    it('explains how to change it when locked', () => {
+        render(<GenderSelector selectedGender="male" onSelectGender={() => {}} disabled={true} />);
+        expect(screen.getByText('Start a new chat to change it')).toBeInTheDocument();
     });
 
     it('calls onSelectGender when option is clicked', () => {
@@ -84,38 +70,9 @@ describe('GenderSelector', () => {
         expect(onSelectGender).not.toHaveBeenCalled();
     });
 
-    it('highlights the selected gender', () => {
-        render(
-            <GenderSelector
-                selectedGender="female"
-                onSelectGender={() => {}}
-            />
-        );
-
-        const womanButton = screen.getByText('Woman').closest('button');
-        expect(womanButton).toHaveClass('bg-primary');
-    });
-
-    it('shows prompt message when no gender is selected', () => {
-        render(
-            <GenderSelector
-                selectedGender={null}
-                onSelectGender={() => {}}
-            />
-        );
-
-        expect(screen.getByText(/Select clothing preference to start/)).toBeInTheDocument();
-    });
-
-    it('applies emphasis styling to buttons when no gender is selected', () => {
-        render(
-            <GenderSelector
-                selectedGender={null}
-                onSelectGender={() => {}}
-            />
-        );
-
-        const manButton = screen.getByText('Man').closest('button');
-        expect(manButton).toHaveClass('border-primary/50');
+    it('marks the selected gender', () => {
+        render(<GenderSelector selectedGender="female" onSelectGender={() => {}} />);
+        expect(screen.getByRole('radio', { name: 'Woman' })).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByRole('radio', { name: 'Man' })).toHaveAttribute('aria-checked', 'false');
     });
 });

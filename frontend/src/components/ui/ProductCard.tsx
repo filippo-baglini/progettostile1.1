@@ -1,158 +1,96 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, ImageOff, Maximize2 } from 'lucide-react';
+import { ArrowUpRight, ImageOff } from 'lucide-react';
 import type { OutfitItem } from '../../types';
+import { formatPrice, useLang, useT } from '../../i18n';
 
 interface ProductCardProps {
   item: OutfitItem;
   onImageClick?: () => void;
 }
 
+// Status chip, Olanda's stamp: pill, tinted fill, 11px capitals
+const Stamp = ({ tone, children }: { tone: 'good' | 'danger' | 'accent'; children: React.ReactNode }) => {
+  const tones = {
+    good: 'text-good bg-good/10 border-good/40',
+    danger: 'text-danger bg-danger/10 border-danger/40',
+    accent: 'text-accent bg-card/90 border-accent/50',
+  };
+  return (
+    <span className={`absolute top-2 left-2 z-10 px-2 py-[3px] rounded-full border text-[11px] font-bold uppercase tracking-[0.04em] leading-none backdrop-blur-sm ${tones[tone]}`}>
+      {children}
+    </span>
+  );
+};
+
+// One piece of the outfit: the photo on a sand "tag" plate, then brand, name and price
 const ProductCard = ({ item, onImageClick }: ProductCardProps) => {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
-
-  const handleShopClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (item.link) {
-      window.open(item.link, '_blank', 'noopener,noreferrer');
-    }
-  };
-
-  const hasLink = !!item.link;
+  const t = useT();
+  const lang = useLang();
+  const soldOut = item.available === false;
 
   return (
-    <motion.div
-      className="bg-cream-100 dark:bg-surface-darker rounded-xl shadow-sm border border-cream-300 dark:border-surface-border overflow-hidden hover:shadow-lg hover:shadow-black/10 dark:hover:shadow-black/30 transition-all duration-300 w-full flex-shrink-0 group cursor-pointer relative"
-      whileHover={{}}
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: "easeOut" }}
-      onClick={onImageClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      {/* Image with gradient background */}
-      <div className="w-full h-[130px] bg-gradient-to-b from-cream-100 to-cream-50 dark:from-surface-darker dark:to-surface-dark flex items-center justify-center overflow-hidden relative">
+    <div className="group min-w-0 flex flex-col">
+      <button
+        type="button"
+        onClick={onImageClick}
+        aria-label={t.chat.openGallery(item.name)}
+        className="relative block w-full aspect-[4/5] rounded-btn overflow-hidden bg-[#f3eee8] ring-1 ring-line"
+      >
+        {item.owned ? (
+          <Stamp tone="accent">{t.chat.owned}</Stamp>
+        ) : soldOut ? (
+          <Stamp tone="danger">{t.chat.outOfStock}</Stamp>
+        ) : null}
+
         {item.imageUrl && !imageError ? (
           <>
-            {!imageLoaded && (
-              <div className="absolute inset-0 bg-gradient-to-r from-cream-200 via-cream-100 to-cream-200 dark:from-surface-muted dark:via-surface-darker dark:to-surface-muted">
-                <motion.div
-                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 dark:via-white/10 to-transparent"
-                  animate={{ x: ['-100%', '100%'] }}
-                  transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
-                />
-              </div>
-            )}
-            <motion.img
+            {!imageLoaded && <span className="absolute inset-0 animate-pulse bg-black/5" />}
+            <img
               src={item.imageUrl}
               alt={item.name}
               loading="lazy"
               referrerPolicy="no-referrer"
-              className="max-w-[90%] max-h-[90%] object-contain transition-all duration-300 rounded-lg bg-white dark:bg-surface-muted p-1 shadow-sm"
-              initial={{ opacity: 0 }}
-              animate={{
-                opacity: imageLoaded ? (isHovered ? 0.4 : 1) : 0,
-                scale: isHovered ? 1.05 : 1
-              }}
-              transition={{ duration: 0.3 }}
               onLoad={() => setImageLoaded(true)}
               onError={() => setImageError(true)}
+              className={`absolute inset-0 w-full h-full object-contain p-2.5 mix-blend-multiply transition-[opacity,transform] duration-300 group-hover:scale-[1.04] ${imageLoaded ? 'opacity-100' : 'opacity-0'} ${soldOut ? 'grayscale opacity-60' : ''}`}
             />
-
-            {/* Centered Expand overlay on hover */}
-            <AnimatePresence>
-              {isHovered && imageLoaded && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  transition={{ duration: 0.2 }}
-                  className="absolute inset-0 flex items-center justify-center"
-                >
-                  <div className="p-3 bg-cream-100/80 dark:bg-surface-dark/80 backdrop-blur-md rounded-full shadow-lg border border-white/50 dark:border-surface-muted/50">
-                    <Maximize2 className="w-5 h-5 text-primary dark:text-primary-light" />
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </>
         ) : (
-          <div className="flex flex-col items-center justify-center p-4 text-center">
-            <div className="p-2.5 bg-cream-200 dark:bg-surface-muted rounded-full">
-              <ImageOff className="w-5 h-5 text-text-muted dark:text-stone-500" />
-            </div>
-          </div>
-        )}
-
-
-        {/* Availability Badge (the user's own pieces get theirs instead) */}
-        {item.owned ? (
-          <div className="absolute top-2 right-2 bg-white/90 dark:bg-surface-dark/90 backdrop-blur-sm border-2 border-primary text-primary dark:text-primary-light text-[9px] font-bold px-2 py-1 rounded-full shadow-sm z-10 flex items-center justify-center leading-none">
-            YOUR WARDROBE
-          </div>
-        ) : item.available === false ? (
-          <div className="absolute top-2 right-2 bg-white/90 dark:bg-surface-dark/90 backdrop-blur-sm border-2 border-red-500 text-red-600 dark:text-red-400 text-[9px] font-bold px-2 py-1 rounded-full shadow-sm z-10 flex items-center justify-center leading-none">
-            OUT OF STOCK
-          </div>
-        ) : (
-          <div className="absolute top-2 right-2 bg-white/90 dark:bg-surface-dark/90 backdrop-blur-sm border-2 border-green-500 text-green-600 dark:text-green-400 text-[9px] font-bold px-2 py-1 rounded-full shadow-sm z-10 flex items-center justify-center leading-none">
-            IN STOCK
-          </div>
-        )}
-      </div>
-
-      {/* Info */}
-      <div className="p-2.5 space-y-1.5">
-        {/* Brand with glassmorphism */}
-        {item.brand && (
-          <div className="inline-flex">
-            <span className="text-[8px] font-bold text-primary dark:text-primary-light uppercase tracking-wider px-1.5 py-0.5 bg-primary/10 dark:bg-primary/20 backdrop-blur-sm rounded-md border border-primary/20 dark:border-primary/30">
-              {item.brand}
-            </span>
-          </div>
-        )}
-
-        {/* Product name */}
-        <h3 className="font-medium text-[11px] text-gray-800 dark:text-stone-100 line-clamp-2 leading-tight min-h-[2.2em]">
-          {item.name}
-        </h3>
-
-        {/* Price and Shop: nothing to buy for an owned piece */}
-        {item.owned ? (
-          <p className="pt-1 text-[11px] font-medium text-text-muted dark:text-stone-400">From your wardrobe</p>
-        ) : (
-        <div className="flex items-center justify-between pt-1">
-          <span className="text-primary dark:text-primary-light font-bold text-[13.5px]">
-            €{item.price.toFixed(2)}
+          <span className="absolute inset-0 flex items-center justify-center text-[#9a8a7b]">
+            <ImageOff className="w-6 h-6" />
           </span>
+        )}
+      </button>
 
-          {hasLink ? (
-            <motion.button
-              onClick={handleShopClick}
-              whileHover={item.available !== false ? { scale: 1.05 } : {}}
-              whileTap={item.available !== false ? { scale: 0.95 } : {}}
-              disabled={item.available === false}
-              className={`px-2 py-0.5 text-[10px] font-semibold rounded-md flex items-center gap-1 transition-colors ${item.available === false
-                ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 cursor-not-allowed'
-                : 'bg-primary text-white hover:bg-primary-hover'
-                }`}
-              aria-label={`Shop ${item.name}`}
-            >
-              <ShoppingBag className="w-2.5 h-2.5" />
-              <span>{item.available === false ? 'Sold Out' : 'Shop'}</span>
-            </motion.button>
-          ) : (
-            <span className="px-2 py-0.5 bg-gray-100 dark:bg-surface-muted text-gray-400 text-[10px] font-medium rounded-md">
-              N/A
-            </span>
-          )}
-        </div>
+      <div className="pt-2.5 px-0.5 flex-1 flex flex-col">
+        {item.brand && <p className="text-[12px] font-semibold text-muted truncate">{item.brand}</p>}
+        <h3 className="text-[13.5px] font-medium leading-snug line-clamp-2 min-h-[2.5em]">{item.name}</h3>
+
+        {item.owned ? (
+          <p className="mt-1.5 text-[12.5px] font-medium text-accent">{t.chat.fromWardrobe}</p>
+        ) : (
+          <div className="mt-1.5 flex items-center justify-between gap-2">
+            <span className="tabular text-[15px] font-extrabold tracking-[-0.01em]">{formatPrice(item.price, lang)}</span>
+            {item.link && !soldOut ? (
+              <a
+                href={item.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={t.chat.shopItem(item.name)}
+                className="press inline-flex items-center gap-0.5 min-h-[30px] px-2 rounded-[8px] text-[12.5px] font-semibold text-accent hover:bg-accent/10 transition-colors"
+              >
+                {t.chat.shop}
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </a>
+            ) : (
+              <span className="text-[12px] text-faint">{soldOut ? t.chat.soldOut : '—'}</span>
+            )}
+          </div>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 };
 

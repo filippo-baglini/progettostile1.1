@@ -1,5 +1,4 @@
-import { motion } from 'framer-motion';
-import { User } from 'lucide-react';
+import { useT } from '../../i18n';
 
 type Gender = 'male' | 'female' | 'non-binary';
 
@@ -9,69 +8,38 @@ interface GenderSelectorProps {
   disabled?: boolean;
 }
 
-const genderOptions: { value: Gender; label: string }[] = [
-  { value: 'male', label: 'Man' },
-  { value: 'female', label: 'Woman' },
-  { value: 'non-binary', label: 'Non-Binary' },
-];
+const GENDERS: Gender[] = ['male', 'female', 'non-binary'];
 
+// Who the clothes are for: asked before the first message, locked once a guest chat starts
 const GenderSelector = ({ selectedGender, onSelectGender, disabled = false }: GenderSelectorProps) => {
+  const t = useT();
   const needsSelection = !selectedGender && !disabled;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-gradient-to-r from-primary/5 via-cream-50 to-primary/5 dark:from-primary/10 dark:via-surface-dark dark:to-primary/10 border-b border-cream-200 dark:border-surface-muted px-4 py-2.5"
-    >
-      <div className="max-w-[992px] mx-auto flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4">
-        <div className="flex items-center gap-2 text-text-dark dark:text-stone-200">
-          <User className="w-4 h-4 text-primary" />
-          <span className="text-sm font-inter font-medium">
-            {disabled
-              ? 'Clothing preference:'
-              : needsSelection
-                ? 'Select clothing preference to start:'
-                : 'Select clothing preference:'}
-          </span>
-        </div>
-
-        <div className="flex gap-1.5">
-          {genderOptions.map((option) => {
-            const isSelected = selectedGender === option.value;
+    <div className={`px-4 py-2.5 border-b border-line ${needsSelection ? 'bg-accent/[0.07]' : ''}`}>
+      <div className="max-w-column mx-auto flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
+        <span className="text-[13.5px] font-semibold text-muted">{t.chat.gender.label}</span>
+        <div role="radiogroup" aria-label={t.chat.gender.label} className="inline-flex p-[3px] rounded-field bg-raised border border-line">
+          {GENDERS.map((value) => {
+            const isSelected = selectedGender === value;
             return (
-              <motion.button
-                key={option.value}
-                whileHover={!disabled ? { scale: 1.03 } : {}}
-                whileTap={!disabled ? { scale: 0.97 } : {}}
-                onClick={() => !disabled && onSelectGender(option.value)}
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                onClick={() => !disabled && onSelectGender(value)}
                 disabled={disabled}
-                className={`
-                  px-4 py-1.5 rounded-full text-sm font-inter font-medium
-                  transition-all duration-200
-                  ${isSelected
-                    ? 'bg-primary text-white shadow-sm'
-                    : disabled
-                      ? 'bg-cream-100 dark:bg-surface-muted text-text-light dark:text-stone-500 cursor-not-allowed'
-                      : needsSelection
-                        ? 'bg-white dark:bg-surface-dark border-2 border-primary/50 dark:border-primary/40 text-text-dark dark:text-stone-200 hover:border-primary hover:bg-cream-50 dark:hover:bg-surface-muted cursor-pointer animate-pulse-subtle'
-                        : 'bg-white dark:bg-surface-dark border border-cream-300 dark:border-surface-muted text-text-dark dark:text-stone-200 hover:border-primary hover:bg-cream-50 dark:hover:bg-surface-muted cursor-pointer'
-                  }
-                `}
+                className={`min-h-[34px] px-3.5 rounded-[8px] text-[13.5px] font-semibold transition-colors disabled:cursor-not-allowed ${isSelected ? 'bg-accent text-on-accent' : 'text-muted enabled:hover:text-ink'}`}
               >
-                {option.label}
-              </motion.button>
+                {t.chat.gender.options[value]}
+              </button>
             );
           })}
         </div>
-
-        {disabled && (
-          <span className="text-xs text-text-light dark:text-stone-500 italic">
-            (start a new chat to change)
-          </span>
-        )}
+        {disabled && <span className="text-[12.5px] text-faint">{t.chat.gender.locked}</span>}
       </div>
-    </motion.div>
+    </div>
   );
 };
 

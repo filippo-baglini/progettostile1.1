@@ -1,6 +1,7 @@
 import { useAuth } from '../../context/AuthContext';
 import { showToast } from '../../utils/toast';
 import { useState } from 'react';
+import { useT } from '../../i18n';
 
 interface GoogleLoginButtonProps {
     mode?: 'signin' | 'signup';
@@ -29,6 +30,7 @@ const GoogleIcon = () => (
 
 const GoogleLoginButton = ({ mode = 'signin' }: GoogleLoginButtonProps) => {
     const { loginWithGoogle } = useAuth();
+    const t = useT();
     const [isLoading, setIsLoading] = useState(false);
 
     // Leaves the page for Google; Supabase brings the user back to /chat signed in
@@ -37,37 +39,26 @@ const GoogleLoginButton = ({ mode = 'signin' }: GoogleLoginButtonProps) => {
         try {
             await loginWithGoogle();
         } catch {
-            showToast.error('Failed to login with Google');
+            showToast.error(t.auth.google.failed);
             setIsLoading(false);
         }
     };
 
-    const buttonText = mode === 'signup' ? 'Sign up with Google' : 'Sign in with Google';
+    const buttonText = mode === 'signup' ? t.auth.google.signup : t.auth.google.signin;
 
     return (
         <button
             onClick={handleClick}
             disabled={isLoading}
             type="button"
-            className="w-full flex items-center justify-center gap-3 px-4 py-3.5
-                       bg-cream-100 dark:bg-surface-dark
-                       border-2 border-cream-300 dark:border-surface-muted
-                       rounded-xl font-inter font-medium 
-                       text-text-dark dark:text-white
-                       hover:bg-cream-200 dark:hover:bg-surface-darker
-                       hover:border-primary/50 dark:hover:border-primary/50
-                       hover:shadow-lg hover:shadow-primary/10
-                       active:scale-[0.98]
-                       transition-all duration-200 ease-out
-                       focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-2
-                       disabled:opacity-60 disabled:cursor-not-allowed"
+            className="press w-full min-h-[48px] flex items-center justify-center gap-3 px-4 rounded-btn bg-raised border border-line text-[15px] font-semibold hover:border-line-strong transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
         >
             {isLoading ? (
-                <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                <div className="w-5 h-5 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
             ) : (
                 <GoogleIcon />
             )}
-            <span>{isLoading ? 'Loading...' : buttonText}</span>
+            <span>{isLoading ? t.common.loading : buttonText}</span>
         </button>
     );
 };

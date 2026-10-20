@@ -21,18 +21,7 @@ describe('ThemeContext', () => {
         document.documentElement.className = '';
     });
 
-    it('provides default theme', () => {
-        render(
-            <ThemeProvider>
-                <TestComponent />
-            </ThemeProvider>
-        );
-
-        expect(screen.getByTestId('theme-value')).toHaveTextContent('light');
-    });
-
-    it('loads theme from local storage', () => {
-        localStorage.setItem('vite-ui-theme', 'dark');
+    it('defaults to dark, whatever the system prefers', () => {
         render(
             <ThemeProvider>
                 <TestComponent />
@@ -40,6 +29,18 @@ describe('ThemeContext', () => {
         );
 
         expect(screen.getByTestId('theme-value')).toHaveTextContent('dark');
+        expect(document.documentElement.classList.contains('dark')).toBe(true);
+    });
+
+    it('loads theme from local storage', () => {
+        localStorage.setItem('vite-ui-theme', 'light');
+        render(
+            <ThemeProvider>
+                <TestComponent />
+            </ThemeProvider>
+        );
+
+        expect(screen.getByTestId('theme-value')).toHaveTextContent('light');
     });
 
     it('updates theme and local storage', async () => {
@@ -50,6 +51,7 @@ describe('ThemeContext', () => {
             </ThemeProvider>
         );
 
+        await user.click(screen.getByText('Set Light'));
         await user.click(screen.getByText('Set Dark'));
 
         expect(screen.getByTestId('theme-value')).toHaveTextContent('dark');
@@ -60,7 +62,7 @@ describe('ThemeContext', () => {
     it('toggles back to light theme', async () => {
         const user = userEvent.setup();
         render(
-            <ThemeProvider defaultTheme="dark">
+            <ThemeProvider>
                 <TestComponent />
             </ThemeProvider>
         );
@@ -73,31 +75,31 @@ describe('ThemeContext', () => {
     });
 
     it('uses custom storage key', () => {
-        localStorage.setItem('custom-key', 'dark');
+        localStorage.setItem('custom-key', 'light');
         render(
             <ThemeProvider storageKey="custom-key">
                 <TestComponent />
             </ThemeProvider>
         );
 
-        expect(screen.getByTestId('theme-value')).toHaveTextContent('dark');
+        expect(screen.getByTestId('theme-value')).toHaveTextContent('light');
     });
 
     it('toggles theme with toggleTheme function', async () => {
         const user = userEvent.setup();
         render(
-            <ThemeProvider defaultTheme="light">
+            <ThemeProvider>
                 <TestComponent />
             </ThemeProvider>
         );
 
-        expect(screen.getByTestId('theme-value')).toHaveTextContent('light');
-
-        await user.click(screen.getByText('Toggle Theme'));
         expect(screen.getByTestId('theme-value')).toHaveTextContent('dark');
 
         await user.click(screen.getByText('Toggle Theme'));
         expect(screen.getByTestId('theme-value')).toHaveTextContent('light');
+
+        await user.click(screen.getByText('Toggle Theme'));
+        expect(screen.getByTestId('theme-value')).toHaveTextContent('dark');
     });
 
     it('throws error when used outside provider', () => {

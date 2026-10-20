@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { t as dict } from '../i18n';
 
 interface Props {
     children: ReactNode;
@@ -26,33 +27,23 @@ class ErrorBoundary extends Component<Props, State> {
 
     public render() {
         if (this.state.hasError) {
+            const t = dict();
             return (
-                <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-surface-dark p-6">
-                    <div className="max-w-md w-full bg-cream-100 dark:bg-surface-darker rounded-2xl shadow-xl p-8 text-center border border-cream-300 dark:border-surface-muted">
-                        <div className="w-16 h-16 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <AlertTriangle className="w-8 h-8 text-red-500 dark:text-red-400" />
-                        </div>
-
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                            Oops! Something went wrong
-                        </h1>
-
-                        <p className="text-gray-500 dark:text-stone-400 mb-6">
-                            We apologize for the inconvenience. The application encountered an unexpected error.
-                        </p>
-
-                        <div className="bg-gray-100 dark:bg-surface-muted/50 rounded-lg p-4 mb-6 text-left overflow-auto max-h-32">
-                            <code className="text-xs text-red-500 font-mono">
-                                {this.state.error?.message || 'Unknown error'}
-                            </code>
-                        </div>
-
+                <div className="min-h-dvh flex items-center justify-center bg-ground p-6">
+                    <div className="ps-card max-w-md w-full p-7">
+                        <AlertTriangle className="w-7 h-7 text-danger mb-4" />
+                        <h1 className="text-[24px] font-extrabold tracking-[-0.02em] mb-2">{t.errors.title}</h1>
+                        <p className="text-[15px] text-muted mb-5">{t.errors.body}</p>
+                        <pre className="rounded-field bg-raised p-3 mb-6 overflow-auto max-h-32 text-[12.5px] text-danger whitespace-pre-wrap">
+                            {this.state.error?.message || t.errors.unknown}
+                        </pre>
                         <button
+                            type="button"
                             onClick={() => window.location.reload()}
-                            className="inline-flex items-center justify-center px-6 py-3 bg-primary hover:bg-primary-hover text-white font-medium rounded-xl transition-all duration-200 w-full group"
+                            className="press w-full min-h-[48px] inline-flex items-center justify-center gap-2 rounded-btn bg-accent text-on-accent font-semibold hover:bg-accent-strong"
                         >
-                            <RefreshCw className="w-4 h-4 mr-2 group-hover:rotate-180 transition-transform duration-500" />
-                            Reload Application
+                            <RefreshCw className="w-4 h-4" />
+                            {t.errors.reload}
                         </button>
                     </div>
                 </div>

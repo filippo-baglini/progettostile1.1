@@ -1,18 +1,21 @@
 <!doctype html>
-<html lang="en">
+<html lang="it" class="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>StyleFinder AI</title>
-    <!-- Inline script to prevent theme flash -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0c0907" />
+    <title>Progetto Stile</title>
+    <link rel="preload" href="/fonts/inter-100-900-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <!-- Theme and language before the first paint: dark and Italian unless the user chose otherwise -->
     <script>
-      (function() {
-        const storageKey = 'vite-ui-theme';
-        const theme = localStorage.getItem(storageKey);
-        if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-          document.documentElement.classList.add('dark');
-        }
+      (function () {
+        var root = document.documentElement;
+        try {
+          if (localStorage.getItem('vite-ui-theme') === 'light') root.classList.remove('dark');
+          var lang = localStorage.getItem('ps-lang');
+          if (lang === 'en') root.lang = 'en';
+        } catch (e) { /* storage blocked: keep the defaults */ }
       })();
     </script>
   </head>

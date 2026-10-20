@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowDown } from 'lucide-react';
+import { useT } from '../../i18n';
 
 interface ScrollToBottomButtonProps {
   show: boolean;
@@ -7,20 +8,21 @@ interface ScrollToBottomButtonProps {
 }
 
 const ScrollToBottomButton = ({ show, onClick }: ScrollToBottomButtonProps) => {
+  const t = useT();
   return (
     <AnimatePresence>
       {show && (
         <motion.button
-          initial={{ opacity: 0, y: 20, scale: 0.8 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 20, scale: 0.8 }}
+          type="button"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 12 }}
+          transition={{ duration: 0.18 }}
           onClick={onClick}
-          className="fixed bottom-32 right-8 bg-cream-100 dark:bg-surface-darker border-2 border-primary text-primary dark:text-primary-light rounded-full p-3 shadow-lg dark:shadow-primary/10 hover:bg-primary hover:text-white dark:hover:bg-primary-light dark:hover:text-white transition-colors z-10"
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.95 }}
-          aria-label="Scroll to bottom"
+          className="absolute bottom-36 left-1/2 -translate-x-1/2 z-20 w-10 h-10 inline-flex items-center justify-center rounded-full bg-card border border-line-strong text-ink shadow-float hover:border-accent/70"
+          aria-label={t.chat.scrollDown}
         >
-          <ArrowDown className="w-5 h-5" />
+          <ArrowDown className="w-[18px] h-[18px]" />
         </motion.button>
       )}
     </AnimatePresence>

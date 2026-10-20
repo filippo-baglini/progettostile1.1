@@ -11,24 +11,17 @@ vi.mock('framer-motion', () => ({
     },
 }));
 
-// Mock ParticleBackground
-vi.mock('../ui/ParticleBackground', () => ({
-    default: () => <div data-testid="particle-background" />,
-}));
-
 describe('ChatEmptyState', () => {
     it('renders correctly for logged in user', () => {
         render(<ChatEmptyState isLoggedIn={true} userName="Test User" />);
 
-        expect(screen.getByText('Hi Test User!')).toBeInTheDocument();
-        expect(screen.getByText('How can I help you today?')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Hi Test User' })).toBeInTheDocument();
     });
 
     it('renders correctly for guest user', () => {
         render(<ChatEmptyState isLoggedIn={false} userName="" />);
 
-        expect(screen.getByText('StyleFinder AI')).toBeInTheDocument();
-        expect(screen.getByText('What would you like to find today?')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'What are you wearing?' })).toBeInTheDocument();
     });
 
     it('renders suggestions when onSuggestionClick is provided', () => {
@@ -40,9 +33,9 @@ describe('ChatEmptyState', () => {
             />
         );
 
-        expect(screen.getByText('Professional outfit for job interview')).toBeInTheDocument();
-        expect(screen.getByText('Casual outfit for weekend')).toBeInTheDocument();
-        expect(screen.getByText('Summer wedding guest look')).toBeInTheDocument();
+        expect(screen.getByText('Job interview')).toBeInTheDocument();
+        expect(screen.getByText('Casual weekend')).toBeInTheDocument();
+        expect(screen.getByText('Summer wedding guest')).toBeInTheDocument();
     });
 
     it('does not render suggestions when onSuggestionClick is missing', () => {
@@ -53,7 +46,7 @@ describe('ChatEmptyState', () => {
             />
         );
 
-        expect(screen.queryByText('Professional outfit for job interview')).not.toBeInTheDocument();
+        expect(screen.queryByText('Job interview')).not.toBeInTheDocument();
     });
 
     it('calls onSuggestionClick when a suggestion is clicked', () => {
@@ -66,7 +59,7 @@ describe('ChatEmptyState', () => {
             />
         );
 
-        fireEvent.click(screen.getByText('Professional outfit for job interview'));
+        fireEvent.click(screen.getByText('Job interview'));
 
         expect(handleSuggestionClick).toHaveBeenCalledWith(
             expect.stringContaining('I need a professional outfit')

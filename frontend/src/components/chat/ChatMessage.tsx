@@ -1,21 +1,16 @@
-
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Maximize2, ShoppingBag, AlertTriangle, RefreshCw, Copy, Check, Sparkles, User, Search } from 'lucide-react';
-import type { ChatMessage as ChatMessageType, BudgetOption } from '../../types';
+import { AlertTriangle, RefreshCw, Copy, Check, SearchX } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import ProductCard from '../ui/ProductCard';
-import ProductCarousel from '../ui/ProductCarousel';
-import Button from '../ui/Button';
-import OutfitExplanation from './OutfitExplanation';
+import type { ChatMessage as ChatMessageType, BudgetOption, OutfitGenerationOption, WardrobeDetails } from '../../types';
 import ImageAttachment from './ImageAttachment';
 import BudgetPoll from './BudgetPoll';
 import OutfitOptionPoll from './OutfitOptionPoll';
 import WardrobeSuggestionCard from './WardrobeSuggestionCard';
-import type { WardrobeDetails } from '../../types';
-import { fadeInUp } from '../../utils/animations';
+import OutfitTicket from './OutfitTicket';
 import { formatTime } from '../../utils/dateUtils';
 import type { SelectedOption } from '../../utils/optionReply';
+import { useT } from '../../i18n';
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -26,45 +21,48 @@ interface ChatMessageProps {
   onSelectOutfit?: (outfitIndex: number) => void;
   selectedOutfitIndex?: number | null;
   onOptionSelect?: (option: BudgetOption) => void;
-  onOutfitOptionSelect?: (option: import('../../types').OutfitGenerationOption) => void;
+  onOutfitOptionSelect?: (option: OutfitGenerationOption) => void;
   isLast?: boolean;
   selectedOption?: SelectedOption; // set when this user message was sent by clicking an option box
   onAddToWardrobe?: (section: string, details: WardrobeDetails) => Promise<void>; // "Add to your wardrobe?" card
   onDismissSuggestion?: () => void;
 }
 
+const enter = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1] as const },
+};
+
+const Time = ({ date, align = 'left' }: { date: Date | string; align?: 'left' | 'right' }) => (
+  <span className={`block text-[11px] text-faint tabular mt-1.5 ${align === 'right' ? 'text-right' : ''}`}>{formatTime(date)}</span>
+);
+
 const ChatMessage = ({ message, onExplainOutfit, isLoadingExplanation, onRetry, onContentChange, onSelectOutfit, selectedOutfitIndex, onOptionSelect, onOutfitOptionSelect, isLast = false, selectedOption, onAddToWardrobe, onDismissSuggestion }: ChatMessageProps) => {
-  const [selectedProductIndex, setSelectedProductIndex] = useState<number | null>(null);
+  const t = useT();
   const [activeOutfitIndex, setActiveOutfitIndex] = useState(0);
   const [isRetrying, setIsRetrying] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [showActions, setShowActions] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
 
-  // Determine which outfit to show
   const outfits = message.outfits && message.outfits.length > 0
     ? message.outfits
     : (message.outfit ? [message.outfit] : []);
-
   const activeOutfit = outfits[activeOutfitIndex];
 
-  // Reset active index if message changes (though usually message prop is stable for a given ID)
   useEffect(() => {
     setActiveOutfitIndex(0);
   }, [message.id]);
 
-  // Track previous loading state to detect completion
+  // Open the explanation as soon as it arrives
   const prevIsLoadingRef = useRef(isLoadingExplanation);
-
   useEffect(() => {
-    // If we were loading and now we're not, and we have an explanation for the active outfit, show it
     if (prevIsLoadingRef.current && !isLoadingExplanation && activeOutfit?.explanation) {
       setShowExplanation(true);
     }
     prevIsLoadingRef.current = isLoadingExplanation;
   }, [isLoadingExplanation, activeOutfit?.explanation]);
 
-  // Copy message to clipboard
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(message.content);
@@ -75,7 +73,7 @@ const ChatMessage = ({ message, onExplainOutfit, isLoadingExplanation, onRetry, 
     }
   };
 
-  // Handle error message display
+  // Errors, and the "no results" notice that travels the same way
   if (message.isError) {
     const handleRetry = async () => {
       if (!onRetry || !message.errorDetails) return;
@@ -84,85 +82,42 @@ const ChatMessage = ({ message, onExplainOutfit, isLoadingExplanation, onRetry, 
       setIsRetrying(false);
     };
 
-    const errorTitle = message.errorDetails?.errorTitle || 'Something went wrong';
-    const errorMsg = message.errorDetails?.errorMessage || 'We couldn\'t process your request. Please try again.';
-
-    // Check if this is a "no results" info message (not a real error)
+    const errorTitle = message.errorDetails?.errorTitle || t.chat.errorTitle;
+    const errorMsg = message.errorDetails?.errorMessage || t.chat.errorBody;
     const isNoResults = errorTitle === 'No Results Found';
-
-    if (isNoResults) {
-      // Show as informational message, not as error
-      return (
-        <motion.div
-          className="flex justify-start mb-6"
-          initial="hidden"
-          animate="visible"
-          variants={fadeInUp}
-          role="status"
-          aria-label="No results message"
-        >
-          <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0 mt-1 mr-3">
-            <Search className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-          </div>
-
-          <div className="max-w-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl rounded-tl-none px-5 py-4 shadow-sm">
-            <h4 className="font-roboto font-bold text-amber-700 dark:text-amber-400 mb-1">
-              {errorTitle}
-            </h4>
-            <p className="font-inter text-sm text-amber-600 dark:text-amber-300 mb-3">
-              {errorMsg}
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRetry}
-              disabled={isRetrying}
-              className="border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 gap-2"
-            >
-              <RefreshCw className={`w-4 h-4 ${isRetrying ? 'animate-spin' : ''}`} />
-              {isRetrying ? 'Searching...' : 'Try Different Request'}
-            </Button>
-          </div>
-        </motion.div>
-      );
-    }
+    const Icon = isNoResults ? SearchX : AlertTriangle;
+    const tone = isNoResults ? 'text-warn border-warn/35 bg-warn/[0.08]' : 'text-danger border-danger/35 bg-danger/[0.08]';
 
     return (
       <motion.div
-        className="flex justify-start mb-6"
-        initial="hidden"
-        animate="visible"
-        variants={fadeInUp}
-        role="alert"
-        aria-label="Error message"
+        {...enter}
+        className="flex justify-start"
+        role={isNoResults ? 'status' : 'alert'}
+        aria-label={isNoResults ? 'No results message' : 'Error message'}
       >
-        <div className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0 mt-1 mr-3">
-          <AlertTriangle className="w-5 h-5 text-red-500 dark:text-red-400" />
-        </div>
-
-        <div className="max-w-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-2xl rounded-tl-none px-5 py-4 shadow-sm">
-          <h4 className="font-roboto font-bold text-red-700 dark:text-red-400 mb-1">
-            {errorTitle}
-          </h4>
-          <p className="font-inter text-sm text-red-600 dark:text-red-300 mb-3">
-            {errorMsg}
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRetry}
-            disabled={isRetrying}
-            className="border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 gap-2"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRetrying ? 'animate-spin' : ''}`} />
-            {isRetrying ? 'Retrying...' : 'Try Again'}
-          </Button>
+        <div className={`max-w-lg w-full rounded-card border px-4 py-4 ${tone}`}>
+          <div className="flex items-start gap-3">
+            <Icon className="w-5 h-5 mt-0.5 shrink-0" />
+            <div className="min-w-0">
+              <h4 className="text-[15px] font-bold text-ink">{isNoResults ? t.chat.noResultsTitle : errorTitle}</h4>
+              <p className="text-[14px] text-muted mt-1">{errorMsg}</p>
+              <button
+                type="button"
+                onClick={handleRetry}
+                disabled={isRetrying}
+                className="ps-chip mt-3 disabled:opacity-60"
+              >
+                <RefreshCw className={`w-4 h-4 ${isRetrying ? 'animate-spin' : ''}`} />
+                {isNoResults
+                  ? (isRetrying ? t.chat.searching : t.chat.tryDifferent)
+                  : (isRetrying ? t.chat.retrying : t.chat.tryAgain)}
+              </button>
+            </div>
+          </div>
         </div>
       </motion.div>
     );
   }
-
-
 
   const suggestionCard = message.wardrobeSuggestion && onAddToWardrobe && onDismissSuggestion && (
     <WardrobeSuggestionCard suggestion={message.wardrobeSuggestion} onAdd={onAddToWardrobe} onDismiss={onDismissSuggestion} />
@@ -170,59 +125,40 @@ const ChatMessage = ({ message, onExplainOutfit, isLoadingExplanation, onRetry, 
 
   if (message.role === 'user') {
     return (
-      <motion.div
-        className="flex justify-end mb-6"
-        initial="hidden"
-        animate="visible"
-        variants={fadeInUp}
-        role="article"
-        aria-label="User message"
-      >
-        <div className="flex flex-col items-end max-w-lg">
+      <motion.div {...enter} className="flex justify-end" role="article" aria-label="User message">
+        <div className="flex flex-col items-end max-w-[85%] sm:max-w-md">
           {selectedOption ? (
-            <div className="flex flex-col items-start p-4 rounded-xl rounded-tr-none border border-primary text-left shadow-md bg-gradient-to-br from-cream-50 via-cream-100 to-primary/5 dark:from-surface-dark dark:via-surface-darker dark:to-primary/10">
-              <div className="flex items-center justify-between gap-3 w-full mb-2">
-                <span className="text-sm font-bold px-2.5 py-1 rounded-lg bg-primary/15 text-primary">
-                  {selectedOption.label}
-                </span>
-                <div className="w-7 h-7 rounded-full flex items-center justify-center bg-primary text-white">
-                  <Check className="w-4 h-4" />
-                </div>
+            <div className="rounded-[18px] rounded-tr-[6px] border border-accent/60 bg-accent/[0.12] px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Check className="w-4 h-4 text-accent shrink-0" />
+                <span className="text-[15px] font-bold">{selectedOption.label}</span>
               </div>
-              <p className="text-xs text-text-muted dark:text-stone-400 leading-snug">
-                {selectedOption.description}
-              </p>
+              <p className="text-[13px] text-muted mt-1 leading-snug">{selectedOption.description}</p>
             </div>
           ) : (
-          <div className="bg-primary text-white font-inter px-5 py-3 rounded-2xl rounded-tr-none shadow-md">
-            {message.imageUrl && (
-              <div className="mb-3">
-                <ImageAttachment imageUrl={message.imageUrl} altText="User uploaded" />
-              </div>
-            )}
-            {message.wardrobeItems && (
-              <div className="flex flex-wrap gap-2 mb-3" aria-label="Pieces from your wardrobe">
-                {message.wardrobeItems.map((piece) => (
-                  <img key={piece.id} src={piece.imageUrl} alt="Wardrobe piece"
-                    className="w-14 h-14 object-cover rounded-lg border-2 border-white/40" />
-                ))}
-              </div>
-            )}
-            {message.content}
-          </div>
+            <div className="rounded-[18px] rounded-tr-[6px] bg-raised border border-line px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap break-words">
+              {message.imageUrl && (
+                <div className="mb-2.5 -mx-1.5 mt-0.5">
+                  <ImageAttachment imageUrl={message.imageUrl} altText={t.chat.attachedImage} />
+                </div>
+              )}
+              {message.wardrobeItems && (
+                <div className="flex flex-wrap gap-2 mb-2.5" aria-label={t.chat.wardrobePieces}>
+                  {message.wardrobeItems.map((piece) => (
+                    <img key={piece.id} src={piece.imageUrl} alt={t.chat.wardrobePiece}
+                      className="w-14 h-14 object-cover rounded-chip ring-1 ring-line" />
+                  ))}
+                </div>
+              )}
+              {message.content}
+            </div>
           )}
-          <span className="text-[10px] text-gray-400 dark:text-stone-500 mt-1 mr-1">
-            {formatTime(message.timestamp)}
-          </span>
-        </div>
-        <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-surface-muted flex items-center justify-center flex-shrink-0 mt-1 ml-3">
-          <User className="w-5 h-5 text-gray-500 dark:text-stone-400" />
+          <Time date={message.timestamp} align="right" />
         </div>
       </motion.div>
     );
   }
 
-  // Handle explanation toggle
   const handleExplainClick = () => {
     if (activeOutfit?.explanation) {
       setShowExplanation(!showExplanation);
@@ -231,258 +167,66 @@ const ChatMessage = ({ message, onExplainOutfit, isLoadingExplanation, onRetry, 
     }
   };
 
-  // Calculate total price for outfit
-  const totalPrice = activeOutfit?.items.reduce((sum, item) => sum + item.price, 0) || 0;
+  const polls = isLast && (
+    <>
+      {message.budgetOptions && message.budgetOptions.length > 0 && onOptionSelect && (
+        <BudgetPoll options={message.budgetOptions} onSelect={onOptionSelect} />
+      )}
+      {message.outfitGenerationOptions && message.outfitGenerationOptions.length > 0 && onOutfitOptionSelect && (
+        <OutfitOptionPoll options={message.outfitGenerationOptions} onSelect={onOutfitOptionSelect} />
+      )}
+    </>
+  );
 
-  const handleShopAll = () => {
-    const itemsWithLinks = activeOutfit?.items.filter(item => item.link) || [];
-
-    // Open all links simultaneously
-    itemsWithLinks.forEach((item) => {
-      window.open(item.link, '_blank', 'noopener,noreferrer');
-    });
-  };
-
+  // The stylist: text without a bubble (the page is the paper), the ticket below when there is one
   return (
-    <motion.div
-      className="flex justify-start mb-8"
-      initial="hidden"
-      animate="visible"
-      variants={fadeInUp}
-      role="article"
-      aria-label="Assistant message"
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
-    >
-      {/* Avatar */}
-      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center flex-shrink-0 mt-1 mr-3 shadow-md">
-        <Sparkles className="w-4 h-4 text-white" />
-      </div>
-
-      <div className={`flex-1 min-w-0 max-w-3xl relative group`}>
-        {/* Text content */}
-        {!activeOutfit ? (
-          <div className="space-y-3">
-            <div className="bg-cream-100 dark:bg-surface-darker border border-cream-300 dark:border-surface-muted rounded-2xl rounded-tl-none px-5 py-4 shadow-sm max-w-lg relative">
-              <div className="prose prose-sm max-w-none dark:prose-invert">
-                <ReactMarkdown>{message.content}</ReactMarkdown>
-              </div>
-
-              {/* Copy button - appears on hover */}
-              {showActions && message.content && (
-                <button
-                  onClick={handleCopy}
-                  className="absolute -right-10 top-2 p-1.5 rounded-lg bg-gray-100 dark:bg-surface-muted hover:bg-gray-200 dark:hover:bg-surface-border transition-colors opacity-0 group-hover:opacity-100"
-                  title="Copy message"
-                >
-                  {copied ? (
-                    <Check className="w-4 h-4 text-green-500" />
-                  ) : (
-                    <Copy className="w-4 h-4 text-gray-500 dark:text-stone-400" />
-                  )}
-                </button>
-              )}
-            </div>
-
-            {/* Budget Poll - show if available and is last message */}
-            {message.budgetOptions && message.budgetOptions.length > 0 && onOptionSelect && isLast && (
-              <BudgetPoll
-                options={message.budgetOptions}
-                onSelect={onOptionSelect}
-              />
-            )}
-
-            {/* Outfit Option Poll - show if available and is last message */}
-            {message.outfitGenerationOptions && message.outfitGenerationOptions.length > 0 && onOutfitOptionSelect && isLast && (
-              <OutfitOptionPoll
-                options={message.outfitGenerationOptions}
-                onSelect={onOutfitOptionSelect}
-              />
-            )}
-
-            {suggestionCard}
+    <motion.div {...enter} className="flex justify-start" role="article" aria-label="Assistant message">
+      <div className="w-full min-w-0 space-y-3">
+        <div className="group relative max-w-[640px]">
+          <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-accent mb-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-accent" aria-hidden="true" />
+            {t.chat.stylist}
+          </p>
+          <div className="ps-prose text-ink">
+            <ReactMarkdown>{message.content}</ReactMarkdown>
           </div>
-        ) : (
-          <div className="space-y-3">
-            {/* Text bubble for messages with outfit - Full width to match outfit card */}
-            <div className="bg-cream-100 dark:bg-surface-darker border border-cream-300 dark:border-surface-muted rounded-2xl rounded-tl-none px-5 py-4 shadow-sm w-full">
-              <div className="prose prose-sm max-w-none dark:prose-invert">
-                <ReactMarkdown>{message.content}</ReactMarkdown>
-              </div>
-            </div>
+          {message.content && (
+            <button
+              type="button"
+              onClick={handleCopy}
+              aria-label={t.chat.copy}
+              title={t.chat.copy}
+              className="absolute -top-1 right-0 w-8 h-8 inline-flex items-center justify-center rounded-chip text-faint hover:text-ink hover:bg-raised opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+            >
+              {copied ? <Check className="w-4 h-4 text-good" /> : <Copy className="w-4 h-4" />}
+            </button>
+          )}
+        </div>
 
-            {suggestionCard}
-
-            {/* Budget Poll - show if available and is last message */}
-            {message.budgetOptions && message.budgetOptions.length > 0 && onOptionSelect && isLast && (
-              <BudgetPoll
-                options={message.budgetOptions}
-                onSelect={onOptionSelect}
-              />
-            )}
-
-            {/* Multiple Outfits Tabs */}
-            {outfits.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-                {outfits.map((_, index) => (
-                  <button
-                    key={index}
-                    onClick={() => {
-                      setActiveOutfitIndex(index);
-                      setSelectedProductIndex(null); // Reset selected product when switching outfits
-                      setShowExplanation(false); // Hide explanation when switching
-                    }}
-                    className={`
-                      px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap
-                      ${activeOutfitIndex === index
-                        ? 'bg-primary text-white shadow-md'
-                        : 'bg-cream-100 dark:bg-surface-darker text-text-medium dark:text-stone-300 border border-cream-300 dark:border-surface-muted hover:bg-cream-200 dark:hover:bg-surface-muted'
-                      }
-                    `}
-                  >
-                    Option {index + 1}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Outfit card with products */}
-            <div className="bg-cream-100 dark:bg-surface-darker border border-cream-300 dark:border-surface-muted rounded-2xl p-5 shadow-lg shadow-gray-100/50 dark:shadow-black/20 w-full">
-              {/* Outfit Header & Gallery Toggle */}
-              <div className="flex items-center justify-between mb-4 px-1">
-                <div className="flex items-center gap-2">
-                  <div className="w-1 h-4 bg-primary rounded-full"></div>
-                  <h3 className="text-sm font-bold text-gray-800 dark:text-white uppercase tracking-wide">
-                    {outfits.length > 1 ? `Recommended Outfit #${activeOutfitIndex + 1}` : 'Recommended Outfit'}
-                  </h3>
-                </div>
-                <button
-                  onClick={() => setSelectedProductIndex(0)}
-                  className="flex items-center gap-1.5 text-xs font-medium text-primary dark:text-primary-light hover:text-primary-hover dark:hover:text-primary transition-all bg-primary/5 hover:bg-primary/10 dark:bg-primary/10 dark:hover:bg-primary/20 px-3 py-1.5 rounded-full group"
-                  aria-label="View product gallery"
-                >
-                  <Maximize2 className="w-3 h-3 group-hover:scale-110 transition-transform" />
-                  View Gallery
-                </button>
-              </div>
-
-              {/* Product Cards - Responsive Grid */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
-                {activeOutfit.items.map((item, index) => (
-                  <ProductCard
-                    key={item.id}
-                    item={item}
-                    onImageClick={() => setSelectedProductIndex(index)}
-                  />
-                ))}
-              </div>
-
-              {/* Outfit Summary Box */}
-              <div className="flex items-center justify-between mb-5 p-4 bg-gray-50 dark:bg-surface-muted/30 rounded-xl border border-gray-100 dark:border-surface-muted">
-                <div className="flex items-center gap-6">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-gray-500 dark:text-stone-400 font-bold uppercase tracking-wider mb-0.5">Estimated Total</span>
-                    <span className="text-xl font-bold text-gray-900 dark:text-white">€{totalPrice.toFixed(2)}</span>
-                  </div>
-                  {typeof activeOutfit.remainingBudget === 'number' && (
-                    <div className="flex flex-col border-l border-gray-200 dark:border-gray-600 pl-6">
-                      <span className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider mb-0.5">
-                        {activeOutfit.remainingBudget >= 0 ? 'Remaining Budget' : 'Over Budget'}
-                      </span>
-                      <span className={`text-xl font-bold ${activeOutfit.remainingBudget >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                        €{Math.abs(activeOutfit.remainingBudget).toFixed(2)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handleShopAll}
-                  className="gap-2 shadow-md hover:shadow-lg transition-all duration-200"
-                >
-                  <ShoppingBag className="w-4 h-4" />
-                  Shop All Items
-                </Button>
-              </div>
-
-              {/* Product Carousel Modal */}
-              <ProductCarousel
-                isOpen={selectedProductIndex !== null}
-                onClose={() => setSelectedProductIndex(null)}
-                items={activeOutfit.items}
-                initialIndex={selectedProductIndex || 0}
-              />
-
-              {/* Actions: Explain & Select */}
-              <div className="flex justify-start gap-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleExplainClick}
-                  disabled={isLoadingExplanation && !activeOutfit.explanation}
-                  className={`
-                    transition-all duration-200 rounded-full px-4 py-2 font-semibold text-sm flex items-center gap-2 cursor-pointer hover:scale-105
-                    ${showExplanation
-                      ? 'bg-primary text-white border-primary hover:bg-primary-hover'
-                      : 'text-primary dark:text-primary-light border-primary/50 hover:bg-primary/10 dark:hover:bg-primary/20'
-                    }
-                  `}
-                  aria-label={showExplanation ? "Hide explanation" : activeOutfit.explanation ? "Show explanation" : "Explain this outfit"}
-                >
-                  {isLoadingExplanation && !activeOutfit.explanation ? (
-                    <>
-                      <span>Generating</span>
-                      <div className="flex gap-1">
-                        <div className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <div className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <div className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                      </div>
-                    </>
-                  ) : (
-                    <span>{showExplanation ? 'Hide Explanation' : activeOutfit.explanation ? 'Show Explanation' : 'Why this outfit?'}</span>
-                  )}
-                </Button>
-
-                {onSelectOutfit && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onSelectOutfit(activeOutfitIndex)}
-                    className={`
-                      transition-all duration-200 rounded-full px-4 py-2 font-semibold text-sm flex items-center gap-2 cursor-pointer hover:scale-105
-                      ${selectedOutfitIndex === activeOutfitIndex
-                        ? 'bg-primary text-white border-primary hover:bg-primary-hover'
-                        : 'text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700'
-                      }
-                    `}
-                  >
-                    {selectedOutfitIndex === activeOutfitIndex ? (
-                      <>
-                        <Check className="w-4 h-4" />
-                        <span>Selected for modification</span>
-                      </>
-                    ) : (
-                      <span>Select to modify</span>
-                    )}
-                  </Button>
-                )}
-              </div>
-
-              {/* Explanation - Show if it exists and is toggled on */}
-              <OutfitExplanation
-                explanation={activeOutfit.explanation || ''}
-                isVisible={showExplanation}
-                onAnimationComplete={onContentChange}
-              />
-            </div>
-          </div>
+        {!activeOutfit && polls}
+        {suggestionCard}
+        {activeOutfit && message.budgetOptions && message.budgetOptions.length > 0 && onOptionSelect && isLast && (
+          <BudgetPoll options={message.budgetOptions} onSelect={onOptionSelect} />
         )}
 
-        {/* Timestamp for assistant messages */}
-        <span className="text-[10px] text-gray-400 dark:text-stone-500 mt-1 ml-1 block">
-          {formatTime(message.timestamp)}
-        </span>
+        {activeOutfit && (
+          <OutfitTicket
+            outfits={outfits}
+            activeIndex={activeOutfitIndex}
+            onActiveIndexChange={(index) => {
+              setActiveOutfitIndex(index);
+              setShowExplanation(false);
+            }}
+            showExplanation={showExplanation}
+            isLoadingExplanation={isLoadingExplanation}
+            onExplain={handleExplainClick}
+            onSelect={onSelectOutfit ? () => onSelectOutfit(activeOutfitIndex) : undefined}
+            isSelected={selectedOutfitIndex === activeOutfitIndex}
+            onContentChange={onContentChange}
+          />
+        )}
+
+        <Time date={message.timestamp} />
       </div>
     </motion.div>
   );

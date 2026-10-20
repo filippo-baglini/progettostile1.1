@@ -4,7 +4,6 @@ type Theme = 'dark' | 'light';
 
 interface ThemeProviderProps {
     children: React.ReactNode;
-    defaultTheme?: Theme;
     storageKey?: string;
 }
 
@@ -16,88 +15,55 @@ interface ThemeProviderState {
 
 const ThemeContext = createContext<ThemeProviderState | undefined>(undefined);
 
-// Theme transition duration (must match CSS variable)
-const THEME_TRANSITION_DURATION = 400;
+// Matches the transition length in index.css (.theme-transitioning)
+const THEME_TRANSITION_DURATION = 300;
 
-// Helper function to apply theme with premium transition
-const applyTheme = (theme: Theme, enableTransition = true) => {
+const applyTheme = (theme: Theme, enableTransition: boolean) => {
     const root = window.document.documentElement;
-    
-    if (enableTransition) {
-        // Enable synchronized transition on all elements
-        root.classList.add('theme-transitioning');
-    }
-    
-    // Apply theme class
-    root.classList.remove('light', 'dark');
-    root.classList.add(theme);
-    
-    if (enableTransition) {
-        // Remove transition class after animation completes
-        setTimeout(() => {
-            root.classList.remove('theme-transitioning');
-        }, THEME_TRANSITION_DURATION);
-    }
+    if (enableTransition) root.classList.add('theme-transitioning');
+    root.classList.toggle('dark', theme === 'dark');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0c0907' : '#f3eee8');
+    if (enableTransition) setTimeout(() => root.classList.remove('theme-transitioning'), THEME_TRANSITION_DURATION);
 };
 
-// Get initial theme synchronously (prevents flash)
-const getInitialTheme = (storageKey: string, defaultTheme: Theme): Theme => {
-    if (typeof window === 'undefined') return defaultTheme;
-    
-    const stored = localStorage.getItem(storageKey) as Theme | null;
-    if (stored === 'dark' || stored === 'light') {
-        return stored;
-    }
-    
-    // Check system preference
-    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+// Dark is the default for everyone (like the sibling apps); light only when chosen.
+// Not read from prefers-color-scheme: the user's choice is the only input.
+const getInitialTheme = (storageKey: string): Theme => {
+    try {
+        return localStorage.getItem(storageKey) === 'light' ? 'light' : 'dark';
+    } catch {
         return 'dark';
     }
-    
-    return defaultTheme;
 };
 
 export function ThemeProvider({
     children,
-    defaultTheme = 'light',
     storageKey = 'vite-ui-theme',
 }: ThemeProviderProps) {
     const [theme, setThemeState] = useState<Theme>(() => {
-        const initial = getInitialTheme(storageKey, defaultTheme);
-        // Apply immediately during initialization (no transition on first load)
-        if (typeof window !== 'undefined') {
-            applyTheme(initial, false);
-        }
+        const initial = getInitialTheme(storageKey);
+        if (typeof window !== 'undefined') applyTheme(initial, false);
         return initial;
     });
 
-    // Use useLayoutEffect to apply theme synchronously before paint
     useLayoutEffect(() => {
-        // Skip on initial mount (already applied in useState)
-        const root = document.documentElement;
-        if (!root.classList.contains(theme)) {
-            applyTheme(theme, true);
-        }
+        const isDark = document.documentElement.classList.contains('dark');
+        if (isDark !== (theme === 'dark')) applyTheme(theme, true);
     }, [theme]);
 
     const setTheme = useCallback((newTheme: Theme) => {
-        localStorage.setItem(storageKey, newTheme);
+        try {
+            localStorage.setItem(storageKey, newTheme);
+        } catch { /* storage blocked: the choice lasts this visit */ }
         setThemeState(newTheme);
     }, [storageKey]);
 
     const toggleTheme = useCallback(() => {
-        const newTheme = theme === 'dark' ? 'light' : 'dark';
-        setTheme(newTheme);
+        setTheme(theme === 'dark' ? 'light' : 'dark');
     }, [theme, setTheme]);
 
-    const value = {
-        theme,
-        setTheme,
-        toggleTheme,
-    };
-
     return (
-        <ThemeContext.Provider value={value}>
+        <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
             {children}
         </ThemeContext.Provider>
     );
@@ -106,9 +72,7 @@ export function ThemeProvider({
 // eslint-disable-next-line react-refresh/only-export-components
 export const useTheme = () => {
     const context = useContext(ThemeContext);
-
     if (context === undefined)
         throw new Error('useTheme must be used within a ThemeProvider');
-
     return context;
 }

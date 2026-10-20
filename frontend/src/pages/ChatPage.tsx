@@ -10,7 +10,6 @@ import { useWardrobePicks } from '../hooks/useWardrobePicks';
 import { Shirt } from 'lucide-react';
 import Sidebar from '../components/layout/Sidebar';
 import Header from '../components/layout/Header';
-import HamburgerMenu from '../components/ui/HamburgerMenu';
 import ChatEmptyState from '../components/chat/ChatEmptyState';
 import ChatMessageSkeleton from '../components/chat/ChatMessageSkeleton';
 import ChatMessage from '../components/chat/ChatMessage';
@@ -19,7 +18,6 @@ import DragDropOverlay from '../components/chat/DragDropOverlay';
 import GenderSelector from '../components/chat/GenderSelector';
 import WardrobePicker, { WardrobeAttachments } from '../components/chat/WardrobePicker';
 import TypingIndicator from '../components/ui/TypingIndicator';
-import ParticleBackground from '../components/ui/ParticleBackground';
 import ScrollToBottomButton from '../components/ui/ScrollToBottomButton';
 import KeyboardShortcutsHelper from '../components/ui/KeyboardShortcutsHelper';
 import { chatService } from '../services/chatService';
@@ -30,10 +28,12 @@ import { beautifyUsername } from '../utils/stringUtils';
 import { showToast } from '../utils/toast';
 import type { ChatHistory, BudgetOption, WardrobeDetails } from '../types';
 import { budgetReply, findSelectedOption } from '../utils/optionReply';
+import { useT } from '../i18n';
 
 type GuestGender = 'male' | 'female' | 'non-binary';
 
 const ChatPage = () => {
+  const t = useT();
   const [inputMessage, setInputMessage] = useState('');
   const [chatHistory, setChatHistory] = useState<ChatHistory[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
@@ -51,7 +51,7 @@ const ChatPage = () => {
   // Auth context
   const { isAuthenticated, isLoading: isAuthLoading, user, updateUser } = useAuth();
   const isLoggedIn = isAuthenticated;
-  let userName = user?.name || 'Guest';
+  let userName = user?.name || '';
   userName = beautifyUsername(userName);
 
   // Handle guest gender selection
@@ -71,7 +71,7 @@ const ChatPage = () => {
       await preferencesService.updatePreferences(preferences);
       updateUser({ ...user, preferences });
     } catch {
-      showToast.error('Could not save your clothing preference');
+      showToast.error(t.chat.gender.saveFailed);
     }
   };
 
@@ -330,9 +330,9 @@ const ChatPage = () => {
       const { item, outfitPiece, outfitIndexes } = await wardrobeService.addFromChat(messageId, section, details);
       wardrobe.addItem(item);
       resolveWardrobeSuggestion(messageId, { outfitPiece, outfitIndexes });
-      showToast.success(outfitIndexes.length > 0 ? 'Added to your wardrobe and to the outfit' : 'Added to your wardrobe');
+      showToast.success(outfitIndexes.length > 0 ? t.chat.addedToWardrobeAndOutfit : t.chat.addedToWardrobe);
     } catch (error) {
-      showToast.error(apiErrorMessage(error, 'Failed to add to your wardrobe'));
+      showToast.error(apiErrorMessage(error, t.chat.addToWardrobeFailed));
     }
   };
 
@@ -352,16 +352,7 @@ const ChatPage = () => {
   const showEmptyState = messages.length === 0;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background dark:bg-surface-dark relative">
-      {/* Particle Background */}
-      <ParticleBackground />
-      {/* Hamburger Menu - Mobile Only */}
-      <HamburgerMenu
-        isOpen={isSidebarOpen}
-        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-      />
-
-      {/* Sidebar */}
+    <div className="flex h-dvh overflow-hidden bg-ground">
       <Sidebar
         chatHistory={chatHistory}
         currentChatId={currentChatId}
@@ -382,7 +373,7 @@ const ChatPage = () => {
             );
           } catch (error) {
             console.error('Failed to rename chat:', error);
-            showToast.error('Could not rename the conversation');
+            showToast.error(t.chat.renameFailed);
           }
         }}
         onDeleteChat={async (chatId) => {
@@ -398,25 +389,26 @@ const ChatPage = () => {
             }
           } catch (error) {
             console.error('Failed to delete chat:', error);
-            showToast.error('Could not delete the conversation');
+            showToast.error(t.chat.deleteFailed);
           }
         }}
       />
 
-      {/* Main Content */}
       <div
-        className="flex-1 flex flex-col relative"
+        className="flex-1 min-w-0 flex flex-col relative"
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
-        {/* Drag and Drop Overlay */}
         {isDragging && <DragDropOverlay />}
 
-        <Header chatTitle={chatHistory.find(c => c.id === currentChatId)?.title || currentChatTitle} />
+        <Header
+          chatTitle={chatHistory.find(c => c.id === currentChatId)?.title || currentChatTitle}
+          onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)}
+        />
 
-        {/* Gender Selector for guests, and for users who haven't set one (changed later in the profile) */}
+        {/* Who the clothes are for: guests, and users who haven't set it (changed later in the profile) */}
         {(!isAuthenticated || !userGender) && (
           <GenderSelector
             selectedGender={isAuthenticated ? null : guestGender}
@@ -425,11 +417,10 @@ const ChatPage = () => {
           />
         )}
 
-        {/* Messages Area */}
         <div
           ref={scrollRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto px-4 py-6"
+          className="flex-1 overflow-y-auto px-4 sm:px-6"
         >
           {showEmptyState && !isFetching ? (
             <ChatEmptyState
@@ -439,12 +430,10 @@ const ChatPage = () => {
               suggestionsDisabled={needsGender}
             />
           ) : (
-            <div className="max-w-[992px] mx-auto space-y-6">
+            <div className="max-w-column mx-auto py-6 space-y-7">
               {isFetching ? (
-                // Show skeletons while fetching history
                 <ChatMessageSkeleton />
               ) : (
-                // Show actual messages
                 messages.map((message, index) => (
                   <ChatMessage
                     key={message.id}
@@ -466,23 +455,17 @@ const ChatPage = () => {
               )}
 
               {isLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-gray-50 dark:bg-surface-darker border border-border dark:border-surface-muted px-6 py-4 rounded-2xl flex items-center gap-3">
-                    <span className="text-sm font-inter text-text-medium dark:text-stone-300">
-                      {loadingStatus || 'AI is thinking'}
-                    </span>
-                    <TypingIndicator />
-                  </div>
+                <div className="flex items-center gap-2.5 text-[14px] text-muted" role="status">
+                  <TypingIndicator />
+                  <span>{loadingStatus || t.chat.thinking}</span>
                 </div>
               )}
             </div>
           )}
         </div>
 
-        {/* Scroll to Bottom Button */}
         <ScrollToBottomButton show={showScrollButton} onClick={() => scrollToBottom()} />
 
-        {/* Input Area */}
         <ChatInput
           ref={inputRef}
           inputMessage={inputMessage}
@@ -494,19 +477,19 @@ const ChatPage = () => {
           onSendMessage={handleSendMessage}
           isLoading={isLoading}
           disabled={needsGender}
-          disabledMessage={needsGender ? "Please select your clothing preference above to start chatting" : undefined}
+          disabledMessage={needsGender ? t.chat.disabledGender : undefined}
           hasAttachments={wardrobe.picked.length > 0}
           toolbarSlot={wardrobe.hasWardrobe && (
             <button
               onClick={() => setIsWardrobeOpen(true)}
-              className="relative mb-2 text-primary/70 hover:text-primary transition-colors p-1.5 hover:bg-primary/10 dark:hover:bg-primary/20 rounded-full border border-primary/20 hover:border-primary/40"
-              title="Use your wardrobe"
+              className="press relative w-10 h-10 shrink-0 inline-flex items-center justify-center rounded-field text-muted hover:text-ink hover:bg-raised transition-colors"
+              title={t.chat.useWardrobe}
               type="button"
-              aria-label="Use your wardrobe"
+              aria-label={t.chat.useWardrobe}
             >
               <Shirt className="w-5 h-5" />
               {wardrobe.picked.length > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-primary text-white text-[10px] font-bold flex items-center justify-center">
+                <span className="absolute top-0.5 right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-on-accent text-[11px] font-bold tabular flex items-center justify-center">
                   {wardrobe.picked.length}
                 </span>
               )}
@@ -532,12 +515,11 @@ const ChatPage = () => {
           onOnlyWardrobeChange={wardrobe.setOnlyWardrobe}
         />
 
-        {/* Accessibility: Announce new messages to screen readers */}
+        {/* Accessibility: announce new messages to screen readers */}
         <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-          {messages.length > 0 && `${messages.length} messages in conversation`}
+          {messages.length > 0 && t.chat.messagesCount(messages.length)}
         </div>
 
-        {/* Keyboard Shortcuts Helper - always visible */}
         <KeyboardShortcutsHelper />
       </div>
     </div>

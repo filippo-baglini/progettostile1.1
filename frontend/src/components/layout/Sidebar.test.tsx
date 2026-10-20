@@ -10,6 +10,8 @@ vi.mock('../../context/AuthContext', () => ({
     useAuth: vi.fn(),
 }));
 
+vi.mock('../ui/ThemeToggle', () => ({ default: () => null }));
+
 // Mock Button component
 vi.mock('../ui/Button', () => ({
     default: ({ children, onClick, className, ...props }: any) => (
@@ -58,9 +60,9 @@ describe('Sidebar', () => {
             </BrowserRouter>
         );
 
-        expect(screen.getByText('Chat History')).toBeInTheDocument();
-        expect(screen.getByText('Log in or sign up to save your conversations.')).toBeInTheDocument();
-        expect(screen.getByText('New Chat')).toBeInTheDocument();
+        expect(screen.getByText('Save your chats')).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Log in' })).toHaveAttribute('href', '/login');
+        expect(screen.getByRole('button', { name: 'New chat' })).toBeInTheDocument();
     });
 
     it('renders correctly when authenticated with history', () => {
@@ -78,7 +80,7 @@ describe('Sidebar', () => {
             </BrowserRouter>
         );
 
-        expect(screen.getByText('HISTORY')).toBeInTheDocument();
+        expect(screen.getByText('Conversations')).toBeInTheDocument();
         expect(screen.getByText('Chat 1')).toBeInTheDocument();
         expect(screen.getByText('Chat 2')).toBeInTheDocument();
     });
@@ -116,7 +118,7 @@ describe('Sidebar', () => {
             </BrowserRouter>
         );
 
-        fireEvent.click(screen.getByText('New Chat'));
+        fireEvent.click(screen.getByRole('button', { name: 'New chat' }));
         expect(mockOnNewChat).toHaveBeenCalled();
     });
 
@@ -156,7 +158,7 @@ describe('Sidebar', () => {
             </BrowserRouter>
         );
 
-        const chat1Button = screen.getByText('Chat 1').closest('button');
-        expect(chat1Button).toHaveClass('bg-primary/10');
+        expect(screen.getByRole('button', { name: 'Open chat: Chat 1' })).toHaveAttribute('aria-current', 'page');
+        expect(screen.getByRole('button', { name: 'Open chat: Chat 2' })).not.toHaveAttribute('aria-current');
     });
 });

@@ -30,7 +30,7 @@ describe('Header', () => {
                 <Header />
             </BrowserRouter>
         );
-        expect(screen.getByText('StyleFinder AI')).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Progetto Stile, home' })).toHaveAttribute('href', '/');
     });
 
     it('avatar links straight to the profile', () => {

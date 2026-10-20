@@ -1,118 +1,61 @@
-import { motion } from 'framer-motion';
-import { ArrowLeft, MessageSquare, User, Settings, Sparkles } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { fadeInUp, staggerContainer } from '../utils/animations';
+import { Link } from 'react-router-dom';
+import { ArrowRight } from 'lucide-react';
+import Header from '../components/layout/Header';
+import { useT } from '../i18n';
 
+// A short guide: one reading column, one heading per thing you can do
 const HowToUsePage = () => {
-    const navigate = useNavigate();
-
-    const sections = [
-        {
-            icon: <MessageSquare className="w-6 h-6 text-primary" />,
-            title: "Chat with AI",
-            description: "Start a conversation with our AI stylist. Ask for outfit recommendations, style advice, or specific clothing items. The AI understands context and your preferences."
-        },
-        {
-            icon: <User className="w-6 h-6 text-primary" />,
-            title: "Create Your Profile",
-            description: "Sign up to save your chat history and personalize your experience. Your profile stores your basic information and allows you to manage your account security."
-        },
-        {
-            icon: <Settings className="w-6 h-6 text-primary" />,
-            title: "Set Preferences",
-            description: "Tell us what you like! In the Preferences section, you can select your favorite styles, colors, brands, and more. The AI uses this information to tailor its recommendations specifically to you."
-        },
-        {
-            icon: <Sparkles className="w-6 h-6 text-primary" />,
-            title: "Get Recommendations",
-            description: "Receive curated product suggestions with images and details. You can ask follow-up questions to refine the results until you find exactly what you're looking for."
-        }
+    const t = useT();
+    const mod = typeof navigator !== 'undefined' && /mac/i.test(navigator.platform) ? '⌘' : 'Ctrl';
+    const shortcuts: [string[], string][] = [
+        [[mod, 'K'], t.shortcuts.newChat],
+        [[mod, 'I'], t.shortcuts.focus],
+        [['Enter'], t.shortcuts.send],
+        [['Shift', 'Enter'], t.shortcuts.newline],
+        [['?'], t.shortcuts.show],
     ];
 
     return (
-        <div className="min-h-screen bg-background dark:bg-surface-dark p-6 md:p-12">
-            <div className="max-w-4xl mx-auto">
-                {/* Header */}
-                <motion.div
-                    className="flex items-center gap-4 mb-12"
-                    initial="hidden"
-                    animate="visible"
-                    variants={fadeInUp}
-                >
-                    <button
-                        onClick={() => navigate(-1)}
-                        className="p-2 hover:bg-gray-100 dark:hover:bg-surface-darker rounded-full transition-colors"
-                    >
-                        <ArrowLeft className="w-6 h-6 text-text-dark dark:text-white" />
-                    </button>
-                    <div>
-                        <h1 className="text-3xl md:text-4xl font-roboto font-bold text-text-dark dark:text-white mb-2">
-                            How to Use StyleFinder
-                        </h1>
-                        <p className="text-text-medium dark:text-stone-400">
-                            Your comprehensive guide to getting the most out of your personal AI stylist.
-                        </p>
-                    </div>
-                </motion.div>
+        <div className="min-h-dvh bg-ground">
+            <Header backTo="/chat" />
 
-                {/* Content Grid */}
-                <motion.div
-                    className="grid gap-6 md:grid-cols-2"
-                    variants={staggerContainer}
-                    initial="hidden"
-                    animate="visible"
-                >
-                    {sections.map((section, index) => (
-                        <motion.div
-                            key={index}
-                            variants={fadeInUp}
-                            className="bg-cream-100 dark:bg-surface-darker p-6 rounded-2xl border border-cream-300 dark:border-surface-muted shadow-sm hover:shadow-md transition-shadow duration-300"
-                        >
-                            <div className="p-3 bg-primary/10 rounded-xl w-fit mb-4">
-                                {section.icon}
-                            </div>
-                            <h3 className="text-xl font-bold text-text-dark dark:text-white mb-3">
-                                {section.title}
-                            </h3>
-                            <p className="text-text-medium dark:text-stone-400 leading-relaxed">
-                                {section.description}
-                            </p>
-                        </motion.div>
+            <main className="max-w-[680px] mx-auto px-4 pt-10 pb-20">
+                <h1 className="text-[34px] sm:text-[40px] font-black tracking-[-0.04em] leading-[1.05]">{t.howto.title}</h1>
+                <p className="text-[17px] text-muted leading-relaxed mt-3">{t.howto.lead}</p>
+
+                <div className="mt-10 space-y-9">
+                    {t.howto.sections.map((section) => (
+                        <section key={section.title}>
+                            <h2 className="text-[20px] font-extrabold tracking-[-0.02em]">{section.title}</h2>
+                            <p className="text-[16px] text-muted leading-[1.65] mt-2">{section.body}</p>
+                        </section>
                     ))}
-                </motion.div>
+                </div>
 
-                {/* FAQ / Tips Section */}
-                <motion.div
-                    className="mt-12 bg-primary/5 dark:bg-primary/10 rounded-3xl p-8 border border-primary/10"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.4 }}
+                <section className="mt-12">
+                    <h2 className="text-[20px] font-extrabold tracking-[-0.02em]">{t.howto.tipsTitle}</h2>
+                    <dl className="ps-card mt-4 divide-y divide-[var(--line)]">
+                        {shortcuts.map(([keys, label]) => (
+                            <div key={label} className="flex items-center justify-between gap-4 px-5 py-3">
+                                <dt className="text-[15px] text-muted">{label}</dt>
+                                <dd className="flex items-center gap-1">
+                                    {keys.map((key) => (
+                                        <kbd key={key} className="inline-flex min-w-[28px] justify-center px-1.5 py-0.5 text-[12.5px] font-semibold bg-raised border border-line rounded-[6px]">{key}</kbd>
+                                    ))}
+                                </dd>
+                            </div>
+                        ))}
+                    </dl>
+                </section>
+
+                <Link
+                    to="/chat"
+                    className="press group inline-flex items-center gap-2 min-h-[52px] px-5 mt-12 rounded-[15px] bg-accent text-on-accent text-[16px] font-semibold hover:bg-accent-strong transition-colors"
                 >
-                    <h2 className="text-2xl font-bold text-text-dark dark:text-white mb-6">
-                        Pro Tips
-                    </h2>
-                    <ul className="space-y-4">
-                        <li className="flex items-start gap-3">
-                            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-sm font-bold">1</span>
-                            <p className="text-text-dark dark:text-stone-300">
-                                <strong>Be specific:</strong> The more details you provide (occasion, weather, budget), the better the recommendations.
-                            </p>
-                        </li>
-                        <li className="flex items-start gap-3">
-                            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-sm font-bold">2</span>
-                            <p className="text-text-dark dark:text-stone-300">
-                                <strong>Update often:</strong> As your style evolves, update your preferences to keep recommendations fresh.
-                            </p>
-                        </li>
-                        <li className="flex items-start gap-3">
-                            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-sm font-bold">3</span>
-                            <p className="text-text-dark dark:text-stone-300">
-                                <strong>Give feedback:</strong> Tell the AI what you like or dislike about its suggestions to help it learn.
-                            </p>
-                        </li>
-                    </ul>
-                </motion.div>
-            </div>
+                    {t.howto.start}
+                    <ArrowRight className="w-[18px] h-[18px] group-hover:translate-x-0.5 transition-transform" />
+                </Link>
+            </main>
         </div>
     );
 };

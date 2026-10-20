@@ -3,7 +3,13 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import ResetPasswordPage from './ResetPasswordPage';
 import { authService } from '../services/authService';
-import { PASSWORD_HINT } from '../utils/password';
+import { t } from '../i18n';
+
+const PASSWORD_HINT = t().auth.passwordHint;
+
+vi.mock('../context/ThemeContext', () => ({
+    useTheme: () => ({ theme: 'dark', setTheme: vi.fn(), toggleTheme: vi.fn() }),
+}));
 
 vi.mock('../services/authService', () => ({ authService: { setNewPassword: vi.fn() } }));
 vi.mock('../components/ui/ParticleBackground', () => ({ default: () => null }));

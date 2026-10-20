@@ -1,50 +1,47 @@
-import { forwardRef, useState } from 'react';
+import { forwardRef, useId, useState } from 'react';
 import type { InputHTMLAttributes } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
+import { useT } from '../../i18n';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
+  hint?: string;
   error?: string;
 }
 
 const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, className = '', type = 'text', ...props }, ref) => {
+  ({ label, hint, error, className = '', type = 'text', id, ...props }, ref) => {
     const [showPassword, setShowPassword] = useState(false);
+    const t = useT();
+    const autoId = useId();
+    const inputId = id ?? autoId;
     const isPassword = type === 'password';
 
     return (
       <div className="w-full">
-        {label && (
-          <label className="block text-[13px] md:text-[14px] font-roboto font-bold text-text-medium mb-1.5 dark:text-stone-300">
-            {label}
-          </label>
-        )}
+        {label && <label htmlFor={inputId} className="ps-label">{label}</label>}
         <div className="relative">
           <input
             ref={ref}
+            id={inputId}
             type={isPassword ? (showPassword ? 'text' : 'password') : type}
-            className={`w-full px-4 py-3 min-h-[44px] font-inter text-[13px] md:text-[14px] border rounded-[20px] focus-ring hover:border-primary/50 touch-manipulation bg-cream-50 dark:bg-surface-darker border-cream-400 dark:border-surface-muted dark:text-white ${error ? 'border-red-500 focus:ring-red-500' : ''
-              } ${className} ${isPassword ? 'pr-12' : ''}`}
+            aria-invalid={error ? true : undefined}
+            className={`ps-field ${error ? '!border-danger' : ''} ${isPassword ? 'pr-12' : ''} ${className}`}
             {...props}
           />
           {isPassword && (
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors focus:outline-none"
-              aria-label={showPassword ? "Hide password" : "Show password"}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 w-9 h-9 inline-flex items-center justify-center rounded-chip text-faint hover:text-ink transition-colors"
+              aria-label={showPassword ? t.auth.hidePassword : t.auth.showPassword}
             >
-              {showPassword ? (
-                <EyeOff className="w-5 h-5" />
-              ) : (
-                <Eye className="w-5 h-5" />
-              )}
+              {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
             </button>
           )}
         </div>
-        {error && (
-          <p className="mt-1 text-sm font-inter text-red-500">{error}</p>
-        )}
+        {hint && !error && <p className="mt-1.5 text-[12.5px] text-muted">{hint}</p>}
+        {error && <p className="mt-1.5 text-[13px] font-medium text-danger">{error}</p>}
       </div>
     );
   }

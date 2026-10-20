@@ -100,6 +100,6 @@ describe('Modal', () => {
 
         rerender(<Modal {...defaultProps} isOpen={false} />);
 
-        expect(document.body.style.overflow).toBe('unset');
+        expect(document.body.style.overflow).toBe('');
     });
 });

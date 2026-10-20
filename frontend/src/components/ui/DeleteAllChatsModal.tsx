@@ -1,7 +1,7 @@
-import { motion } from 'framer-motion';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquareX } from 'lucide-react';
 import Modal from './Modal';
 import Button from './Button';
+import { useT } from '../../i18n';
 
 interface DeleteAllChatsModalProps {
     isOpen: boolean;
@@ -11,60 +11,24 @@ interface DeleteAllChatsModalProps {
 }
 
 const DeleteAllChatsModal = ({ isOpen, onClose, onConfirm, isDeleting }: DeleteAllChatsModalProps) => {
+    const t = useT();
     const handleClose = () => {
-        if (!isDeleting) {
-            onClose();
-        }
+        if (!isDeleting) onClose();
     };
 
     return (
-        <Modal
-            isOpen={isOpen}
-            onClose={handleClose}
-            className="max-w-md w-full p-6"
-        >
-            <div className="text-center">
-                <motion.div
-                    className="w-16 h-16 bg-orange-50 dark:bg-orange-900/20 rounded-2xl flex items-center justify-center mx-auto mb-6"
-                    animate={{
-                        rotate: [0, -10, 10, -10, 10, 0],
-                        scale: [1, 1.1, 1]
-                    }}
-                    transition={{
-                        duration: 0.5,
-                        delay: 0.2,
-                        ease: "easeInOut"
-                    }}
-                >
-                    <MessageSquare className="w-8 h-8 text-orange-500" />
-                </motion.div>
+        <Modal isOpen={isOpen} onClose={handleClose} label={t.modals.deleteChatsTitle} className="w-full sm:max-w-md p-6">
+            <MessageSquareX className="w-7 h-7 text-danger mb-4" />
+            <h3 className="text-[22px] font-extrabold tracking-[-0.02em] mb-2 pr-8">{t.modals.deleteChatsTitle}</h3>
+            <p className="text-[15px] text-muted mb-6">{t.modals.deleteChatsBody}</p>
 
-                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                    Delete All Conversations?
-                </h3>
-
-                <p className="text-gray-500 dark:text-stone-400 mb-6">
-                    This will permanently delete all your chat history and conversations. This action cannot be undone.
-                </p>
-
-                <div className="flex gap-3 justify-center">
-                    <Button
-                        variant="outline"
-                        onClick={handleClose}
-                        disabled={isDeleting}
-                        className="flex-1"
-                    >
-                        Cancel
-                    </Button>
-                    <Button
-                        variant="primary"
-                        onClick={onConfirm}
-                        disabled={isDeleting}
-                        className="flex-1 bg-orange-500 hover:bg-orange-600 text-white shadow-lg shadow-orange-500/20 border-transparent transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-                    >
-                        {isDeleting ? 'Deleting...' : 'Delete All Chats'}
-                    </Button>
-                </div>
+            <div className="flex gap-2.5">
+                <Button variant="secondary" onClick={handleClose} disabled={isDeleting} className="flex-1">
+                    {t.common.cancel}
+                </Button>
+                <Button variant="danger" onClick={onConfirm} disabled={isDeleting} className="flex-1">
+                    {isDeleting ? t.common.deleting : t.profile.deleteChatsButton}
+                </Button>
             </div>
         </Modal>
     );

@@ -1,27 +1,44 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { User, Lock, Save, ArrowLeft, Loader2, LogOut, Shirt, SlidersHorizontal } from 'lucide-react';
+import { User, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { authService } from '../services/authService';
 import { chatService } from '../services/chatService';
 import { apiErrorMessage } from '../services/api';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
-import ParticleBackground from '../components/ui/ParticleBackground';
+import Avatar from '../components/ui/Avatar';
+import LanguageSwitch from '../components/ui/LanguageSwitch';
+import Header from '../components/layout/Header';
 import { showToast } from '../utils/toast';
 import { passwordProblem } from '../utils/password';
-import { fadeInUp } from '../utils/animations';
 import ProfileSkeleton from '../components/ui/ProfileSkeleton';
 import DeleteAccountModal from '../components/ui/DeleteAccountModal';
 import DeleteAllChatsModal from '../components/ui/DeleteAllChatsModal';
 import PreferencesSection from '../components/profile/PreferencesSection';
 import PhotoPicker from '../components/profile/PhotoPicker';
 import WardrobeSection from '../components/profile/WardrobeSection';
+import { useT } from '../i18n';
+
+type Tab = 'wardrobe' | 'style' | 'account';
+const TABS: Tab[] = ['wardrobe', 'style', 'account'];
+
+// A titled block of the page: heading and lead above, the card below
+const Block = ({ title, lead, children }: { title: string; lead?: string; children: React.ReactNode }) => (
+    <section className="pt-7 first:pt-0">
+        <h2 className="text-[17px] font-bold tracking-[-0.01em]">{title}</h2>
+        {lead && <p className="text-[14px] text-muted mt-1">{lead}</p>}
+        <div className="ps-card p-[18px] sm:p-6 mt-3">{children}</div>
+    </section>
+);
 
 const ProfilePage = () => {
+    const t = useT();
     const navigate = useNavigate();
+    const { theme, setTheme } = useTheme();
     const { user, isLoading: isAuthLoading, updateUser, logout } = useAuth();
+    const [tab, setTab] = useState<Tab>('wardrobe');
     const [isLoading, setIsLoading] = useState(false);
     const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -31,6 +48,7 @@ const ProfilePage = () => {
     const [name, setName] = useState(user?.name || '');
     const [username, setUsername] = useState(user?.username || '');
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+    const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
 
     // Fill the form when the user loads; not on later updates (e.g. a new avatar), which would wipe unsaved edits
     useEffect(() => {
@@ -45,9 +63,9 @@ const ProfilePage = () => {
         setIsUploadingAvatar(true);
         try {
             updateUser(await authService.uploadAvatar(file));
-            showToast.success('Profile picture updated');
+            showToast.success(t.profile.avatarUpdated);
         } catch (error) {
-            showToast.error(apiErrorMessage(error, 'Failed to upload picture'));
+            showToast.error(apiErrorMessage(error, t.profile.avatarFailed));
         } finally {
             setIsUploadingAvatar(false);
         }
@@ -64,57 +82,41 @@ const ProfilePage = () => {
 
     const handleProfileUpdate = async (e: React.FormEvent) => {
         e.preventDefault();
-
         if (!name.trim()) {
-            showToast.error('Name cannot be empty');
+            showToast.error(t.profile.nameEmpty);
             return;
         }
-
         setIsUpdatingProfile(true);
-
         try {
             const updatedUser = await authService.updateProfile({ name, username });
             updateUser(updatedUser);
-            showToast.success('Profile updated successfully');
+            showToast.success(t.profile.profileUpdated);
         } catch (error) {
-            showToast.error(apiErrorMessage(error, 'Failed to update profile'));
+            showToast.error(apiErrorMessage(error, t.profile.profileFailed));
         } finally {
             setIsUpdatingProfile(false);
         }
     };
 
-    const [passwords, setPasswords] = useState({
-        current: '',
-        new: '',
-        confirm: ''
-    });
-
     const handlePasswordChange = async (e: React.FormEvent) => {
         e.preventDefault();
-
         if (passwords.new !== passwords.confirm) {
-            showToast.error('New passwords do not match');
+            showToast.error(t.profile.passwordsMismatch);
             return;
         }
-
         const problem = passwordProblem(passwords.new);
         if (problem) {
             showToast.error(problem);
             return;
         }
-
         setIsLoading(true);
-
         try {
-            await authService.changePassword({
-                current: passwords.current,
-                new: passwords.new
-            });
-            showToast.success('Password updated successfully');
+            await authService.changePassword({ current: passwords.current, new: passwords.new });
+            showToast.success(t.profile.passwordUpdated);
             setPasswords({ current: '', new: '', confirm: '' });
         } catch (err) {
             // e.g. "Current password is not correct"
-            showToast.error(err instanceof Error && err.message ? err.message : 'Failed to update password');
+            showToast.error(err instanceof Error && err.message ? err.message : t.profile.passwordFailed);
         } finally {
             setIsLoading(false);
         }
@@ -124,12 +126,12 @@ const ProfilePage = () => {
         setIsDeleting(true);
         try {
             await authService.deleteAccount();
-            showToast.success('Account deleted. Bye bye! 👋');
+            showToast.success(t.profile.accountDeleted);
             setTimeout(() => {
                 window.location.href = '/login';
             }, 1500);
         } catch {
-            showToast.error('Failed to delete account');
+            showToast.error(t.profile.accountDeleteFailed);
             setIsDeleting(false);
         }
     };
@@ -138,12 +140,10 @@ const ProfilePage = () => {
         setIsDeletingChats(true);
         try {
             const result = await chatService.deleteAllConversations();
-            if (result.success) {
-                showToast.success(`${result.deletedCount} conversation${result.deletedCount !== 1 ? 's' : ''} deleted`);
-            }
+            if (result.success) showToast.success(t.profile.chatsDeleted(result.deletedCount));
             setIsDeleteChatsModalOpen(false);
         } catch {
-            showToast.error('Failed to delete chats');
+            showToast.error(t.profile.chatsDeleteFailed);
         } finally {
             setIsDeletingChats(false);
         }
@@ -155,291 +155,212 @@ const ProfilePage = () => {
 
     if (!user) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-background dark:bg-surface-dark p-6">
-                <div className="text-center max-w-md">
-                    <div className="p-4 bg-red-100 dark:bg-red-900/20 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-                        <User className="w-8 h-8 text-red-500 dark:text-red-400" />
-                    </div>
-                    <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Profile Not Found</h2>
-                    <p className="text-gray-500 dark:text-stone-400 mb-6">
-                        We couldn't load your profile information. Please try logging in again.
-                    </p>
-                    <Button onClick={() => navigate('/login')} variant="primary">
-                        Go to Login
-                    </Button>
+            <div className="min-h-dvh flex items-center justify-center bg-ground p-6">
+                <div className="text-center max-w-sm">
+                    <User className="w-8 h-8 text-muted mx-auto mb-4" />
+                    <h2 className="text-[22px] font-extrabold tracking-[-0.02em] mb-2">{t.profile.notFoundTitle}</h2>
+                    <p className="text-[15px] text-muted mb-6">{t.profile.notFoundBody}</p>
+                    <Button onClick={() => navigate('/login')}>{t.profile.goToLogin}</Button>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-background dark:bg-surface-dark p-6 md:p-12 relative overflow-hidden">
-            {/* Particle Background */}
-            <ParticleBackground />
+        <div className="min-h-dvh bg-ground">
+            <Header backTo="/chat" />
 
-            <div className="max-w-2xl mx-auto relative z-10">
-                {/* Header */}
-                <motion.div
-                    className="flex items-center gap-4 mb-8"
-                    initial="hidden"
-                    animate="visible"
-                    variants={fadeInUp}
-                >
-                    <button
-                        onClick={() => navigate(-1)}
-                        className="p-2 hover:bg-gray-100 dark:hover:bg-surface-darker rounded-full transition-colors"
-                    >
-                        <ArrowLeft className="w-6 h-6 text-text-dark dark:text-white" />
-                    </button>
-                    <h1 className="text-3xl font-roboto font-bold text-text-dark dark:text-white">
-                        Profile Settings
-                    </h1>
-                    <Button onClick={handleLogout} variant="ghost" className="ml-auto text-red-500">
-                        <LogOut className="w-4 h-4 mr-2" />
-                        Log out
+            <main className="max-w-[720px] mx-auto px-4 pt-6 pb-16">
+                {/* Who you are */}
+                <div className="flex items-center gap-4">
+                    <Avatar name={user.name} url={user.avatarUrl} size={64} />
+                    <div className="min-w-0 flex-1">
+                        <h1 className="text-[28px] sm:text-[30px] font-extrabold tracking-[-0.03em] leading-[1.1] truncate">{user.name}</h1>
+                        <p className="text-[14px] text-muted truncate mt-0.5">{user.email}</p>
+                    </div>
+                    <Button onClick={handleLogout} variant="ghost" size="sm" className="shrink-0" aria-label={t.profile.logout}>
+                        <LogOut className="w-4 h-4" />
+                        <span className="hidden sm:inline">{t.profile.logout}</span>
                     </Button>
-                </motion.div>
-
-                <div className="space-y-6">
-                    {/* User Info Card */}
-                    <motion.div
-                        className="bg-cream-100/95 dark:bg-surface-darker/90 backdrop-blur-xl rounded-2xl p-6 border border-cream-300 dark:border-surface-muted shadow-xl"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1 }}
-                    >
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2 bg-primary/10 rounded-lg">
-                                <User className="w-5 h-5 text-primary" />
-                            </div>
-                            <h2 className="text-xl font-bold text-text-dark dark:text-white">Personal Information</h2>
-                        </div>
-
-                        {/* Profile picture: the camera input opens the camera on phones, a file picker elsewhere */}
-                        <div className="flex flex-col sm:flex-row items-center gap-5 mb-6">
-                            <div className="relative w-24 h-24 shrink-0 rounded-full bg-primary overflow-hidden flex items-center justify-center text-white text-4xl font-semibold">
-                                {user.avatarUrl ? (
-                                    <img src={user.avatarUrl} alt="Profile picture" className="w-full h-full object-cover" />
-                                ) : (
-                                    user.name.charAt(0).toUpperCase()
-                                )}
-                                {isUploadingAvatar && (
-                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                        <Loader2 className="w-8 h-8 animate-spin" />
-                                    </div>
-                                )}
-                            </div>
-                            <PhotoPicker onPick={handleAvatarChange} disabled={isUploadingAvatar} />
-                        </div>
-
-                        <form onSubmit={handleProfileUpdate} className="space-y-6">
-                            <div className="grid gap-6 md:grid-cols-2">
-                                <Input
-                                    label="Username"
-                                    value={username}
-                                    onChange={(e) => setUsername(e.target.value.toLowerCase())}
-                                    placeholder="letters, numbers, . and _"
-                                    className="dark:bg-surface-muted dark:border-surface-border dark:text-white"
-                                    required
-                                />
-                                <Input
-                                    label="Full Name"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    placeholder="Enter your name"
-                                    className="dark:bg-surface-muted dark:border-surface-border dark:text-white"
-                                    required
-                                />
-                                <div className="md:col-span-2">
-                                    <Input
-                                        label="Email Address"
-                                        value={user?.email || ''}
-                                        disabled
-                                        className="bg-gray-50 dark:bg-surface-muted/50 text-gray-500 dark:text-stone-400 cursor-not-allowed border-gray-200 dark:border-surface-muted"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="flex justify-end">
-                                <Button
-                                    type="submit"
-                                    disabled={isUpdatingProfile || (name === user.name && username === user.username)}
-                                    variant="outline"
-                                    className="w-full md:w-auto min-w-[140px]"
-                                >
-                                    {isUpdatingProfile ? (
-                                        'Saving...'
-                                    ) : (
-                                        <>
-                                            <Save className="w-4 h-4 mr-2" />
-                                            Update Profile
-                                        </>
-                                    )}
-                                </Button>
-                            </div>
-                        </form>
-                    </motion.div>
-
-                    {/* Preferences Card */}
-                    <motion.div
-                        className="bg-cream-100/95 dark:bg-surface-darker/90 backdrop-blur-xl rounded-2xl p-6 border border-cream-300 dark:border-surface-muted shadow-xl"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.15 }}
-                    >
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2 bg-primary/10 rounded-lg">
-                                <SlidersHorizontal className="w-5 h-5 text-primary" />
-                            </div>
-                            <h2 className="text-xl font-bold text-text-dark dark:text-white">Style Preferences</h2>
-                        </div>
-                        <PreferencesSection />
-                    </motion.div>
-
-                    {/* Wardrobe Card */}
-                    <motion.div
-                        className="bg-cream-100/95 dark:bg-surface-darker/90 backdrop-blur-xl rounded-2xl p-6 border border-cream-300 dark:border-surface-muted shadow-xl"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.18 }}
-                    >
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2 bg-primary/10 rounded-lg">
-                                <Shirt className="w-5 h-5 text-primary" />
-                            </div>
-                            <h2 className="text-xl font-bold text-text-dark dark:text-white">My Wardrobe</h2>
-                        </div>
-                        <WardrobeSection />
-                    </motion.div>
-
-                    {/* Password Change Card */}
-                    <motion.div
-                        className="bg-cream-100/95 dark:bg-surface-darker/90 backdrop-blur-xl rounded-2xl p-6 border border-cream-300 dark:border-surface-muted shadow-xl"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2 }}
-                    >
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2 bg-primary/10 rounded-lg">
-                                <Lock className="w-5 h-5 text-primary" />
-                            </div>
-                            <h2 className="text-xl font-bold text-text-dark dark:text-white">Change Password</h2>
-                        </div>
-
-                        <form onSubmit={handlePasswordChange} className="space-y-4">
-                            <Input
-                                type="password"
-                                label="Current Password"
-                                value={passwords.current}
-                                onChange={(e) => setPasswords({ ...passwords, current: e.target.value })}
-                                placeholder="Enter current password"
-                                className="dark:bg-surface-muted dark:border-surface-border dark:text-white"
-                                required
-                            />
-
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <Input
-                                    type="password"
-                                    label="New Password"
-                                    value={passwords.new}
-                                    onChange={(e) => setPasswords({ ...passwords, new: e.target.value })}
-                                    placeholder="Min. 8 characters"
-                                    className="dark:bg-surface-muted dark:border-surface-border dark:text-white"
-                                    required
-                                />
-                                <Input
-                                    type="password"
-                                    label="Confirm New Password"
-                                    value={passwords.confirm}
-                                    onChange={(e) => setPasswords({ ...passwords, confirm: e.target.value })}
-                                    placeholder="Re-enter new password"
-                                    className="dark:bg-surface-muted dark:border-surface-border dark:text-white"
-                                    required
-                                />
-                            </div>
-
-                            <div className="pt-4 flex justify-end">
-                                <Button
-                                    type="submit"
-                                    disabled={isLoading}
-                                    className="w-full md:w-auto min-w-[140px]"
-                                >
-                                    {isLoading ? (
-                                        'Updating...'
-                                    ) : (
-                                        <>
-                                            <Save className="w-4 h-4 mr-2" />
-                                            Save Changes
-                                        </>
-                                    )}
-                                </Button>
-                            </div>
-                        </form>
-                    </motion.div>
-
-                    {/* Delete All Chats Section - Modern & Minimalist */}
-                    <motion.div
-                        className="bg-cream-100/95 dark:bg-surface-darker/90 backdrop-blur-xl rounded-2xl p-6 border border-cream-300 dark:border-surface-muted shadow-xl"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.3 }}
-                    >
-                        <div className="group flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-4 rounded-xl transition-all duration-300 hover:bg-orange-50/50 dark:hover:bg-orange-900/10 border border-transparent hover:border-orange-100 dark:hover:border-orange-900/30">
-                            <div>
-                                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1 group-hover:text-orange-700 dark:group-hover:text-orange-400 transition-colors">
-                                    Delete All Conversations
-                                </h3>
-                                <p className="text-sm text-gray-500 dark:text-stone-400">
-                                    Permanently remove all your chat history and conversations.
-                                </p>
-                            </div>
-                            <Button
-                                onClick={() => setIsDeleteChatsModalOpen(true)}
-                                variant="outline"
-                                className="text-orange-600 border-orange-200 bg-orange-50 hover:bg-orange-100 hover:text-orange-700 hover:border-orange-300 dark:bg-orange-900/20 dark:border-orange-900/50 dark:text-orange-400 dark:hover:bg-orange-900/30 transition-all duration-300"
-                            >
-                                Delete All Chats
-                            </Button>
-                        </div>
-                    </motion.div>
-
-                    {/* Delete Account Section - Modern & Minimalist */}
-                    <motion.div
-                        className="bg-cream-100/95 dark:bg-surface-darker/90 backdrop-blur-xl rounded-2xl p-6 border border-cream-300 dark:border-surface-muted shadow-xl"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.4 }}
-                    >
-                        <div className="group flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-4 rounded-xl transition-all duration-300 hover:bg-red-50/50 dark:hover:bg-red-900/10 border border-transparent hover:border-red-100 dark:hover:border-red-900/30">
-                            <div>
-                                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1 group-hover:text-red-700 dark:group-hover:text-red-400 transition-colors">
-                                    Delete Account
-                                </h3>
-                                <p className="text-sm text-gray-500 dark:text-stone-400">
-                                    Permanently remove your account and all of its contents.
-                                </p>
-                            </div>
-                            <Button
-                                onClick={() => setIsDeleteModalOpen(true)}
-                                variant="outline"
-                                className="text-red-600 border-red-200 bg-red-50 hover:bg-red-100 hover:text-red-700 hover:border-red-300 dark:bg-red-900/20 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/30 transition-all duration-300"
-                            >
-                                Delete Account
-                            </Button>
-                        </div>
-                    </motion.div>
                 </div>
-            </div>
 
-            {/* Delete Confirmation Modal */}
+                {/* Palestra's segmented tabs */}
+                <div role="tablist" aria-label={t.profile.title} className="mt-6 grid grid-cols-3 p-1 rounded-btn bg-raised border border-line">
+                    {TABS.map((key) => (
+                        <button
+                            key={key}
+                            type="button"
+                            role="tab"
+                            id={`tab-${key}`}
+                            aria-selected={tab === key}
+                            aria-controls={`panel-${key}`}
+                            onClick={() => setTab(key)}
+                            className={`min-h-[40px] rounded-[10px] text-[14px] font-bold transition-colors ${tab === key ? 'bg-card text-ink shadow-card' : 'text-muted hover:text-ink'}`}
+                        >
+                            {t.profile.tabs[key]}
+                        </button>
+                    ))}
+                </div>
+
+                <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="mt-7">
+                    {tab === 'wardrobe' && (
+                        <Block title={t.profile.wardrobe} lead={t.profile.wardrobeLead}>
+                            <WardrobeSection />
+                        </Block>
+                    )}
+
+                    {tab === 'style' && (
+                        <Block title={t.profile.preferences} lead={t.profile.preferencesLead}>
+                            <PreferencesSection />
+                        </Block>
+                    )}
+
+                    {tab === 'account' && (
+                        <>
+                            <Block title={t.profile.personal}>
+                                <div className="flex flex-col sm:flex-row items-center gap-4 mb-6">
+                                    <div className="relative">
+                                        <Avatar name={user.name} url={user.avatarUrl} size={80} />
+                                        {isUploadingAvatar && (
+                                            <span className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center">
+                                                <span className="w-6 h-6 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                            </span>
+                                        )}
+                                    </div>
+                                    <PhotoPicker onPick={handleAvatarChange} disabled={isUploadingAvatar} />
+                                </div>
+
+                                <form onSubmit={handleProfileUpdate} className="space-y-4">
+                                    <div className="grid gap-4 sm:grid-cols-2">
+                                        <Input
+                                            label={t.profile.username}
+                                            value={username}
+                                            onChange={(e) => setUsername(e.target.value.toLowerCase())}
+                                            placeholder={t.profile.usernamePlaceholder}
+                                            autoComplete="username"
+                                            required
+                                        />
+                                        <Input
+                                            label={t.profile.fullName}
+                                            value={name}
+                                            onChange={(e) => setName(e.target.value)}
+                                            placeholder={t.profile.fullNamePlaceholder}
+                                            autoComplete="name"
+                                            required
+                                        />
+                                    </div>
+                                    <Input label={t.profile.emailAddress} value={user.email || ''} disabled />
+                                    <div className="flex justify-end pt-1">
+                                        <Button
+                                            type="submit"
+                                            variant="secondary"
+                                            isLoading={isUpdatingProfile}
+                                            disabled={name === user.name && username === user.username}
+                                            className="w-full sm:w-auto"
+                                        >
+                                            {isUpdatingProfile ? t.common.saving : t.profile.updateProfile}
+                                        </Button>
+                                    </div>
+                                </form>
+                            </Block>
+
+                            <Block title={t.profile.password}>
+                                <form onSubmit={handlePasswordChange} className="space-y-4">
+                                    <Input
+                                        type="password"
+                                        label={t.profile.currentPassword}
+                                        value={passwords.current}
+                                        onChange={(e) => setPasswords({ ...passwords, current: e.target.value })}
+                                        placeholder={t.profile.currentPlaceholder}
+                                        autoComplete="current-password"
+                                        required
+                                    />
+                                    <div className="grid gap-4 sm:grid-cols-2">
+                                        <Input
+                                            type="password"
+                                            label={t.auth.newPassword}
+                                            value={passwords.new}
+                                            onChange={(e) => setPasswords({ ...passwords, new: e.target.value })}
+                                            placeholder={t.auth.newPlaceholder}
+                                            autoComplete="new-password"
+                                            required
+                                        />
+                                        <Input
+                                            type="password"
+                                            label={t.auth.confirmPassword}
+                                            value={passwords.confirm}
+                                            onChange={(e) => setPasswords({ ...passwords, confirm: e.target.value })}
+                                            placeholder={t.auth.confirmPlaceholder}
+                                            autoComplete="new-password"
+                                            required
+                                        />
+                                    </div>
+                                    <p className="text-[12.5px] text-muted">{t.auth.passwordHint}</p>
+                                    <div className="flex justify-end pt-1">
+                                        <Button type="submit" isLoading={isLoading} className="w-full sm:w-auto">
+                                            {isLoading ? t.profile.updatingPassword : t.profile.savePassword}
+                                        </Button>
+                                    </div>
+                                </form>
+                            </Block>
+
+                            <Block title={t.profile.appearance}>
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <span className="text-[15px] font-medium">{t.settings.language}</span>
+                                    <LanguageSwitch />
+                                </div>
+                                <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-4 border-t border-line">
+                                    <span className="text-[15px] font-medium">{t.settings.theme}</span>
+                                    <div role="group" aria-label={t.settings.theme} className="inline-flex p-[3px] rounded-field bg-raised border border-line">
+                                        {(['dark', 'light'] as const).map((value) => (
+                                            <button
+                                                key={value}
+                                                type="button"
+                                                aria-pressed={theme === value}
+                                                onClick={() => setTheme(value)}
+                                                className={`min-h-[30px] px-3 rounded-[8px] text-[13px] font-bold transition-colors ${theme === value ? 'bg-card text-ink shadow-card' : 'text-muted hover:text-ink'}`}
+                                            >
+                                                {value === 'dark' ? t.profile.themeDark : t.profile.themeLight}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </Block>
+
+                            <section className="pt-7">
+                                <h2 className="text-[17px] font-bold tracking-[-0.01em] text-danger">{t.profile.dangerTitle}</h2>
+                                <div className="ps-card mt-3 divide-y divide-[var(--line)]">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-[18px] sm:px-6">
+                                        <div>
+                                            <h3 className="text-[15px] font-semibold">{t.profile.deleteChats}</h3>
+                                            <p className="text-[13.5px] text-muted mt-0.5">{t.profile.deleteChatsBody}</p>
+                                        </div>
+                                        <Button onClick={() => setIsDeleteChatsModalOpen(true)} variant="danger" size="sm" className="shrink-0">
+                                            {t.profile.deleteChatsButton}
+                                        </Button>
+                                    </div>
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-[18px] sm:px-6">
+                                        <div>
+                                            <h3 className="text-[15px] font-semibold">{t.profile.deleteAccount}</h3>
+                                            <p className="text-[13.5px] text-muted mt-0.5">{t.profile.deleteAccountBody}</p>
+                                        </div>
+                                        <Button onClick={() => setIsDeleteModalOpen(true)} variant="danger" size="sm" className="shrink-0">
+                                            {t.profile.deleteAccountButton}
+                                        </Button>
+                                    </div>
+                                </div>
+                            </section>
+                        </>
+                    )}
+                </div>
+            </main>
+
             <DeleteAccountModal
                 isOpen={isDeleteModalOpen}
                 onClose={() => setIsDeleteModalOpen(false)}
                 onConfirm={handleDeleteAccount}
                 isDeleting={isDeleting}
             />
-
-            {/* Delete All Chats Confirmation Modal */}
             <DeleteAllChatsModal
                 isOpen={isDeleteChatsModalOpen}
                 onClose={() => setIsDeleteChatsModalOpen(false)}

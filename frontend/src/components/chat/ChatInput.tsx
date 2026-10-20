@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useRef } from 'react';
-import { Plus, Send, X } from 'lucide-react';
+import { ImagePlus, ArrowUp, X, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useT } from '../../i18n';
 
 interface ChatInputProps {
   inputMessage: string;
@@ -18,6 +19,10 @@ interface ChatInputProps {
   hasAttachments?: boolean; // something besides text/image is attached, so an empty message can be sent
 }
 
+const MAX_HEIGHT = 200;
+const MAX_LENGTH = 1000;
+
+// The composer: a 22px card floating over the bottom of the conversation
 const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
   (
     {
@@ -37,28 +42,19 @@ const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     },
     ref
   ) => {
+    const t = useT();
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-    const MAX_HEIGHT = 200;
-
-    // Auto-resize textarea with max height limit
+    // Grow with the text up to MAX_HEIGHT, then scroll
     useEffect(() => {
       const textarea = textareaRef.current;
-      if (textarea) {
-        // Reset height to auto to get the correct scrollHeight
-        textarea.style.height = 'auto';
-        
-        // Calculate new height, capped at MAX_HEIGHT
-        const newHeight = Math.min(textarea.scrollHeight, MAX_HEIGHT);
-        textarea.style.height = `${newHeight}px`;
-        
-        // Enable/disable scroll based on content
-        textarea.style.overflowY = textarea.scrollHeight > MAX_HEIGHT ? 'auto' : 'hidden';
-      }
+      if (!textarea) return;
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.min(textarea.scrollHeight, MAX_HEIGHT)}px`;
+      textarea.style.overflowY = textarea.scrollHeight > MAX_HEIGHT ? 'auto' : 'hidden';
     }, [inputMessage]);
 
-    // Handle Enter key
     const handleKeyDown = (e: React.KeyboardEvent) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -66,133 +62,102 @@ const ChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       }
     };
 
+    const isEmpty = !inputMessage.trim() && !selectedImage && !hasAttachments;
+    const canSend = !disabled && !isEmpty && !isLoading;
+
     return (
-      <div className="px-4 sm:px-8 py-4 sm:py-6 bg-background dark:bg-surface-dark border-t border-border dark:border-surface-muted">
-        <div className="max-w-[992px] mx-auto">
-          {/* Image Preview */}
-          <AnimatePresence mode="wait">
-            {imagePreview && selectedImage && (
-              <motion.div
-                key="image-preview"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.15 }}
-                className="mb-3 overflow-hidden"
-              >
-                <div className="inline-flex items-center gap-2 px-2 py-1.5 bg-stone-100 dark:bg-surface-darker rounded-lg max-w-[200px]">
-                  <img
-                    src={imagePreview}
-                    alt="Preview"
-                    className="h-10 w-10 object-cover rounded-md flex-shrink-0"
-                  />
-                  <div className="flex flex-col min-w-0 overflow-hidden">
-                    <div className="overflow-hidden">
-                      <span className="text-sm font-medium text-text-dark dark:text-white whitespace-nowrap inline-block animate-marquee hover:animation-paused">
-                        {selectedImage.name}
-                      </span>
+      <div className="px-3 sm:px-6 pb-[max(12px,env(safe-area-inset-bottom))] pt-2 bg-gradient-to-t from-ground via-ground/95 to-ground/0">
+        <div className="max-w-column mx-auto">
+          <div className={`ps-card !rounded-card p-2 shadow-float focus-within:border-accent/70 transition-colors ${disabled ? 'opacity-60' : ''}`}>
+            <AnimatePresence initial={false}>
+              {imagePreview && selectedImage && (
+                <motion.div
+                  key="image-preview"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="overflow-hidden"
+                >
+                  <div className="inline-flex items-center gap-2.5 m-1 mb-2 pl-1 pr-1.5 py-1 rounded-btn bg-raised border border-line max-w-[260px]">
+                    <img src={imagePreview} alt="Preview" className="h-10 w-10 object-cover rounded-chip shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-semibold truncate">{selectedImage.name}</p>
+                      <p className="text-[12px] text-muted tabular">{(selectedImage.size / 1024).toFixed(0)} KB</p>
                     </div>
-                    <span className="text-xs text-text-light dark:text-stone-400">
-                      {(selectedImage.size / 1024).toFixed(0)} KB
-                    </span>
+                    <button
+                      type="button"
+                      onClick={onRemoveImage}
+                      aria-label={t.chat.removeImage}
+                      className="w-8 h-8 shrink-0 inline-flex items-center justify-center rounded-chip text-muted hover:text-ink hover:bg-card"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
-                  <button
-                    onClick={onRemoveImage}
-                    className="p-1.5 hover:bg-stone-200 dark:hover:bg-surface-muted rounded-full transition-colors flex-shrink-0"
-                    type="button"
-                  >
-                    <X className="w-4 h-4 text-text-medium dark:text-stone-400" />
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {attachmentsSlot}
-
-          {/* Input Box */}
-          <div className={`flex gap-3 items-end bg-cream-100 dark:bg-surface-darker border border-cream-400 dark:border-surface-border rounded-2xl shadow-sm hover:shadow-md transition-shadow p-2 pl-4 focus-within:ring-4 focus-within:ring-primary/20 focus-within:border-primary ${disabled ? 'opacity-60' : ''}`}>
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept="image/*"
-              onChange={onImageSelect}
-              className="hidden"
-              aria-label="Upload image file"
-              disabled={disabled}
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="mb-2 text-primary/70 hover:text-primary transition-colors cursor-pointer p-1.5 hover:bg-primary/10 dark:hover:bg-primary/20 rounded-full border border-primary/20 hover:border-primary/40 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Upload image"
-              type="button"
-              aria-label="Upload image"
-              disabled={disabled}
-            >
-              <Plus className="w-5 h-5" />
-            </button>
-            {toolbarSlot}
-
-            <textarea
-              ref={(node) => {
-                textareaRef.current = node;
-                if (typeof ref === 'function') ref(node);
-                else if (ref) ref.current = node;
-              }}
-              value={inputMessage}
-              onChange={(e) => {
-                // Limit to 1000 characters
-                if (e.target.value.length <= 1000) {
-                  setInputMessage(e.target.value);
-                }
-              }}
-              onKeyDown={handleKeyDown}
-              placeholder={disabledMessage || "Describe your ideal outfit or upload a photo..."}
-              rows={1}
-              disabled={disabled}
-              className="flex-1 py-3 font-inter text-[15px] text-text-dark dark:text-white placeholder:text-text-light dark:placeholder-stone-500 bg-transparent resize-none scrollbar-hide placeholder-shimmer"
-              style={{ 
-                minHeight: '44px', 
-                maxHeight: `${MAX_HEIGHT}px`,
-                outline: 'none',
-                border: 'none',
-                boxShadow: 'none',
-                WebkitAppearance: 'none',
-              }}
-              aria-label="Message input"
-            />
-
-            <motion.button
-              onClick={onSendMessage}
-              disabled={disabled || (!inputMessage.trim() && !selectedImage && !hasAttachments) || isLoading}
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{
-                scale: (disabled || (!inputMessage.trim() && !selectedImage && !hasAttachments)) ? 0.8 : 1,
-                opacity: (disabled || (!inputMessage.trim() && !selectedImage && !hasAttachments)) ? 0.5 : 1
-              }}
-              whileHover={{ scale: disabled ? 1 : 1.05 }}
-              whileTap={{ scale: disabled ? 1 : 0.95 }}
-              className={`rounded-full w-10 h-10 p-0 flex items-center justify-center mb-1 transition-colors shadow-sm ${disabled || (!inputMessage.trim() && !selectedImage && !hasAttachments) || isLoading
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                : 'bg-primary text-white shadow-md hover:shadow-lg hover:bg-primary-hover'
-                }`}
-              aria-label="Send message"
-            >
-              {isLoading ? (
-                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
+                </motion.div>
               )}
-            </motion.button>
+            </AnimatePresence>
+
+            {attachmentsSlot}
+
+            <div className="flex items-end gap-1">
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                onChange={onImageSelect}
+                className="hidden"
+                aria-label={t.chat.uploadFile}
+                disabled={disabled}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                title={t.chat.attachPhoto}
+                aria-label={t.chat.attachPhoto}
+                disabled={disabled}
+                className="press w-10 h-10 shrink-0 inline-flex items-center justify-center rounded-field text-muted hover:text-ink hover:bg-raised transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ImagePlus className="w-5 h-5" />
+              </button>
+              {toolbarSlot}
+
+              <textarea
+                ref={(node) => {
+                  textareaRef.current = node;
+                  if (typeof ref === 'function') ref(node);
+                  else if (ref) ref.current = node;
+                }}
+                value={inputMessage}
+                onChange={(e) => {
+                  if (e.target.value.length <= MAX_LENGTH) setInputMessage(e.target.value);
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder={disabledMessage || t.chat.inputPlaceholder}
+                rows={1}
+                disabled={disabled}
+                aria-label={t.chat.inputLabel}
+                className="flex-1 min-w-0 self-center bg-transparent resize-none outline-none border-0 px-1.5 py-2 text-[16px] leading-[1.45] scrollbar-hide disabled:cursor-not-allowed"
+                style={{ maxHeight: `${MAX_HEIGHT}px` }}
+              />
+
+              <button
+                type="button"
+                onClick={onSendMessage}
+                disabled={!canSend}
+                aria-label={t.chat.send}
+                className={`press w-10 h-10 shrink-0 inline-flex items-center justify-center rounded-full transition-colors ${canSend ? 'bg-accent text-on-accent hover:bg-accent-strong' : 'bg-raised text-faint cursor-not-allowed'}`}
+              >
+                {isLoading ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <ArrowUp className="h-5 w-5" strokeWidth={2.4} />}
+              </button>
+            </div>
           </div>
 
-          <div className="text-center mt-2 flex items-center justify-center gap-2">
-            <p className="text-[11px] text-text-light dark:text-stone-500">
-              AI can make mistakes. Check important info.
-            </p>
+          <div className="flex items-center justify-center gap-3 mt-2 min-h-[16px]">
+            <p className="text-[11.5px] text-muted text-center">{t.chat.disclaimer}</p>
             {inputMessage.length > 0 && (
-              <span className={`text-[10px] font-medium ${inputMessage.length > 500 ? 'text-amber-500' : 'text-text-light dark:text-stone-500'}`}>
-                {inputMessage.length}/1000
+              <span className={`text-[11.5px] tabular font-medium ${inputMessage.length > 500 ? 'text-warn' : 'text-muted'}`}>
+                {inputMessage.length}/{MAX_LENGTH}
               </span>
             )}
           </div>

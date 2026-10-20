@@ -1,53 +1,21 @@
-import { motion } from 'framer-motion';
-
 interface SkeletonProps {
   className?: string;
   variant?: 'text' | 'circular' | 'rectangular';
-  animation?: 'pulse' | 'wave';
 }
 
-const Skeleton = ({
-  className = '',
-  variant = 'text',
-  animation = 'wave'
-}: SkeletonProps) => {
-  const baseStyles = 'bg-gray-200 dark:bg-surface-muted';
+const shapes = { text: 'h-4 rounded-md', circular: 'rounded-full', rectangular: 'rounded-chip' };
 
-  const variants = {
-    text: 'h-4 rounded',
-    circular: 'rounded-full',
-    rectangular: 'rounded-lg',
-  };
-
-  return (
-    <motion.div
-      className={`${baseStyles} ${variants[variant]} ${className} overflow-hidden relative`}
-      animate={
-        animation === 'pulse'
-          ? { opacity: [0.5, 1, 0.5] }
-          : {}
-      }
-      transition={{
-        duration: 1.5,
-        repeat: Infinity,
-        ease: 'easeInOut',
-      }}
-    >
-      {animation === 'wave' && (
-        <motion.div
-          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 dark:via-gray-600/30 to-transparent"
-          animate={{
-            x: ['-100%', '100%'],
-          }}
-          transition={{
-            duration: 1.5,
-            repeat: Infinity,
-            ease: 'linear',
-          }}
-        />
-      )}
-    </motion.div>
-  );
-};
+// A raised block with a slow warm sheen
+const Skeleton = ({ className = '', variant = 'text' }: SkeletonProps) => (
+  <div
+    aria-hidden="true"
+    className={`${shapes[variant]} ${className}`}
+    style={{
+      backgroundImage: 'linear-gradient(90deg, rgb(var(--c-raised)) 0%, rgb(var(--c-faint) / 0.18) 50%, rgb(var(--c-raised)) 100%)',
+      backgroundSize: '200% 100%',
+      animation: 'ps-shimmer 1.6s linear infinite',
+    }}
+  />
+);
 
 export default Skeleton;

@@ -2,13 +2,15 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
-import ParticleBackground from '../components/ui/ParticleBackground';
+import AuthLayout from '../components/layout/AuthLayout';
 import { authService } from '../services/authService';
-import { passwordProblem, PASSWORD_HINT } from '../utils/password';
+import { passwordProblem } from '../utils/password';
 import { showToast } from '../utils/toast';
+import { useT } from '../i18n';
 
 // Opened from the password reset email: the link has already signed the user in
 const ResetPasswordPage = () => {
+  const t = useT();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
@@ -18,7 +20,7 @@ const ResetPasswordPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirm) {
-      setError('Passwords do not match');
+      setError(t.auth.mismatch);
       return;
     }
     const problem = passwordProblem(password);
@@ -30,56 +32,47 @@ const ResetPasswordPage = () => {
     setIsLoading(true);
     try {
       await authService.setNewPassword(password);
-      showToast.success('Password updated');
+      showToast.success(t.auth.passwordUpdated);
       navigate('/chat');
     } catch (err) {
       // Expired link, or a rule only Supabase checks (e.g. same as the old password)
-      setError(err instanceof Error && err.message ? err.message : 'This link has expired. Ask for a new one from the login page.');
+      setError(err instanceof Error && err.message ? err.message : t.auth.linkExpired);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background dark:bg-surface-dark px-4 py-8 relative overflow-hidden">
-      <ParticleBackground />
+    <AuthLayout title={t.auth.resetTitle}>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Input
+          label={t.auth.newPassword}
+          type="password"
+          autoComplete="new-password"
+          placeholder={t.auth.newPlaceholder}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          minLength={8}
+          hint={t.auth.passwordHint}
+        />
+        <Input
+          label={t.auth.confirmPassword}
+          type="password"
+          autoComplete="new-password"
+          placeholder={t.auth.confirmPlaceholder}
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          required
+        />
 
-      <div className="max-w-md w-full bg-cream-100/95 dark:bg-surface-darker/90 backdrop-blur-sm rounded-2xl shadow-lg p-6 md:p-8 border border-cream-300 dark:border-surface-muted relative z-10">
-        <h1 className="text-xl md:text-2xl font-roboto font-bold text-center text-text-dark dark:text-white mb-6">
-          Choose a new password
-        </h1>
+        {error && <div role="alert" className="text-[14px] font-medium text-danger">{error}</div>}
 
-        <form onSubmit={handleSubmit} className="space-y-4 md:space-y-5">
-          <Input
-            label="New Password"
-            type="password"
-            placeholder="Min. 8 characters"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={8}
-          />
-          <p className="-mt-2 text-xs font-inter text-text-medium dark:text-stone-400">{PASSWORD_HINT}</p>
-
-          <Input
-            label="Confirm New Password"
-            type="password"
-            placeholder="Re-enter new password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            required
-          />
-
-          {error && (
-            <div className="text-red-500 text-sm text-center">{error}</div>
-          )}
-
-          <Button type="submit" variant="primary" size="lg" className="w-full" isLoading={isLoading}>
-            Save new password
-          </Button>
-        </form>
-      </div>
-    </div>
+        <Button type="submit" size="lg" className="w-full" isLoading={isLoading}>
+          {t.auth.saveNewPassword}
+        </Button>
+      </form>
+    </AuthLayout>
   );
 };
 
