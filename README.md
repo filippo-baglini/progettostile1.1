@@ -115,7 +115,7 @@ frontend/
    and the preference names.
 2. Run the files in `backend/migrations/` in this order (filename order, except that `wardrobe_outfits`
    must come before `wardrobe_from_chat`):
-   `2026-10-13_supabase_auth`, `2026-10-13_username_avatar`, `2026-10-13_wardrobe`,
+   `2026-10-11_poll_options`, `2026-10-13_supabase_auth`, `2026-10-13_username_avatar`, `2026-10-13_wardrobe`,
    `2026-10-13_wardrobe_outfits`, `2026-10-13_wardrobe_from_chat`, `2026-10-14_guest_chats`,
    `2026-10-14_outfit_explanations`, `2026-10-14_product_constraints`.
    New migrations go at the end of this list.

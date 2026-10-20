@@ -40,8 +40,6 @@ CREATE TABLE IF NOT EXISTS ai_responses (
     outfit_generation_options JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
-ALTER TABLE ai_responses ADD COLUMN IF NOT EXISTS budget_options JSONB;
-ALTER TABLE ai_responses ADD COLUMN IF NOT EXISTS outfit_generation_options JSONB;
 
 -- Product Data table (Catalog)
 CREATE TABLE IF NOT EXISTS product_data (

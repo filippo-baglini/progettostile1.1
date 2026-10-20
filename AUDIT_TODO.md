@@ -84,8 +84,8 @@ Findings from the codebase audit of 2026-10-13, merged with the colleague's revi
 - [x] **C9.** Leftover code: the unused `chat_history`/`history` passing, the "legacy single outfit" fallbacks, and `DEBUG` prints. Replace `print()` with `logging` (see S9). *(fixed 2026-10-14: the server code logs through `logging`; dead fallbacks (`outfit_plan`, `previous_outfit_items`, the top-level `outfit` field, front and back) and the unused `history` passing are gone. The frontend still uses `message.outfit` as "the first outfit")*
 - [x] **C10.** ESLint: 44 errors and 8 warnings (mostly `no-explicit-any` and unused variables). *(fixed 2026-10-14: `npm run lint` is clean)*
 - [x] **C11.** Remove `pandas`: it does one group-by in `outfit_retrieval_logic.py`, which a dict can do. *(fixed 2026-10-14 with C2)*
-- [ ] **C12.** `google-genai` is only installed for its request types, which get translated to Mistral. Writing Mistral messages directly would remove it and most of `model_fallback.py` (bigger refactor).
-- [ ] **C13.** `schema.sql` contains `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` lines; move them into migrations, as the README says.
+- [x] **C12.** `google-genai` is only installed for its request types, which get translated to Mistral. Writing Mistral messages directly would remove it and most of `model_fallback.py` (bigger refactor). *(fixed 2026-10-14: requests are built as Mistral messages and JSON Schema dicts; checked identical to the old ones (messages byte for byte, schemas and their property order) before `google-genai` was removed)*
+- [x] **C13.** `schema.sql` contains `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` lines; move them into migrations, as the README says. *(fixed 2026-10-14: the two `ai_responses` columns are in `migrations/2026-10-11_poll_options.sql`; `schema.sql` already creates them)*
 
 ## Missing
 
